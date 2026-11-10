@@ -183,6 +183,9 @@ type IssueDetail struct {
 	// which is every detail that is not about a size.
 	ActualBytes int64
 	LimitBytes  int64
+	// ADR 0179's text limits, in code points; zero means the server did not say.
+	ActualCodePoints int64
+	LimitCodePoints  int64
 }
 
 // Error is the sentence a person reads. The two lifecycle cases are spelled out because they are
@@ -228,6 +231,12 @@ func serverError(status int, body []byte) error {
 			}
 			if detail.LimitBytes != nil {
 				entry.LimitBytes = *detail.LimitBytes
+			}
+			if detail.ActualCodePoints != nil {
+				entry.ActualCodePoints = *detail.ActualCodePoints
+			}
+			if detail.LimitCodePoints != nil {
+				entry.LimitCodePoints = *detail.LimitCodePoints
 			}
 			ordered = append(ordered, entry)
 		}

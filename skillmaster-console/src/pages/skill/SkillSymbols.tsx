@@ -32,6 +32,15 @@ export default function SkillSymbols() {
           strokeLinejoin="round"
         />
       </symbol>
+      <symbol id="personMark" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="8.2" r="3.4" stroke="currentColor" strokeWidth="1.8" />
+        <path
+          d="M5.6 19.4c.7-3.4 3.4-5.4 6.4-5.4s5.7 2 6.4 5.4"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </symbol>
       <symbol id="versionMark" viewBox="0 0 24 24" fill="none">
         <path
           d="M20.1 12.7l-7.4 7.4a1.8 1.8 0 0 1-2.5 0L4 14.1V4h10.1l6 6a1.8 1.8 0 0 1 .0 2.7z"

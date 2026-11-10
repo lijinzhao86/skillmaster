@@ -13,6 +13,7 @@ import { useSkillFiles } from '../../hooks/useSkillFiles'
 import { useSkillSettings } from '../../hooks/useSkillSettings'
 import { useSkillImport } from '../../hooks/useSkillImport'
 import { atLeast } from '../../rungs'
+import { useSkillMyWhenToUse } from '../../hooks/useSkillMyWhenToUse'
 import { statusOf, versionLabel, versionSuffix } from '../../version'
 import { useSession } from '../../store'
 import { setSkillOwner } from '../../skillOwnership'
@@ -277,6 +278,15 @@ export default function SkillPage({
       ? evidenceLine(skill.usage ?? null)
       : null
   const library = membership.library
+  const myWhen = useSkillMyWhenToUse(
+    namespace,
+    name,
+    library?.active === true,
+    detail.setBanner,
+  )
+  useEffect(() => {
+    myWhen.startIfNeeded()
+  }, [myWhen.startIfNeeded])
   const showFavorite =
     library !== null &&
     ((library.source === null && library.joinable) ||
@@ -410,6 +420,13 @@ export default function SkillPage({
               compatibility={compatibility}
               liveLabel={liveLabel}
               canAdmin={canAdmin}
+              inLibraryActive={library?.active === true}
+              canWriteWhenToUse={skill !== null && atLeast(skill.rung, 'write')}
+              myWhenToUse={myWhen.myWhenToUse}
+              myWhenToUseError={myWhen.error}
+              myWhenToUseSaving={myWhen.saving}
+              onMyWhenToUseSave={myWhen.save}
+              onMyWhenToUseClear={myWhen.clear}
               groups={skillTags.groups}
               categories={skillTags.categories}
               myTagDefs={skillTags.myTagDefs}

@@ -167,12 +167,12 @@ public final class SkillCatalogRepository {
         String publicTagFilter = SqlFilters.publicTags(publicTagKeys, params);
 
         String sql = SkillPredicates.IDENTIFIED + """
-                SELECT t.id, t.namespace_id, t.name, t.description, t.when_to_use,
+                SELECT t.id, t.namespace_id, t.name, t.title, t.description, t.when_to_use,
                        t.updated_at, t.relevance, t.source, t.grant_role, t.public_rung,
                        t.state, t.version,
                        t.deleted_at, t.category_key, t.category_name, t.active
                 FROM (
-                    SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use, s.source,
+                    SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.when_to_use, s.source,
                            %s,
                            -- The list's "更新于" (V21, extended in v14): the current published
                            -- version's submission time, the newest draft's when nothing has been
@@ -239,6 +239,7 @@ public final class SkillCatalogRepository {
                         rs.getString("id"),
                         rs.getString("namespace_id"),
                         rs.getString("name"),
+                        rs.getString("title"),
                         rs.getString("description"),
                         rs.getString("when_to_use"),
                         rs.getString("updated_at"),
@@ -294,7 +295,7 @@ public final class SkillCatalogRepository {
         java.util.Map<String, Object> params = filterParams(filters, caller);
         params.put("ids", ids.toArray(String[]::new));
         String sql = SkillPredicates.IDENTIFIED + """
-                SELECT s.id, s.namespace_id, s.name, s.description, s.when_to_use,
+                SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.when_to_use,
                        %s AS updated_at,
                        0 AS relevance,
                        s.source,
@@ -320,6 +321,7 @@ public final class SkillCatalogRepository {
                         rs.getString("id"),
                         rs.getString("namespace_id"),
                         rs.getString("name"),
+                        rs.getString("title"),
                         rs.getString("description"),
                         rs.getString("when_to_use"),
                         rs.getString("updated_at"),

@@ -68,6 +68,10 @@ export interface InfoPaneProps {
   onPublicTagRemove: (id: string) => void
   /** 我的标签（id 与名字）。只有库条目生效时才会被画出来。 */
   myTags: Array<{ id: string; name: string }>
+  /** 我写的适用场景（本人私有）；只有库条目生效时才会被画出来。 */
+  myWhenToUse: string
+  /** 就地保存；空串表示清除。 */
+  onMyWhenToUseChange: (value: string) => void
   /** 全部标签定义：输入框要拿它做候选，找不到才新建。 */
   tagDefs: Array<{ id: string; name: string }>
   /** 我的标签这一区在不在：库条目生效时在，休眠 / 不在库时不在。 */
@@ -128,6 +132,8 @@ export default function InfoPane({
   onPublicTagRemove,
   myTags,
   inLibrary,
+  myWhenToUse,
+  onMyWhenToUseChange,
   tagDefs,
   canEditCategories,
   onCategoryChange,
@@ -144,6 +150,10 @@ export default function InfoPane({
   /* 我的标签与公开标签都是自由输入，就地展开；公开分类是固定词表，点「+」开多选菜单。 */
   const [editingTags, setEditingTags] = useState(initialEdit === 'my-tags')
   const [editingPublicTags, setEditingPublicTags] = useState(initialEdit === 'public-tags')
+  /* **我的适用场景就地编辑**：点「添加」或铅笔，这一块换成 textarea；保存 / 取消都在卡里。
+     200 字上限与 PRD 同一档；空串不让保存，「清除」是另一个动作。 */
+  const [editingWhen, setEditingWhen] = useState(false)
+  const [draftWhen, setDraftWhen] = useState('')
   const options = rungsAbove(tier)
   const show = inLibrary && tier !== 'owner' && options.length > 0
   const effective = options.some((rung) => rung.name === askedRung)
@@ -152,6 +162,11 @@ export default function InfoPane({
   const standing = STANDING[tier] ?? ''
   const hasCategory = category !== null
   const whenToUse = asList(FRONTMATTER.metadata.when_to_use)[0] ?? ''
+  /* **200 个 Unicode 码点**，不是 UTF-16 单元：中文、英文、标点都算 1，emoji 不会被算成 2。
+     HTML 的 maxlength 数的是 UTF-16 单元，所以这里按码点自己截。 */
+  const WHEN_MAX = 200
+  const clampWhen = (text: string) => [...text].slice(0, WHEN_MAX).join('')
+  const normalizeWhen = (text: string) => text.replace(/\s+/g, ' ').trim()
 
   return (
     <div className="tab-panel" data-tab="info" hidden={hidden}>
@@ -164,6 +179,8 @@ export default function InfoPane({
             </span>
             <p className="info-text" id="infoDesc">{FRONTMATTER.description}</p>
           </section>
+          {/* **适用场景是 skill 自带的，位置不随归属变。** 非库条目只有这一块；库条目在它
+              下面再加一块自己的。两块同档——作者那句不是脚注。 */}
           <section className="info-block" id="infoWhen" hidden={!whenToUse}>
             <span className="info-label">
               <svg className="info-icon" aria-hidden="true"><use href="#clockMark" /></svg>
@@ -171,6 +188,79 @@ export default function InfoPane({
             </span>
             <p className="info-text" id="infoWhenText">{whenToUse}</p>
           </section>
+          {inLibrary && (
+            /* **我的适用场景：库条目才有，排在 skill 自带的那块后面。** 两段都参与召回：
+               我的优先，作者那句仍在下层。空态也要画，因为「在哪里补」本身是一个入口。 */
+            <section className="info-block" id="infoMyWhen">
+              <div className="info-label-row">
+                <span className="info-label">
+                  <svg className="info-icon" aria-hidden="true"><use href="#personMark" /></svg>
+                  我的适用场景
+                </span>
+                {!editingWhen && (
+                  <button
+                    type="button"
+                    className="info-edit"
+                    aria-label={myWhenToUse === '' ? '添加我的适用场景' : '编辑我的适用场景'}
+                    title={myWhenToUse === '' ? '添加我的适用场景' : '编辑我的适用场景'}
+                    onClick={() => { setDraftWhen(myWhenToUse); setEditingWhen(true) }}
+                  >
+                    {myWhenToUse === '' ? (
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M4.5 19.5l.8-3.6L15.8 5.4a1.6 1.6 0 0 1 2.3 0l.5.5a1.6 1.6 0 0 1 0 2.3L8.1 18.7z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+                        <path d="M14.4 6.8l2.8 2.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </button>
+                )}
+              </div>
+              {editingWhen ? (
+                <div className="info-when-editor">
+                  <textarea
+                    className="info-when-input"
+                    aria-label="我的适用场景"
+                    rows={4}
+                    value={draftWhen}
+                    onChange={(event) => setDraftWhen(clampWhen(event.target.value))}
+                  />
+                  <div className="info-when-actions">
+                    <span className="info-when-count">{[...draftWhen].length}/{WHEN_MAX}</span>
+                    <button type="button" className="link-button" onClick={() => setEditingWhen(false)}>取消</button>
+                    {myWhenToUse !== '' && (
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => { onMyWhenToUseChange(''); setEditingWhen(false) }}
+                      >
+                        清除
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="button"
+                      disabled={draftWhen.trim() === ''}
+                      onClick={() => { onMyWhenToUseChange(normalizeWhen(draftWhen)); setEditingWhen(false) }}
+                    >
+                      保存
+                    </button>
+                  </div>
+                </div>
+              ) : myWhenToUse !== '' ? (
+                <p className="info-text" id="infoMyWhenText">{myWhenToUse}</p>
+              ) : (
+                <p className="info-empty" id="infoMyWhenEmpty">
+                  {'写一句你平时会怎么找它；搜索时先按你的说法找。'}
+                  {atLeast('write') && whenToUse !== '' &&
+                    '上面那句随 skill 发布；这句只影响你自己的搜索，改了不用出新版本。'}
+                  <button type="button" className="link-button" onClick={() => { setDraftWhen(''); setEditingWhen(true) }}>添加</button>
+                </p>
+              )}
+            </section>
+          )}
           <section className="info-block" id="infoEnv" hidden={!FRONTMATTER.compatibility}>
             <span className="info-label">
               <svg className="info-icon" aria-hidden="true"><use href="#envMark" /></svg>

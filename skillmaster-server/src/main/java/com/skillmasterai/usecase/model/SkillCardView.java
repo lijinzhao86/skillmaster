@@ -23,6 +23,13 @@ public record SkillCardView(
         String name,
         String description,
         String whenToUse,
+        /** The caller's own sentence, or null. Only an effective library entry carries one. */
+        String myWhenToUse,
+        /**
+         * Whether this result was promoted by the personal layer (S1/S2). Null outside a search,
+         * so a listing card does not claim a match that was never evaluated.
+         */
+        Boolean myWhenToUseMatched,
         String source,
         /**
          * The caller's own rung; null when they own it, and null when the caller has no
@@ -41,6 +48,12 @@ public record SkillCardView(
     public SkillCardView {
         publicTags = List.copyOf(publicTags);
         myTags = List.copyOf(myTags);
+    }
+
+    public SkillCardView withMyWhenToUseMatched(boolean matched) {
+        return new SkillCardView(id, namespace, name, description, whenToUse, myWhenToUse, matched,
+                source, standing, state, version, updatedAt, deletedAt, category, publicTags,
+                myTags);
     }
 
     public record Category(String key, String name) {

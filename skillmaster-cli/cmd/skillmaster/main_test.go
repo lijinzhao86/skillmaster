@@ -1284,7 +1284,7 @@ func TestSkillHelpHasTheSingleSkillVerbs(t *testing.T) {
 	want := map[string]bool{}
 	for _, verb := range []string{"invoke", "ls", "find", "stat", "head", "tail", "read", "cat", "wc", "grep", "check", "write", "get", "edit",
 		"rm", "mv", "cp", "versions", "submit", "share", "shares", "role", "unshare", "request",
-		"create", "copy", "open", "show", "license", "tags", "tag", "category", "join", "leave", "restore", "delete", "offline", "online", "visibility"} {
+		"create", "copy", "open", "show", "license", "tags", "tag", "category", "my-when-to-use", "join", "leave", "restore", "delete", "offline", "online", "visibility"} {
 		want[verb] = true
 	}
 

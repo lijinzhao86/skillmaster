@@ -91,6 +91,7 @@ var dispatchers = map[string]string{
 	"myTagsCmd":         "skills my-tags ",
 	"tagVerb":           "skill tag ",
 	"categoryVerb":      "skill category ",
+	"myWhenToUseVerb":   "skill my-when-to-use ",
 	"versionVerb":       "version ",
 	"draftVerb":         "draft ",
 	"notificationsVerb": "notifications ",

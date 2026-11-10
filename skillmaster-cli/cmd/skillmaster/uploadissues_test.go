@@ -157,6 +157,39 @@ func TestDroppedFilesAreNamedOnSuccess(t *testing.T) {
 	}
 }
 
+// ADR 0179: a text refusal reaches the person as the field and both numbers, not as raw JSON.
+func TestASubmitRefusedForItsTextPrintsTheFieldSentence(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/me" {
+			_, _ = w.Write([]byte(`{"user":{"user_id":"u","username":"owner","namespace":"owner"}}`))
+			return
+		}
+		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/versions") {
+			_, _ = w.Write([]byte(`{"skill":{"namespace":"owner","name":"pdf-tools",` +
+				`"address":"owner/pdf-tools"},"versions":[],"counts":{}}`))
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_upload","message":"no",` +
+			`"details":[{"field":"description","issue":"too_long",` +
+			`"actual_code_points":1025,"limit_code_points":1024}]}}`))
+	})
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"),
+		[]byte("---\nname: pdf-tools\ndescription: d\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := submitSkill(context.Background(), []string{dir})
+
+	if err == nil {
+		t.Fatal("a refused submission reported success")
+	}
+	if got := err.Error(); got != "描述有 1025 个字，超过 1024 个的上限。" {
+		t.Errorf("command error = %q", got)
+	}
+}
+
 // The whole command path: a refused package reaches the person as these lines, not as the generic
 // `服务端答 400`.
 func TestASubmitRefusedForItsNamesPrintsTheNameLines(t *testing.T) {

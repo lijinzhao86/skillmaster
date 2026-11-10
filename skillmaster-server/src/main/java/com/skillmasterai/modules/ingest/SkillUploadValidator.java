@@ -212,16 +212,16 @@ public final class SkillUploadValidator {
             if ("too_many_files".equals(issue)) {
                 return new IngestException(
                         "the upload is above the limit of " + limits.maxFiles() + " files",
-                        java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
-                                "file", "too_many_files", null, (long) limits.maxFiles())));
+                        java.util.List.of(com.skillmasterai.common.ApiError.Detail.limitBytes(
+                                "file", "too_many_files", limits.maxFiles())));
             }
             if ("too_large".equals(issue)) {
                 return new IngestException(
                         "the upload is above the limit of "
                                 + com.skillmasterai.common.Bytes.human(limits.maxTotalBytes())
                                 + " uncompressed",
-                        java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
-                                "file", "package_too_large", null, limits.maxTotalBytes())));
+                        java.util.List.of(com.skillmasterai.common.ApiError.Detail.limitBytes(
+                                "file", "package_too_large", limits.maxTotalBytes())));
             }
             // `package_too_large` is the reader's *import* ceiling (an interim guard). Its
             // sentence already names it and the way forward; rewriting it here would tell the

@@ -101,6 +101,13 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const [membership, setMembership] = useState<Membership>(askedMembership)
   const [joining, setJoining] = useState(false)
   const inLibrary = membership === 'created' || membership === 'shared' || membership === 'joined'
+  /* **我的适用场景**：库条目才有；地址里 `myWhen=` 覆盖演示数据，空串就是空态。 */
+  const [myWhenToUse, setMyWhenToUse] = useState<string>(() => {
+    const asked = params.get('myWhen')
+    if (asked !== null) return asked
+    if (membership === 'visible' || membership === 'blocked' || membership === 'dormant') return ''
+    return LIBRARY.find((skill) => skill.name === 'pdf-tools')?.myWhenToUse ?? ''
+  })
   /* 默认是「文档与演示」；地址里的 `category=` 让演示能落在别的货架上——包括停用词
      （停用的词不能新增，但已经贴在它上面的仍然保留）。 */
   const [category, setCategory] = useState<string | null>(() => {
@@ -697,6 +704,10 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           <symbol id="descMark" viewBox="0 0 24 24" fill="none">
             <path d="M5 6h14M5 10.5h14M5 15h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </symbol>
+          <symbol id="personMark" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8.2" r="3.4" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M5.6 19.4c.7-3.4 3.4-5.4 6.4-5.4s5.7 2 6.4 5.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </symbol>
           <symbol id="infoMark" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.8" />
             <path d="M12 11v5M12 8.1v.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -750,6 +761,8 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           }))}
           tagDefs={tagDefs}
           inLibrary={inLibrary}
+          myWhenToUse={myWhenToUse}
+          onMyWhenToUseChange={setMyWhenToUse}
           canEditCategories={atLeast('admin')}
           onCategoryChange={changeCategory}
           onTagPick={pickTag}

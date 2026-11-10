@@ -66,7 +66,9 @@ public class DiscoverRecommendedUseCase {
                         List.of(rows.get(batch - 1).updatedAt(), rows.get(batch - 1).id()))
                 : null;
         List<SkillCatalogService.CatalogRow> page = rows.stream().limit(batch).toList();
-        return new Result(cards.assemble(page, subject.userId()), next);
+        // The discovery plane never shows the caller's private sentence (ADR 0180: personal
+        // layer is library-only), even when a recommended skill happens to be in their library.
+        return new Result(cards.assemble(page, subject.userId(), false), next);
     }
 
     private static List<String> resumeKey(String cursor) {

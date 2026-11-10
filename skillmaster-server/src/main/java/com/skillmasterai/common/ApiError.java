@@ -30,20 +30,34 @@ public record ApiError(Error error) {
     /**
      * One field-level problem.
      *
-     * <p>Size refusals also carry the actual and allowed byte counts, so a client can write the
-     * sentence in its own language with both numbers (v39 A9). The two nullable components are
-     * omitted from JSON when absent; every other detail keeps the original two-field shape.
+     * <p>A size refusal also carries the actual and allowed counts, so a client can write the
+     * sentence in its own language with both numbers (v39 A9). Bytes and Unicode code points are
+     * separate components rather than one "amount": a file limit counts bytes, while a text limit
+     * counts code points (ADR 0179), and a client that read a code-point count as bytes would
+     * render the wrong unit. The nullable components are omitted from JSON when absent; every other
+     * detail keeps the original two-field shape.
      */
     @com.fasterxml.jackson.annotation.JsonInclude(
             com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-    public record Detail(String field, String issue, Long actualBytes, Long limitBytes) {
+    public record Detail(String field, String issue, Long actualBytes, Long limitBytes,
+            Long actualCodePoints, Long limitCodePoints) {
 
         public Detail(String field, String issue) {
-            this(field, issue, null, null);
+            this(field, issue, null, null, null, null);
         }
 
         public Detail(String field, String issue, long actualBytes, long limitBytes) {
-            this(field, issue, Long.valueOf(actualBytes), Long.valueOf(limitBytes));
+            this(field, issue, Long.valueOf(actualBytes), Long.valueOf(limitBytes), null, null);
+        }
+
+        /** A byte limit where only the ceiling is known, such as a count of files. */
+        public static Detail limitBytes(String field, String issue, long limit) {
+            return new Detail(field, issue, null, Long.valueOf(limit), null, null);
+        }
+
+        /** A text limit measured in Unicode code points, with the count and the cap. */
+        public static Detail codePoints(String field, String issue, long actual, long limit) {
+            return new Detail(field, issue, null, null, Long.valueOf(actual), Long.valueOf(limit));
         }
     }
 

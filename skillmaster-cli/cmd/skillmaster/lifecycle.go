@@ -362,7 +362,7 @@ func joinLibrary(ctx context.Context, args []string, join bool) error {
 		if join {
 			fmt.Println("加入是引用：不复制内容、不产生版本、不改变访问权；作者发新版，库里跟新版。")
 		} else {
-			fmt.Println("移除只删「我加入的」这条引用；这个 skill 上的我的标签会休眠，重新加入后回来。" +
+			fmt.Println("移除只删「我加入的」这条引用；我的标签与我的适用场景会保留，重新加入后回来。" +
 				"它仍在公域，仍可直接调用。")
 		}
 		fmt.Printf("确认后执行：\n%s\n", command)

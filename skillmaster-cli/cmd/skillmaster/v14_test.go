@@ -887,7 +887,7 @@ func TestJoinAndLeaveRefuseWithoutYesAndSendNothing(t *testing.T) {
 		consequence string
 	}{
 		{verb: "join", consequence: "不复制内容"},
-		{verb: "leave", consequence: "我的标签会休眠"},
+		{verb: "leave", consequence: "我的标签与我的适用场景会保留"},
 	} {
 		t.Run(test.verb, func(t *testing.T) {
 			fake := newFakeServer(t, func(recordedRequest) (int, string) {
@@ -987,6 +987,8 @@ func TestSkillShowPrintsTheFieldsInOrderAndOmitsTheEmptyOnes(t *testing.T) {
 				"version":{"name":"1.2.3","digest":"sha256:abc"}}`
 		case "/api/v1/skills/dev/pdf-tools/tags":
 			return http.StatusOK, threeGroups
+		case "/api/v1/skills/dev/pdf-tools/my-when-to-use":
+			return http.StatusOK, `{"when_to_use":"当我说循环审计时用它"}`
 		}
 		return http.StatusNotFound, `{}`
 	})
@@ -995,6 +997,7 @@ func TestSkillShowPrintsTheFieldsInOrderAndOmitsTheEmptyOnes(t *testing.T) {
 	want := "dev/pdf-tools\n" +
 		"  把 PDF 拆页、合并与压缩。\n" +
 		"  适用场景：需要拆分、合并或压缩 PDF 时。\n" +
+		"  我的适用场景：当我说循环审计时用它\n" +
 		"  运行环境：需要 Python 3.10+ 与 poppler。\n" +
 		"  版本：1.2.3\n" +
 		"  分类：文档与演示\n" +
@@ -1003,14 +1006,18 @@ func TestSkillShowPrintsTheFieldsInOrderAndOmitsTheEmptyOnes(t *testing.T) {
 	if out != want {
 		t.Errorf("skill show =\n%q\nwant\n%q", out, want)
 	}
-	if len(fake.requests) != 2 {
-		t.Errorf("skill show is two reads, got %d", len(fake.requests))
+	if len(fake.requests) != 3 {
+		t.Errorf("skill show is three reads (metadata, tags, my when-to-use), got %d",
+			len(fake.requests))
 	}
 
 	newFakeServer(t, func(r recordedRequest) (int, string) {
 		if r.Path == "/api/v1/skills/dev/pdf-tools/metadata" {
 			// No version object at all: every field this command could print is empty.
 			return http.StatusOK, `{"namespace":{"slug":"dev"},"name":"pdf-tools"}`
+		}
+		if r.Path == "/api/v1/skills/dev/pdf-tools/my-when-to-use" {
+			return http.StatusOK, `{"when_to_use":null}`
 		}
 		return http.StatusOK, `{"category":null,"public_tags":[],
 			"my_tags":{"readable":true,"reason":null,"tags":[]}}`

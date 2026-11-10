@@ -3464,6 +3464,74 @@ a.pager-page:hover {
   color: var(--ink);
 }
 
+/* v59 我的适用场景：标题行右侧一颗编辑键，下面是正文或就地编辑的 textarea。
+   编辑键与标签那颗「+」同一档（24 的框、15 的图标、hover 用 accent-tint）；空态用「+」。 */
+.info-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.info-label-row .info-label {
+  margin-bottom: 0;
+}
+.info-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.info-edit svg {
+  width: 15px;
+  height: 15px;
+}
+.info-edit:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+.info-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.info-when-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.75;
+  resize: vertical;
+}
+.info-when-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.info-when-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.info-when-count {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .info-tags {
   display: flex;
   flex-wrap: wrap;

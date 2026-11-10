@@ -58,6 +58,10 @@ TRUNCATE TABLE
     -- v19: the vectors. Listed explicitly rather than left to the cascade from `skill`, so a test
     -- that only ever writes this table (EmbeddingRepositoryIT) still starts from nothing.
     skill_embedding,
+    -- v59: the personal sentence and its sentence vectors. The embedding names the note, so it
+    -- goes first; both name a user and a skill, so they go before `app_user` and `skill` too.
+    my_skill_when_to_use_embedding,
+    my_skill_when_to_use,
     -- v54: a copy's provenance is skill-level and has no foreign key (ADR 0173), so it does not
     -- follow `skill`'s cascade; without this line a later test would read a row it did not write.
     skill_copy,

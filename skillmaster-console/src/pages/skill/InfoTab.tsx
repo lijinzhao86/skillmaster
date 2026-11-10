@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type {
   AuthoredSkill,
   CategoryRow,
@@ -22,6 +23,16 @@ export interface InfoTabProps {
   compatibility: string
   liveLabel: string
   canAdmin: boolean
+  /** v59: the sentence is drawn only for an effective library entry. */
+  inLibraryActive: boolean
+  /** Whether the caller may change the skill itself; the empty state explains the two sets only to them. */
+  canWriteWhenToUse: boolean
+  /** null until read; '' is the empty state. */
+  myWhenToUse: string | null
+  myWhenToUseError: string | null
+  myWhenToUseSaving: boolean
+  onMyWhenToUseSave: (text: string) => Promise<boolean>
+  onMyWhenToUseClear: () => Promise<boolean>
   groups: SkillTagGroupsData | null
   categories: CategoryRow[]
   myTagDefs: Array<{ id: string; name: string }>
@@ -79,12 +90,162 @@ function licenseNameOf(license: SignalLicense): string {
   return ''
 }
 
+/* **200 Unicode code points, not UTF-16 units**: a Han character, a Latin letter and a punctuation
+   mark each count as one, and an emoji is one rather than two. HTML's `maxlength` counts UTF-16
+   units, so the clamp is done here instead. */
+const WHEN_MAX = 200
+const clampWhen = (text: string): string => [...text].slice(0, WHEN_MAX).join('')
+const normalizeWhen = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
+function MyWhenToUseBlock({
+  value,
+  error,
+  saving,
+  canWrite,
+  hasAuthorWhen,
+  onSave,
+  onClear,
+}: {
+  value: string
+  error: string | null
+  saving: boolean
+  canWrite: boolean
+  /** Whether the skill itself has a 适用场景 above; the extra empty-state sentence points at it. */
+  hasAuthorWhen: boolean
+  onSave: (text: string) => Promise<boolean>
+  onClear: () => Promise<boolean>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  return (
+    <section className="info-block" id="infoMyWhen">
+      <div className="info-label-row">
+        <span className="info-label">
+          <svg className="info-icon" aria-hidden="true">
+            <use href="#personMark" />
+          </svg>
+          我的适用场景
+        </span>
+        {!editing ? (
+          <button
+            type="button"
+            className="info-edit"
+            aria-label={value === '' ? '添加我的适用场景' : '编辑我的适用场景'}
+            title={value === '' ? '添加我的适用场景' : '编辑我的适用场景'}
+            onClick={() => {
+              setDraft(value)
+              setEditing(true)
+            }}
+          >
+            {value === '' ? (
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M4.5 19.5l.8-3.6L15.8 5.4a1.6 1.6 0 0 1 2.3 0l.5.5a1.6 1.6 0 0 1 0 2.3L8.1 18.7z"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinejoin="round"
+                />
+                <path d="M14.4 6.8l2.8 2.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        ) : null}
+      </div>
+      {editing ? (
+        <div className="info-when-editor">
+          <textarea
+            className="info-when-input"
+            aria-label="我的适用场景"
+            rows={4}
+            value={draft}
+            onChange={(event) => setDraft(clampWhen(event.target.value))}
+          />
+          <div className="info-when-actions">
+            <span className="info-when-count">
+              {[...draft].length}/{WHEN_MAX}
+            </span>
+            <button type="button" className="link-button" onClick={() => setEditing(false)}>
+              取消
+            </button>
+            {value !== '' ? (
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  void (async () => {
+                    if (await onClear()) {
+                      setEditing(false)
+                    }
+                  })()
+                }}
+              >
+                清除
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="button"
+              disabled={saving || normalizeWhen(draft) === ''}
+              onClick={() => {
+                void (async () => {
+                  // Keep the editor open until the write resolves: a field-level refusal is
+                  // rendered inside it, and closing first would hide the only sentence that says
+                  // what to fix (v59 PRD #10).
+                  if (await onSave(normalizeWhen(draft))) {
+                    setEditing(false)
+                  }
+                })()
+              }}
+            >
+              保存
+            </button>
+          </div>
+          {error !== null ? <p className="field-error">{error}</p> : null}
+        </div>
+      ) : value !== '' ? (
+        <p className="info-text" id="infoMyWhenText">
+          {value}
+        </p>
+      ) : (
+        <p className="info-empty" id="infoMyWhenEmpty">
+          写一句你平时会怎么找它；搜索时先按你的说法找。
+          {canWrite && hasAuthorWhen
+            ? '上面那句随 skill 发布；这句只影响你自己的搜索，改了不用出新版本。'
+            : ''}
+          <button
+            type="button"
+            className="link-button"
+            onClick={() => {
+              setDraft('')
+              setEditing(true)
+            }}
+          >
+            添加
+          </button>
+        </p>
+      )}
+    </section>
+  )
+}
+
 export default function InfoTab({
   skill,
   whenToUse,
   compatibility,
   liveLabel,
   canAdmin,
+  inLibraryActive,
+  canWriteWhenToUse,
+  myWhenToUse,
+  myWhenToUseError,
+  myWhenToUseSaving,
+  onMyWhenToUseSave,
+  onMyWhenToUseClear,
   groups,
   categories,
   myTagDefs,
@@ -135,6 +296,17 @@ export default function InfoTab({
               </span>
               <p className="info-text">{whenToUse}</p>
             </section>
+          ) : null}
+          {inLibraryActive && myWhenToUse !== null ? (
+            <MyWhenToUseBlock
+              value={myWhenToUse}
+              error={myWhenToUseError}
+              saving={myWhenToUseSaving}
+              canWrite={canWriteWhenToUse}
+              hasAuthorWhen={whenToUse !== ''}
+              onSave={onMyWhenToUseSave}
+              onClear={onMyWhenToUseClear}
+            />
           ) : null}
           {compatibility !== '' ? (
             <section className="info-block">

@@ -96,6 +96,12 @@ final class SkillRoutes {
     /** The one shelf this skill is on. */
     static final String CATEGORY = SKILL + "/category";
 
+    /**
+     * The caller's own sentence for when they would look for this skill (v59). Read and write need
+     * the library entry; clearing does not, so a person who left can still remove their data.
+     */
+    static final String MY_WHEN_TO_USE = SKILL + "/my-when-to-use";
+
     /** Bringing a soft-deleted skill back; the API copy of the browser's action (v14). */
     static final String RESTORE = SKILL + "/restore";
 

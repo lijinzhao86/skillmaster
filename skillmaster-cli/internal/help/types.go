@@ -22,6 +22,10 @@ type Spec struct {
 	Summary string
 	// Usage is the usage line, including how each flag's value is written.
 	Usage string
+	// Note is one sentence that has to be on the help page but does not fit Summary's 12-rune
+	// column. Pure groups use it for a boundary the group itself must state (v59: this command
+	// edits your own sentence, not the author's SKILL.md field).
+	Note string
 	// Flags lists only the flags that change behaviour. Universal flags (--help, --json) come from
 	// Universal and are not repeated here.
 	Flags []Flag

@@ -60,6 +60,8 @@ var codes = []Code{
 	// Membership and tags.
 	{Name: "skill_not_joinable", Text: "这个 skill 现在加入不了", Exit: 1},
 	{Name: "library_reference_missing", Text: "库里没有这个引用", Exit: 1},
+	{Name: "skill_not_in_library", Text: "这个 skill 不在你的库里", Exit: 1},
+	{Name: "my_when_to_use_too_long", Text: "我的适用场景超过 200 个字符", Exit: 1},
 
 	// Service credentials (v52). **`credential_share_conflict` is not here**: creating a share is a
 	// page action (ADR 0081's first exception), so no CLI request can carry it. `credential_not_shareable`

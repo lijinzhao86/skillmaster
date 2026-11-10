@@ -16,8 +16,8 @@
 | M8 | search | `.search` | — | — |
 | M9 | distribution | `.distribution` | — | — |
 | M10 | audit | `.audit` | `audit_event` | `AuditEvent`、`AuditLog` |
-| M13 | retrieval | `.retrieval` | `skill_embedding` | `EmbeddingTextSource` |
-| M12 | skill | `.skill` | `skill`、`skill_grant`、`skill_access_request`、`skill_invitation`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`skill_category`、`skill_source`、`skill_source_snapshot`、`skill_version_license`、`skill_copy` | `Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection` |
+| M13 | retrieval | `.retrieval` | `skill_embedding`、`my_skill_when_to_use_embedding` | `EmbeddingTextSource` |
+| M12 | skill | `.skill` | `skill`、`skill_grant`、`skill_access_request`、`skill_invitation`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`my_skill_when_to_use`、`skill_category`、`skill_source`、`skill_source_snapshot`、`skill_version_license`、`skill_copy` | `Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection` |
 | M14 | notification | `.notification` | `notification`、`notification_recipient` | `Notification`、`NotificationDraft`、`NotificationKinds`、`NotificationOutcome`、`NotificationPage`、`NotificationQuery`、`NotificationService`、`NotificationStateException`、`NotificationNotFoundException` |
 | M15 | metrics | `.metrics` | `skill_usage_day`、`skill_usage_total` | `SkillLoad`、`UsageQuery`、`UsageRecorder`、`UsageScope`、`UsageSnapshot` |
 | M16 | secret | `.secret` | `service_credential`、`credential_binding`、`credential_use`、`credential_share` | `SecretService`、`CredentialRef`、`CredentialBinding`、`CredentialLease`、`CredentialValue`、`IncomingBinding`、`SecretSettings`、`SecretNotFoundException`、`CredentialBindingNotFoundException`、`BindingConflictException`、`SecretValueTooLargeException`、`QuotaExceededException`、`NotShareableException`、`ShareNotFoundException`、`CredentialVaultUnavailableException` |

@@ -48,6 +48,12 @@ export function stubFetch(...responses: Array<() => Response | Promise<Response>
     if (method === 'GET' && path.endsWith('/invitations')) {
       return json(200, { items: [] })
     }
+    // v59: every skill page reads the caller's own sentence once. Answered here with the empty
+    // truth, for the same reason as the two reads above; a test about the block calls
+    // `stubMyWhenToUse` first.
+    if (method === 'GET' && path.endsWith('/my-when-to-use')) {
+      return json(200, myWhenToUseAnswer)
+    }
     const next = responses.shift()
     if (next === undefined) {
       throw new Error(`the test made more requests than it stubbed (${requests.length} so far)`)
@@ -58,6 +64,13 @@ export function stubFetch(...responses: Array<() => Response | Promise<Response>
   })
   vi.stubGlobal('fetch', mock)
   return { requests, mock }
+}
+
+let myWhenToUseAnswer: unknown = { when_to_use: null }
+
+/** What the automatic `GET …/my-when-to-use` answers for the rest of the file. */
+export function stubMyWhenToUse(body: unknown): void {
+  myWhenToUseAnswer = body
 }
 
 export function json(status: number, body: unknown): Response {

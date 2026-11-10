@@ -116,6 +116,28 @@ class PublishBatchIT extends AbstractAccountIT {
     }
 
     @Test
+    void aDraftWrittenUnderAnOlderTextRuleCannotGoLive() {
+        String draft = submit("too-long", "第一版", null);
+        // A draft can predate the 200-code-point rule; the stored frontmatter is what publish reads.
+        jdbc.sql("""
+                UPDATE skill_version v SET frontmatter = :frontmatter
+                  FROM skill s, namespace n
+                 WHERE v.skill_id = s.id AND s.namespace_id = n.id
+                   AND n.slug = :slug AND s.name = :name AND v.state = 'draft'
+                """)
+                .param("frontmatter", "{\"name\":\"too-long\",\"description\":\"d\","
+                        + "\"metadata\":{\"when_to_use\":\"" + "x".repeat(201) + "\"}}")
+                .param("slug", username).param("name", "too-long").update();
+
+        List<JsonNode> lines = batch(List.of(target("too-long", draft, "1.0.0")));
+
+        assertThat(lines.get(1).get("ok").asBoolean()).isFalse();
+        assertThat(lines.get(1).get("code").asText()).isEqualTo("invalid_request");
+        assertThat(lines.get(1).get("message").asText()).contains("when_to_use");
+        assertThat(liveVersionOf("too-long")).as("nothing went live").isNull();
+    }
+
+    @Test
     void aTargetThisCallerCannotPublishFailsAsItsOwnRowAndNotAsTheWholeBatch() {
         // A `write` grantee may add a draft and not publish one. The queue never lists it (M12 filters
         // by rung), so this is the window where the grant changed after the page opened — and the row

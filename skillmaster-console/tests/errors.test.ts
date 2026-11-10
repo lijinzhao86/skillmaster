@@ -89,7 +89,7 @@ describe('an error code', () => {
     ).toContain('同一个名字已经有了')
     expect(
       codeMessage('invalid_request', 'refused', [{ field: 'description', issue: 'too_long' }]),
-    ).toBe('说明最多 200 个字。')
+    ).toBe('描述最多 1024 个字。')
     // An issue this version does not know still falls back to the code's sentence.
     expect(
       codeMessage('invalid_request', 'refused', [{ field: 'x', issue: 'mystery' }]),

@@ -168,6 +168,11 @@ func skillVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return categoryVerb(ctx, args[1:])
+	case "my-when-to-use":
+		if err := rejectJSON("my-when-to-use", args[1:]); err != nil {
+			return err
+		}
+		return myWhenToUseVerb(ctx, args[1:])
 	case "join":
 		if err := rejectJSON("join", args[1:]); err != nil {
 			return err

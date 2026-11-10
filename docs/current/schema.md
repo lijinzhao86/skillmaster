@@ -53,6 +53,8 @@
 | `credential_share` | M16 |
 | `skill_copy` | M12 |
 | `legal_consent` | M1 |
+| `my_skill_when_to_use` | M12 |
+| `my_skill_when_to_use_embedding` | M13 |
 
 ## `app_user`
 
@@ -519,3 +521,19 @@
 - `terms_version` — TEXT NOT NULL
 - `privacy_version` — TEXT NOT NULL
 - `consented_at` — TEXT NOT NULL
+
+## `my_skill_when_to_use`
+
+- `user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `when_to_use` — TEXT NOT NULL
+- `updated_at` — TEXT NOT NULL
+
+## `my_skill_when_to_use_embedding`
+
+- `user_id` — TEXT NOT NULL
+- `skill_id` — TEXT NOT NULL
+- `sentence_no` — INTEGER NOT NULL
+- `model` — TEXT NOT NULL
+- `embedding` — vector(1024) NOT NULL
+- `updated_at` — TEXT NOT NULL

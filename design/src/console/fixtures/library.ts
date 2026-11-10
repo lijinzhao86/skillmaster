@@ -187,6 +187,8 @@ export interface LibrarySkill {
   description: string
   /** `metadata.when_to_use`——PRD 把它纳入库内搜索与公域检索。 */
   whenToUse: string
+  /** 我写的适用场景（本人私有）；没写时这里没有值，预览退回作者的 `whenToUse`。 */
+  myWhenToUse?: string
   source: Source
   /**
    * **你在那一条上的档位**（2026-10-31 起直接画在行上）：我创建的是「所有者」，不在这个字段里；
@@ -241,21 +243,27 @@ export const LONG_DESCRIPTIONS: string[] = [
 export const LONG_WHEN = '用户要做界面、改界面、重设计、审界面时；写任何前端页面、组件、设计稿之前；问「这个页面怎么设计」「配色/排版/交互/动效怎么做」「这版好看吗」「跟设计稿对不上」「照设计稿实现」时；或说「改版」「重做一版」「把界面弄好看点」「UI/UX 怎么定」时。'
 
 /**
- * 一条**够到折线**的 when_to_use：三句原话接起来。
+ * 一条**贴着产品上限（200 码点）**的 when_to_use：`LONG_WHEN`（124 字真实原文）＋一句真实的
+ * 审计触发语，共 185 字。
  *
- * 服务端对它没有长度上限（DB 是 `TEXT`；校验只要求 `name` ≤ 64 字、`description` 非空），但
- * **现有样本里最长的一条只有 131 字**——3–5 行，够不到预览的 8 行折线，所以「超长的适用场景」
- * 这件事一直没法在演示件上看见。
+ * **不再拼接三句超长文本**：v59 把作者这句的上限定在 200（ADR 0179），超过就不再是合法数据
+ * 了。185 字在 380px 的预览里装得进 8 行，所以宽屏不再折；窄屏（预览被压到更窄）仍可能折。
  *
- * 拼接用的三句都是真的，逐句可查：`lijinzhao/web-design`、`lijinzhao/code-audit`、
- * `lijinzhao/coding` 三个 skill 的 `metadata.when_to_use` 原文，一个字没改。
- * **拼接这件是我们做的**（演示件的编排，不是任何一条真实数据）。
+ * 两句都是真的，逐句可查：`lijinzhao/web-design` 与 `lijinzhao/code-audit` 的
+ * `metadata.when_to_use` 原文，拼接是演示件的编排。
  */
 export const LONG_WHEN_STRESS = [
   LONG_WHEN,
-  '用户说「循环审计」「审计」「审一下这版」「code review」「有没有问题」「还有没有 blocker/high」「再跑一轮」时；功能做完、准备合并/上线/发版前；提交前想独立看一眼；或怀疑文档与实现不一致时。只想看、不动文件就说「先看一眼」或「只看不改」。',
-  '用户要写代码、改代码、重构、修 bug、调试、写测试时；任何会改动仓库代码的任务开始之前；或问「这段代码怎么改」「为什么崩了」「性能怎么这么差」这类会落到改动上的问题。',
+  '用户说「循环审计」「审一下这版」「还有没有 blocker/high」时；功能做完、准备上线前；只想看就说「先看一眼」。',
 ].join(' ')
+
+/**
+ * **个人适用场景的上限那一屏（200 字，产品上限）。** 作者那句也是贴着 200 上限的替身；用户
+ * 自己写的那一段同样按 200 算。200 字在 380px 的预览里正好占满 8 行、不折；窄屏才可能折。
+ * 第一句就是本文档反复用的那个真实触发语。
+ */
+export const MY_WHEN_STRESS =
+  '当我说「循环审计」「过一遍合同」「把扫描件里的条款抽出来」的时候用它；给我 PDF 合同时先说一句「先拆一下」，或者把合同、报价单、扫描发票丢过来让我核对条款、金额、日期的时候，也用它；需要比对两版合同哪几条改了，或者把几百页附件按章节拆开再汇总，同样用它；反过来只是让我读一段短文字、一张截图或者一个网页的时候，不要用它；只是让我看看某个 PDF 长什么样、大致讲点什么的时候，也不要先拿它出来用。'
 
 /**
  * 把前 `count` 条的说明换成真实长度，两条交替；前 `whenCount` 条的适用场景换成 `LONG_WHEN`。
@@ -267,7 +275,7 @@ export function withLongDescriptions<T extends { description: string; whenToUse?
   rows: T[],
   count = 4,
   whenCount = 0,
-  /** 这一条的适用场景用 `LONG_WHEN_STRESS`——两段话都超长的那一屏，靠它才画得出来。 */
+  /** 这一条的适用场景用 `LONG_WHEN_STRESS`——贴着 200 上限的那一态，靠它才画得出来。 */
   stressIndex = -1,
 ): T[] {
   return rows.map((row, index) => {
@@ -283,11 +291,12 @@ export function withLongDescriptions<T extends { description: string; whenToUse?
 }
 
 export const LIBRARY: LibrarySkill[] = [
-  /* **这一条在默认数据里就是长的，故意的。** 它是演示件里唯一一条「两段话都超长」的样本：
-   `?page=skills&sel=dev/pdf-tools` 点一下就看得见预览的两处折叠，不必再加 `?long=1`。
-   文字全是真的——描述取 `heygen-com/cut-the-curve`（949 字，实测样本里最长的一条），
-   适用场景见 `LONG_WHEN_STRESS`（三句原话接起来的）。 */
-  { name: 'pdf-tools', namespace: 'dev', description: LONG_DESCRIPTIONS[1], whenToUse: LONG_WHEN_STRESS, source: 'created', state: 'live', version: '1.2.3', updated: '2026/10/07 14:32', category: 'doc', publicTags: ['pdf', 'batch'], myTags: ['client'] },
+  /* **这一条在默认数据里就是长的，故意的。** 它是演示件里唯一一条「描述与生效的适用场景都超长」
+   的样本：`?page=skills&sel=dev/pdf-tools` 点一下就看得见预览的两处折叠，不必再加 `?long=1`。
+   描述取 `heygen-com/cut-the-curve`（949 字，实测样本里最长的一条），作者的适用场景见
+   `LONG_WHEN_STRESS`；用户自己的那段见 `MY_WHEN_STRESS`（200 字，产品上限）——
+   预览显示的是生效的那段（我的），作者那段退到信息页当参考。 */
+  { name: 'pdf-tools', namespace: 'dev', description: LONG_DESCRIPTIONS[1], whenToUse: LONG_WHEN_STRESS, myWhenToUse: MY_WHEN_STRESS, source: 'created', state: 'live', version: '1.2.3', updated: '2026/10/07 14:32', category: 'doc', publicTags: ['pdf', 'batch'], myTags: ['client'] },
   { name: 'commit-lint', namespace: 'dev', description: '按团队约定检查提交信息，不合规的给出改法。', whenToUse: '提交之前，想确认这一条信息团队读得懂的时候', source: 'created', state: 'live', version: '0.4.1', updated: '2026/09/18 09:06', category: 'dev', publicTags: ['review', 'efficiency'], myTags: ['team'] },
   { name: 'changelog-writer', namespace: 'dev', description: '从提交历史里收拾出一份能给人看的更新日志。', whenToUse: '要发版，需要一份给人读的更新说明的时候', source: 'created', state: 'live', version: '1.0.0', updated: '2026/10/09 08:15', category: 'writing', publicTags: ['doc-gen', 'writing'], myTags: ['client', 'this-week'] },
   { name: 'sql-review', namespace: 'dev', description: '读一遍要上线的 SQL，把会锁表、会走全表扫的那几句挑出来。', whenToUse: '一条 SQL 要上生产之前', source: 'created', state: 'offline', version: '0.1.0', updated: '2026/04/12 10:05', category: 'dev', publicTags: ['review', 'data'], myTags: [] },

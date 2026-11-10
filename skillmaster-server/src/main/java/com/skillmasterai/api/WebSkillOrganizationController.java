@@ -3,6 +3,7 @@ package com.skillmasterai.api;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.usecase.JoinSkillLibraryUseCase;
 import com.skillmasterai.usecase.LeaveSkillLibraryUseCase;
+import com.skillmasterai.usecase.MyWhenToUseUseCase;
 import com.skillmasterai.usecase.ReadSkillTagsUseCase;
 import com.skillmasterai.usecase.WriteMyTagUseCase;
 import com.skillmasterai.usecase.WritePublicTagUseCase;
@@ -38,17 +39,19 @@ class WebSkillOrganizationController {
     private final WriteSkillCategoryUseCase writeCategory;
     private final WritePublicTagUseCase writePublicTag;
     private final WriteMyTagUseCase writeMyTag;
+    private final MyWhenToUseUseCase notes;
 
     WebSkillOrganizationController(ReadSkillTagsUseCase readTags,
             JoinSkillLibraryUseCase joinLibrary, LeaveSkillLibraryUseCase leaveLibrary,
             WriteSkillCategoryUseCase writeCategory, WritePublicTagUseCase writePublicTag,
-            WriteMyTagUseCase writeMyTag) {
+            WriteMyTagUseCase writeMyTag, MyWhenToUseUseCase myWhenToUse) {
         this.readTags = readTags;
         this.joinLibrary = joinLibrary;
         this.leaveLibrary = leaveLibrary;
         this.writeCategory = writeCategory;
         this.writePublicTag = writePublicTag;
         this.writeMyTag = writeMyTag;
+        this.notes = myWhenToUse;
     }
 
     @GetMapping(path = WebSkillRoutes.TAGS, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -86,6 +89,33 @@ class WebSkillOrganizationController {
             @PathVariable String name, Authentication caller) {
         return changed(writeCategory.clear(namespace, name,
                 AuthenticatedSubject.ofSession(caller.getName())));
+    }
+
+    @GetMapping(path = WebSkillRoutes.MY_WHEN_TO_USE, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrganizationResponses.MyWhenToUse> myWhenToUse(@PathVariable String namespace,
+            @PathVariable String name, Authentication caller) {
+        MyWhenToUseUseCase.Read read = notes.read(namespace, name,
+                AuthenticatedSubject.ofSession(caller.getName()))
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new OrganizationResponses.MyWhenToUse(read.whenToUse()));
+    }
+
+    @PutMapping(path = WebSkillRoutes.MY_WHEN_TO_USE,
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrganizationResponses.Changed> setMyWhenToUse(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody MyWhenToUseBody body, Authentication caller) {
+        return changed(notes.set(namespace, name, body.whenToUse(),
+                AuthenticatedSubject.ofSession(caller.getName())));
+    }
+
+    @DeleteMapping(path = WebSkillRoutes.MY_WHEN_TO_USE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrganizationResponses.Changed> clearMyWhenToUse(@PathVariable String namespace,
+            @PathVariable String name, Authentication caller) {
+        return ResponseEntity.ok(new OrganizationResponses.Changed(
+                notes.clear(namespace, name,
+                        AuthenticatedSubject.ofSession(caller.getName()))));
     }
 
     @PostMapping(path = WebSkillRoutes.PUBLIC_TAGS, consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -134,5 +164,8 @@ class WebSkillOrganizationController {
     }
 
     record CategoryBody(String key) {
+    }
+
+    record MyWhenToUseBody(String whenToUse) {
     }
 }

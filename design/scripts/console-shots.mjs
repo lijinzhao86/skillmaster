@@ -151,6 +151,11 @@ export const SHOTS = [
   { name: 'skills-failed', query: '?page=skills&state=failed', page: 'skills', nav: '我的 skill', scrolls: false },
   /* `?page=skill` 落在「信息」——那一屏一屏装得下（内容块在没点文件时不出现），所以它不滚动。 */
   { name: 'skill-ready', query: '?page=skill', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **我的适用场景的另外两态（v59）**：没写过是空态 +「添加」；点开是卡片里的 textarea。
+     `?myWhen=` 把那一段清空，`open` 再点一下「添加」——同一页的两张照片。 */
+  { name: 'skill-my-when-empty', query: '?page=skill&myWhen=', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-my-when-edit', query: '?page=skill&myWhen=', page: 'skill', nav: '我的 skill', scrolls: false,
+    open: () => document.querySelector('#infoMyWhenEmpty button')?.click() },
   /* **六种库归属里另外的五种（v14）**：页头的加入 / 移除，与「我的标签」那一区都跟着变。 */
   { name: 'skill-shared', query: '?page=skill&in=shared', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-joined', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', scrolls: false },

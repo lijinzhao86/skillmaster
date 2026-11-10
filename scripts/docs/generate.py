@@ -179,7 +179,8 @@ def gen_limits() -> str:
         HEADER.format(
             source="skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/"
             "IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/"
-            "modules/blob/BlobSettings.java"
+            "modules/blob/BlobSettings.java；skillmaster-server/src/main/java/"
+            "com/skillmasterai/common/SkillFieldLimits.java"
         ),
         "# 上传与对象存储的上限（生成）\n",
         "**服务端**以这些常量为准。CLI 与网页各自保留了一份同值或接近的常量（不由这里读取，"
@@ -221,6 +222,28 @@ def gen_limits() -> str:
         lines.append(f"| 单个 blob 上限 | {ceiling} 字节（{human(ceiling)}） |")
     else:
         fail("BlobSettings.defaults() 的形状变了，解析不到两个默认值")
+
+    # ADR 0179: the three skill text limits are code points, not bytes. A separate table rather
+    # than reusing the byte one, because the unit is the fact a client has to respect.
+    fields_source = read(SERVER / "common/SkillFieldLimits.java")
+    fields = LIMIT_RE.findall(fields_source)
+    if len(fields) < 4:
+        fail(f"SkillFieldLimits 只解析到 {len(fields)} 个常量")
+    lines.append("")
+    lines.append("## 技能文本字段的上限\n")
+    lines.append(
+        "单位是 **Unicode 码点**：一个汉字、一个英文字母、一个标点都算 1，emoji 也按 1 个"
+        "码点计（ADR 0179）。作者字段由 `SkillTextFields.inspect` 校验：写入时经 "
+        "`SkillDocument.parse`，发布时经 `SkillMetadataService` 各调用一次；"
+        "「我的适用场景」由它自己的写接口校验。\n"
+    )
+    lines.append("| 常量 | 原始表达式 | 码点 |")
+    lines.append("|---|---|---|")
+    for name, expression in fields:
+        value = evaluate(expression)
+        if value is None:
+            fail(f"无法求值 SkillFieldLimits.{name} = {expression.strip()}")
+        lines.append(f"| `SkillFieldLimits.{name}` | `{expression.strip()}` | {value} |")
     lines.append("")
     return "\n".join(lines)
 

@@ -99,7 +99,7 @@ public final class ModuleMap {
             // private needs no row changed here. The one write is the embedding itself, on publish
             // (through `EmbeddingIndex`), and no second copy of the state exists to keep in step.
             new Module("M13", "retrieval", MODULES_PACKAGE + ".retrieval",
-                    Set.of("skill_embedding")),
+                    Set.of("skill_embedding", "my_skill_when_to_use_embedding")),
             // M11 (gateway) retired in v20: its one artefact, the startup journey, is the platform's
             // `skillmaster/skillmaster-startup` skill now (ADR 0096), so the package it named no longer exists.
             // M12 was carved out of M7 for v5 (ADR 0053): the skill's address and identity, the
@@ -113,7 +113,7 @@ public final class ModuleMap {
             new Module("M12", "skill", MODULES_PACKAGE + ".skill",
                     Set.of("skill", "skill_grant", "skill_access_request", "skill_invitation",
                             "skill_library_join", "skill_public_tag", "my_tag_definition",
-                            "my_tag_attachment", "skill_category",
+                            "my_tag_attachment", "my_skill_when_to_use", "skill_category",
                             "skill_source", "skill_source_snapshot", "skill_version_license",
                             // v54: an internal copy is provenance about the skill row, not an
                             // external source; M12 writes and reads it, and no other module does.

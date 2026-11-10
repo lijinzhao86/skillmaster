@@ -251,6 +251,11 @@ func notANameRefusal(err error) error {
 	if sentence, ok := sizeRefusal(server); ok {
 		return errors.New(sentence)
 	}
+	// ADR 0179's text refusals arrive on the same 400; without this the author sees the raw JSON
+	// envelope and never learns which field or limit the server refused.
+	if sentence, ok := textRefusal(server); ok {
+		return errors.New(sentence)
+	}
 	return fmt.Errorf("服务端答 %d：%s", server.Status, server.Body)
 }
 

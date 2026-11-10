@@ -22,10 +22,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param threshold  the lowest cosine similarity a result may have
  * @param overFetch  candidates fetched per requested row when the admissible set cannot be
  *                   enumerated
+ * @param personalThreshold the S2 cut for the caller's own sentence vectors
+ * @param personalMargin    how far S2's best must lead the runner-up before it claims a tier
  */
 @ConfigurationProperties("skillmaster.retrieval")
 public record RetrievalProperties(Boolean enabled, String apiKey, String model, Integer dimensions,
-        Duration timeout, Double threshold, Integer overFetch) {
+        Duration timeout, Double threshold, Integer overFetch, Double personalThreshold,
+        Double personalMargin) {
 
     public RetrievalProperties {
         enabled = enabled != null && enabled;
@@ -43,5 +46,10 @@ public record RetrievalProperties(Boolean enabled, String apiKey, String model, 
         // `application.yml`, which supplies the value in every real deployment.
         threshold = threshold == null ? 0.40 : threshold;
         overFetch = overFetch == null ? 20 : overFetch;
+        // Provisional until the labelled set is scanned (ADR 0180 Q2). The cut is above the author
+        // threshold because a personal sentence is short and a false promotion costs a wrong row;
+        // the margin stops two near-identical sentences from claiming the tier on noise.
+        personalThreshold = personalThreshold == null ? 0.55 : personalThreshold;
+        personalMargin = personalMargin == null ? 0.05 : personalMargin;
     }
 }

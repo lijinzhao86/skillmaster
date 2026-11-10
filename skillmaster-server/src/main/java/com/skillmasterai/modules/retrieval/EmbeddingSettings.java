@@ -22,9 +22,12 @@ import java.time.Duration;
  * @param threshold     the lowest cosine similarity a result may have and still be returned
  * @param overFetch     how many candidates per requested row to fetch when the admissible set
  *                      cannot be enumerated (the public plane)
+ * @param personalThreshold the S2 cut for the caller's own sentence vectors
+ * @param personalMargin    how far S2's best must lead the runner-up before it claims a tier
  */
 public record EmbeddingSettings(boolean enabled, String apiKey, String model, int dimensions,
-        Duration timeout, double threshold, int overFetch) {
+        Duration timeout, double threshold, int overFetch, double personalThreshold,
+        double personalMargin) {
 
     /** The declared width of {@code skill_embedding.embedding}; see V30. */
     public static final int COLUMN_WIDTH = 1024;
@@ -45,6 +48,13 @@ public record EmbeddingSettings(boolean enabled, String apiKey, String model, in
         }
         if (overFetch < 1) {
             throw new IllegalArgumentException("embedding over-fetch must be at least 1");
+        }
+        if (personalThreshold < 0 || personalThreshold > 1) {
+            throw new IllegalArgumentException(
+                    "the personal semantic threshold must be within 0 and 1");
+        }
+        if (personalMargin < 0 || personalMargin > 1) {
+            throw new IllegalArgumentException("the personal semantic margin must be within 0 and 1");
         }
         if (enabled && (apiKey == null || apiKey.isBlank())) {
             // A key is required exactly when the switch is on. Refusing here is what keeps the

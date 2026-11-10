@@ -3,11 +3,13 @@ import { fireEvent, render } from '@testing-library/react'
 import SkillPage from '../src/pages/SkillPage'
 import {
   clearCookies,
+  errorBody,
   flush,
   json,
   setCookie,
   stubFetch,
   stubLocation,
+  stubMyWhenToUse,
   type RecordedRequest,
 } from './support'
 
@@ -117,6 +119,8 @@ let location = stubLocation('/')
 
 beforeEach(() => {
   location = stubLocation('/')
+  // v59's read is answered by the harness; a test about the block sets its own value.
+  stubMyWhenToUse({ when_to_use: null })
   setCookie('XSRF-TOKEN', 'token-one')
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -251,8 +255,10 @@ describe('one skill: 信息', () => {
     expect(text(blocks[0])).toContain('把 PDF 拆开再拼起来')
     expect(text(blocks[1])).toContain('适用场景')
     expect(text(blocks[1])).toContain('需要拆分或合并 PDF 时')
-    expect(text(blocks[2])).toContain('运行环境')
-    expect(text(blocks[2])).toContain('需要 ghostscript')
+    expect(text(blocks[2])).toContain('我的适用场景')
+    expect(text(blocks[2])).toContain('搜索时先按你的说法找')
+    expect(text(blocks[3])).toContain('运行环境')
+    expect(text(blocks[3])).toContain('需要 ghostscript')
     expect(text(container.querySelector('.info-rail-value'))).toBe('@1.0.0')
   })
 
@@ -383,7 +389,76 @@ describe('one skill: 信息', () => {
       frontmatter: { name: 'pdf-tools' },
     })
 
-    expect(container.querySelectorAll('.info-block')).toHaveLength(1)
+    expect(container.querySelectorAll('.info-block')).toHaveLength(2)
+    expect(text(container.querySelectorAll('.info-block')[1])).toContain('我的适用场景')
+    // The extra sentence points at 「上面那句」; with no author sentence there is nothing to point at.
+    expect(text(container.querySelector('#infoMyWhen'))).not.toContain('上面那句')
+  })
+
+  it('adds, edits and clears my when-to-use sentence in place', async () => {
+    stubMyWhenToUse({ when_to_use: '当我说循环审计时用它' })
+    const { container } = await showSkill(SKILL)
+
+    expect(text(container.querySelector('#infoMyWhen'))).toContain('当我说循环审计时用它')
+    const put = stubFetch(() => json(200, { changed: true }))
+
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>('#infoMyWhen .info-edit') as HTMLButtonElement,
+    )
+    const textarea = container.querySelector<HTMLTextAreaElement>(
+      '#infoMyWhen .info-when-input',
+    ) as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: '当我说反复审查时用它' } })
+    expect(text(container.querySelector('#infoMyWhen .info-when-count'))).toBe('10/200')
+    fireEvent.click(
+      [...container.querySelectorAll<HTMLButtonElement>('#infoMyWhen .info-when-actions button')]
+        .find((button) => text(button) === '保存') as HTMLButtonElement,
+    )
+    await settle()
+
+    expect(put.requests.at(-1)?.method).toBe('PUT')
+    expect(put.requests.at(-1)?.body).toEqual({ when_to_use: '当我说反复审查时用它' })
+    expect(text(container.querySelector('#infoMyWhen'))).toContain('当我说反复审查时用它')
+
+    const clear = stubFetch(() => json(200, { changed: true }))
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>('#infoMyWhen .info-edit') as HTMLButtonElement,
+    )
+    fireEvent.click(
+      [...container.querySelectorAll<HTMLButtonElement>('#infoMyWhen .info-when-actions button')]
+        .find((button) => text(button) === '清除') as HTMLButtonElement,
+    )
+    await settle()
+
+    expect(clear.requests.at(-1)?.method).toBe('DELETE')
+    expect(text(container.querySelector('#infoMyWhen'))).toContain('搜索时先按你的说法找')
+  })
+
+  it('keeps the editor open when the sentence is refused', async () => {
+    stubMyWhenToUse({ when_to_use: '当我说循环审计时用它' })
+    const { container } = await showSkill(SKILL)
+    stubFetch(() =>
+      json(
+        400,
+        errorBody('my_when_to_use_too_long', 'too long', [
+          { field: 'when_to_use', issue: 'too_long' },
+        ]),
+      ),
+    )
+
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>('#infoMyWhen .info-edit') as HTMLButtonElement,
+    )
+    fireEvent.click(
+      [...container.querySelectorAll<HTMLButtonElement>('#infoMyWhen .info-when-actions button')]
+        .find((button) => text(button) === '保存') as HTMLButtonElement,
+    )
+    await settle()
+
+    // The field error lives inside the editor; closing first would hide the only sentence that
+    // says what to fix.
+    expect(container.querySelector('#infoMyWhen .info-when-input')).not.toBeNull()
+    expect(text(container.querySelector('#infoMyWhen .field-error'))).toContain('200')
   })
 
   it('offers 申请 to 浏览, and posts the rung that was asked for', async () => {
@@ -572,7 +647,7 @@ describe('one skill: the three word groups (v14)', () => {
     fireEvent.click(container.querySelector('#removeSkill') as HTMLButtonElement)
     expect(text(container.querySelector('.confirm-title'))).toBe('从我的 skill 移除？')
     expect(text(container.querySelector('.confirm-body'))).toBe(
-      '标签会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。',
+      '我的标签与我的适用场景会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。',
     )
     // Removing a reference takes nothing away: the sheet is not red (ADR 0056).
     expect(container.querySelector('.confirm-acts .button.is-danger')).toBeNull()
@@ -1137,7 +1212,8 @@ describe('one skill: 设置 › 常规', () => {
 
     expect(text(container.querySelector('.confirm'))).toContain('已经发生的下载与复制无法收回')
     // Nothing written until the answer, and the selector is back on the state that is true.
-    expect(requests).toHaveLength(2)
+    // Three reads: the skill, the word groups, and v59's own sentence.
+    expect(requests).toHaveLength(3)
     const radios = [...container.querySelectorAll<HTMLInputElement>('input[name="skill-visibility"]')]
     expect(radios[0]!.checked).toBe(true)
     expect(radios[2]!.checked).toBe(false)

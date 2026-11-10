@@ -508,6 +508,32 @@
       ],
       "status": 503,
       "body": "{\"error\":{\"code\":\"credential_vault_unavailable\",\"message\":\"no\"}}"
+    },
+    {
+      "code": "skill_not_in_library",
+      "argv": [
+        "skill",
+        "my-when-to-use",
+        "set",
+        "dev/pdf-tools",
+        "--text",
+        "循环审计"
+      ],
+      "status": 403,
+      "body": "{\"error\": {\"code\": \"forbidden\", \"message\": \"先把 dev/pdf-tools 加入你的库\", \"details\": [{\"field\": \"reason\", \"issue\": \"not_in_library\"}]}}"
+    },
+    {
+      "code": "my_when_to_use_too_long",
+      "argv": [
+        "skill",
+        "my-when-to-use",
+        "set",
+        "dev/pdf-tools",
+        "--text",
+        "循环审计"
+      ],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"my_when_to_use_too_long\", \"message\": \"too long\", \"details\": [{\"field\": \"when_to_use\", \"issue\": \"too_long\"}]}}"
     }
   ]
 }

@@ -21,6 +21,8 @@ export type Field =
   | 'expires_at'
   | 'never_expires'
   | 'id'
+  /** v59: the caller's own sentence; the server names it `when_to_use`. */
+  | 'when_to_use'
 
 /**
  * What to say for each issue code the server can send.
@@ -103,6 +105,8 @@ const CODE_MESSAGES: Record<string, string> = {
     '公开目前只对官方 skill 开放；你的 skill 可以保持私有，或共享给协作者。',
   unauthenticated: '登录状态已失效，请重新登录。',
   invalid_request: '提交的内容有问题，请检查后重试。',
+  my_when_to_use_too_long: '我的适用场景最多 200 个字符；缩短后再试。',
+  my_when_to_use_empty: '写一句你平时会怎么找它；要清除请用「清除」。',
   key_not_found: '这把密钥不在你的账号里——它可能已经被删掉了。',
   // v52 服务凭据。The server's text for these is English and written for a log; every one of them
   // can be reached from `/account/secrets` or the skill's settings pane.
@@ -189,6 +193,30 @@ const CODE_MESSAGES: Record<string, string> = {
 const IMPORT_CEILING_BYTES = 128 * 1024 * 1024
 
 /**
+ * ADR 0179's skill-text refusal, written from the field and the code-point numbers the server
+ * sends. It exists apart from {@link sizeSentence} because the unit is different: a description is
+ * 1024 code points, not a byte ceiling, and a tag's description shares the `description` field name
+ * with a 200-code-point ceiling.
+ */
+export function textSentence(detail: ErrorDetail): string | null {
+  const label = detail.field.endsWith('when_to_use') ? '适用场景' : '描述'
+  if (detail.issue === 'field_not_text') {
+    return `${label}要填文本，不能是数字或列表。`
+  }
+  if (detail.issue === 'required_field_missing' && detail.field === 'description') {
+    return '描述是必填的。'
+  }
+  const limit = detail.limit_code_points
+  // No code points means an older server or a field this contract does not own; leave it to the
+  // field-specific table rather than guessing a ceiling.
+  if (limit === undefined) return null
+  const actual = detail.actual_code_points
+  return actual === undefined
+    ? `${label}最多 ${limit} 个字。`
+    : `${label}有 ${actual} 个字，超过 ${limit} 个的上限。`
+}
+
+/**
  * One of v39's four size sentences, from the numbers the server sends with the refusal.
  *
  * <p>`package_too_large` is one issue for two ceilings — a version's total and the import cap,
@@ -254,6 +282,8 @@ export function codeMessage(
     // sends the actual and allowed counts, so the sentence is the voice-spec one rather than a
     // restatement of the limit alone (voice-spec §上传与大小的四句话).
     for (const detail of details) {
+      const text = textSentence(detail)
+      if (text !== null) return text
       const sentence = sizeSentence(detail)
       if (sentence !== null) return sentence
     }
@@ -298,13 +328,30 @@ export function codeMessage(
       if (detail.issue === 'browse_required') {
         return '这个 skill 你只有「调用」权限，看不到文件清单，不能复制。'
       }
+      if (detail.issue === 'not_in_library') {
+        return '先把这个 skill 加入你的库，再写我的适用场景。'
+      }
+    }
+  }
+  if (code === 'my_when_to_use_too_long') {
+    for (const detail of details) {
+      if (
+        detail.limit_code_points !== undefined &&
+        detail.actual_code_points !== undefined
+      ) {
+        return `我的适用场景有 ${detail.actual_code_points} 个字，最多 ${detail.limit_code_points} 个；缩短后再试。`
+      }
     }
   }
   if (code === 'invalid_request') {
     for (const detail of details) {
       // Field-specific wording first: `too_long` on a tag's description and on a password are not
-      // the same sentence even though they share an issue code.
-      const byField = FIELD_SPECIFIC[detail.field as Field]?.[detail.issue]
+      // the same sentence even though they share an issue code. The author's when_to_use can
+      // arrive as `metadata.when_to_use`, so the nested spelling shares the top-level entry.
+      const field = detail.field.endsWith('when_to_use') ? 'when_to_use' : detail.field
+      const text = textSentence(detail)
+      if (text !== null) return text
+      const byField = FIELD_SPECIFIC[field as Field]?.[detail.issue]
       const issue = byField ?? ISSUE_MESSAGES[detail.issue]
       if (issue !== undefined) {
         return issue
@@ -356,7 +403,15 @@ const FIELD_SPECIFIC: Partial<Record<Field, Record<string, string>>> = {
     invitee_is_owner: '对方是这个 skill 的所有者，已经拥有全部档位。',
     not_shared: '这个人还没有已生效的授权；要新共享请发邀请。',
   },
-  description: { too_long: '说明最多 200 个字。' },
+  description: {
+    required_field_missing: '描述是必填的。',
+    field_not_text: '描述要填文本，不能是数字或列表。',
+    too_long: '描述最多 1024 个字。',
+  },
+  when_to_use: {
+    field_not_text: '适用场景要填文本，不能是数字或列表。',
+    too_long: '适用场景最多 200 个字。',
+  },
   password: {
     // The one rule here a person cannot guess, so it has to say what is allowed rather than that
     // something is wrong.

@@ -77,4 +77,6 @@
 | `CREDENTIAL_QUOTA_EXCEEDED` | `credential_quota_exceeded` |
 | `CREDENTIAL_VALUE_TOO_LARGE` | `credential_value_too_large` |
 | `CREDENTIAL_VAULT_UNAVAILABLE` | `credential_vault_unavailable` |
+| `MY_WHEN_TO_USE_EMPTY` | `my_when_to_use_empty` |
+| `MY_WHEN_TO_USE_TOO_LONG` | `my_when_to_use_too_long` |
 | `INTERNAL_ERROR` | `internal_error` |

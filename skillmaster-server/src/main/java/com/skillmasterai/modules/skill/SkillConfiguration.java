@@ -163,4 +163,18 @@ public class SkillConfiguration {
     SkillTagService skillTagService(TagRepository repository, SkillCategoryService categories) {
         return new SkillTagService(repository, categories);
     }
+
+    /* ---- v59: the caller's own when-to-use sentence ---- */
+
+    @Bean
+    com.skillmasterai.modules.skill.internal.MyWhenToUseRepository myWhenToUseRepository(
+            JdbcClient jdbc) {
+        return new com.skillmasterai.modules.skill.internal.MyWhenToUseRepository(jdbc);
+    }
+
+    @Bean
+    MyWhenToUseService myWhenToUseService(
+            com.skillmasterai.modules.skill.internal.MyWhenToUseRepository repository) {
+        return new MyWhenToUseService(repository);
+    }
 }
