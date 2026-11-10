@@ -10,8 +10,15 @@ import (
 
 // v60: the window is local calendar days, converted in the CLI; the server only sees instants.
 
+// In `time.Local`, because the window is the *machine's* local calendar days: a fixed offset
+// would be discarded by `now.Local()` on a runner that is set to UTC.
 func fixedNow() time.Time {
-	return time.Date(2026, 11, 11, 10, 30, 0, 0, time.FixedZone("CST", 8*3600))
+	return time.Date(2026, 11, 11, 10, 30, 0, 0, time.Local)
+}
+
+// The UTC instant of a local midnight, in the zone `fixedNow` uses.
+func localMidnight(year int, month time.Month, day int) string {
+	return time.Date(year, month, day, 0, 0, 0, 0, time.Local).UTC().Format(time.RFC3339)
 }
 
 func TestUsageWindowDefaultsToThirtyDays(t *testing.T) {
@@ -22,7 +29,8 @@ func TestUsageWindowDefaultsToThirtyDays(t *testing.T) {
 	if window.Label != "近 30 天（2026-10-13 至 2026-11-11）" {
 		t.Errorf("label = %q", window.Label)
 	}
-	if window.Since != "2026-10-12T16:00:00Z" || window.Until != "2026-11-11T16:00:00Z" {
+	if window.Since != localMidnight(2026, 10, 13) ||
+		window.Until != localMidnight(2026, 11, 12) {
 		t.Errorf("instants = %s .. %s", window.Since, window.Until)
 	}
 }
@@ -64,7 +72,8 @@ func TestUsageWindowOfCustomDaysIncludesBothEnds(t *testing.T) {
 	if window.Label != "2026-11-01 至 2026-11-10" {
 		t.Errorf("label = %q", window.Label)
 	}
-	if window.Since != "2026-10-31T16:00:00Z" || window.Until != "2026-11-10T16:00:00Z" {
+	if window.Since != localMidnight(2026, 11, 1) ||
+		window.Until != localMidnight(2026, 11, 11) {
 		t.Errorf("instants = %s .. %s", window.Since, window.Until)
 	}
 }
