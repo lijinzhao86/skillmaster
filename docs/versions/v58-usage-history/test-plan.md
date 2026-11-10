@@ -594,7 +594,7 @@
 | 控制台类型 | `cd skillmaster-console && npx tsc --noEmit` | 退出码 0 | — |
 | 设计件类型 | `cd design && npm run type-check` | 退出码 0 | — |
 | 设计件结构 | `cd design && node scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console --only usage,skill-usage` | 全过 | U1、U2 的结构部分 |
-| CLI | `cd skillmaster-cli && go test ./...` | 除 3 条既有更新用例（见 [`known-issues.md`](known-issues.md)）外全过 | C1–C6、C8（含 `--users` 成功与 404 退出码、`--json` 原样输出） |
+| CLI | `cd skillmaster-cli && go test ./...` | 全过 | C1–C6、C8（含 `--users` 成功与 404 退出码、`--json` 原样输出） |
 | CLI 编译 | `cd skillmaster-cli && go build ./...` | 退出码 0 | — |
 | 文件上限 | `node scripts/check-file-size.mjs` | 通过（`styles.css` 到基线后，使用记录的样式拆进 `styles-usage.css`） | — |
 | 文档 | `check_docs.py`、`generate.py --check`、`impact.py --check` | 均退出 0 | — |
@@ -632,4 +632,4 @@
 
 本版范围内没有已发现但未修的缺陷；未执行的用例在上表，未执行不等于已知缺陷。
 
-本版范围外的历史缺陷（CLI 自动更新三条用例）记在 [`known-issues.md`](known-issues.md)。
+本版没有范围外未修缺陷；此前本机 CLI 三条用例的失败是 `SKILLMASTER_AUTO_UPDATE=0` 污染，已在 [`known-issues.md`](known-issues.md) 记明并隔离。

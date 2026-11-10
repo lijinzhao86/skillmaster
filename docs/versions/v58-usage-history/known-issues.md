@@ -1,11 +1,9 @@
 # v58 · 本版范围外的已知问题
 
-> 这些缺陷在**本版之外**的历史代码里，v58 决定不修；每条标状态与复现方式。
+本版没有留下未修的范围外缺陷。
 
-## CLI 自动更新的三条用例在 `main` 上就失败
+## 记录：CLI 自动更新三条用例在本机失败的原因（已消除）
 
-- **状态**：已复现（在 `main` 的 `b743f3d` 与 v58 工作区上输出一致）。
-- **用例**：`TestTheCheckIsThrottledToOnceADay`、`TestANewerBuildIsInstalledAndTheCommandIsUntouched`、`TestATamperedPackageLeavesTheBinaryAlone`（`skillmaster-cli/cmd/skillmaster/v25_test.go`）。
-- **现象**：三条命令发出 0 次更新请求；`skmr skill invoke` 无参数时只返回用法错误（退出码 2），更新提示不出现。
-- **复现**：`cd skillmaster-cli && go test ./cmd/skillmaster`；或在 `main` 的干净检出上跑同样三条。
-- **为什么不在这里修**：与 v58 的采集 / 读取路径无关，属于更新器与测试夹具的既有问题；改了会让本版的回归范围混进一个独立缺陷。
+- **现象**：`TestTheCheckIsThrottledToOnceADay`、`TestANewerBuildIsInstalledAndTheCommandIsUntouched`、`TestATamperedPackageLeavesTheBinaryAlone` 在本机报「0 次更新请求」，看起来像更新器坏了。
+- **实际原因**：本机 shell 导出了 `SKILLMASTER_AUTO_UPDATE=0`，`autoUpdateAllowed` 正确地关掉了自动检查；三条用例没有清这个变量，于是测到的是「开关关着」，不是更新逻辑。CI 上没有这个变量，所以一直是绿的。
+- **处置**：三条用例开头显式 `t.Setenv(AutoUpdateEnv, "")`，开关本身仍由 `TestTheSwitchTurnsTheAutomaticCheckOff` 覆盖；`go test ./...` 现在全过。

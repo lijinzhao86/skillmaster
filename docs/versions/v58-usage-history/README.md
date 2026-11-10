@@ -37,5 +37,5 @@
 | [`prd.md`](prd.md) | 用户与场景、范围、四层可见性、拥有面、多面对应、验收与指标 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题（第 3 关填写） |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果（第 4 关填写） |
-| [`known-issues.md`](known-issues.md) | 本版范围外的历史缺陷（CLI 自动更新三条用例） |
+| [`known-issues.md`](known-issues.md) | 本版无范围外未修缺陷；记录本机 CLI 三条用例失败的环境原因 |
 | [`docs/research/activity-log-storage.md`](../../research/activity-log-storage.md) | 存储选型调研：PG / SLS / 独立实例 / TimescaleDB |
