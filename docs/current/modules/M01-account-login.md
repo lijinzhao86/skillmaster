@@ -112,7 +112,7 @@
 - **一次一个用途**：`register` 发的码在 `reset` 上不认。用途存在行里，不是靠请求的形状判断——否则两个流程里弱的那条就成了进强那条的路。
 - **猜错的次数必须活过回滚。** 拒绝是用抛异常表达的，而抛异常会回滚事务，于是「记一次猜错」这件事本身会被撤销——六位数字就能在一分钟内枚举完，**而且除了专门钉它的那一条，所有测试都是绿的**。两个用例因此都声明 `noRollbackFor = VerificationCodeException`；那条声明之所以安全，是因为**码的校验排在所有写入之前**，所以那一刻待提交的只有计数器本身。
 - 六位数字的哈希挡不住枚举，**真正管用的是过期时间与尝试次数上限**——不要指望哈希。
-- **当前不比对**（`skillmaster.sms.accept-any-code`，默认 `false`；要用就在 `.env` 里打开，`.env.example` 里以注释形式给出）：任意六位数字都通过。它存在是因为签名与模板还没过审、真码发不出来，而整条流程要先能走通（[迭代 0011](../../versions/v1-hosting/iterations/0011-register-flow-and-sms-state.md)）。**摘掉的只有比对这一步**：码仍要先请求过（没有未消费的行就拒）、仍按 `PhoneVerificationService.LIFETIME` 过期、仍只能用一次、仍按 `PhoneVerificationService.MAX_ATTEMPTS` 限次——所以流程的形状与真码时**一模一样**。**生产前必须关掉**，而且配上 AccessKey 还开着它会**启动失败**，不靠人记得。
+- **生产比对真码**（`skillmaster.sms.accept-any-code`，默认 `false`，生产未设置它）：短信里发出的那一串才是能通过的那一串。这个开关只在本地联调时打开（`.env.example` 里以注释形式给出），**它摘掉的只有比对这一步**：码仍要先请求过（没有未消费的行就拒）、仍按 `PhoneVerificationService.LIFETIME` 过期、仍只能用一次、仍按 `PhoneVerificationService.MAX_ATTEMPTS` 限次——所以流程的形状与真码时**一模一样**。配上 AccessKey 还开着它会**启动失败**，不靠人记得（来历见[迭代 0011](../../versions/v1-hosting/iterations/0011-register-flow-and-sms-state.md)）。
 
 ### 凭据怎么存
 
@@ -156,15 +156,15 @@
 | `app_user` / `credential` / `phone_verification` / `auth_throttle` / `spring_session*` | **已实现**。 |
 | 注册 / 登录 / 登出 / 重置 / 注销 + `/web/session` | **已实现**，十一个端点在 `WebAccountController`（v56 加 `POST /web/account/delete`、注册体加 `consent`，V44 加 `legal_consent` 与 `app_user.deleted_at` / `purged_at`）。 |
 | 图形验证码 | **已实现**：`captcha` 表 + `GET /web/captcha` + 发码端点的校验。**注册的第一次发码免它**（ADR 0020），并有一个只读的 `captcha-required` 告诉前端要不要把图摆出来。画图用 Hutool，答案用 `SecureRandom`。 |
-| 短信发送 | **已接阿里云官方 SDK**（`AliyunSmsSender` + `SmsGateway` 那道缝，SDK 只出现在 `config/SmsConfig`）。**与阿里云的真实往返未验证**，见下。 |
-| 验证码比对 | **当前关着**（`accept-any-code`，见上）。**上线前必须打开**，而它不是「还没做」——它在等签名过审。 |
+| 短信发送 | **已接阿里云官方 SDK**（`AliyunSmsSender` + `SmsGateway` 那道缝，SDK 只出现在 `config/SmsConfig`）。**真实往返已验证**：生产配置了 AccessKey、签名与模板，2026-11-09 核到近 30 天 5 条验证码请求且全部消费（见下）。 |
+| 验证码比对 | **开着**：生产未设置 `accept-any-code`，走默认 `false`，进来的是与短信里那条比对过的码。 |
 | 令牌（M2） | **已实现**（见 [M02](M02-token-and-as.md)）；验收第 1 条里「拿到令牌」这半句已成立。 |
 
 ### 还没做的
 
 | 没做 | 为什么 |
 |---|---|
-| **阿里云短信的端到端验证** | 代码接完了，但**一次真实往返都没跑过**：签名与模板还没过审、也没有凭据。这不是「没做」，是「没验证」——`AliyunSmsSenderTest` 钉住的是代码这一侧的全部。**等待期间用 `accept-any-code` 顶着**，那个口子必须在上线前关掉。 |
+| ~~**阿里云短信的端到端验证**~~ | **已验证（2026-11-09）**：生产四项配置齐全，`accept-any-code` 未开启；库里近 30 天的验证码请求全部被消费，码只能来自真实发送。 |
 | ~~**令牌撤销**（重置密码时）~~ | **已实现（2026-10-05）**：M1 撤销会话那一半一直在，M2 那一半当时只到接口与实现，没有调用者；现在 `ResetPasswordUseCase` 里是相邻的两行，用例走 `POST /web/reset` 真实入口（见 [M02 §撤销](M02-token-and-as.md)）。 |
 | `/inner` 独立端口、`anyRequest().denyAll()` | 仍是待办项。 |
 
