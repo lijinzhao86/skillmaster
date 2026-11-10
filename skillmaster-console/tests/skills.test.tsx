@@ -12,7 +12,15 @@ import {
   stubMyWhenToUse,
   type RecordedRequest,
 } from './support'
-import { EMPTY_TAGS, settle, showSkill, text } from './skill-page-harness'
+import {
+  DRAFT_VERSION,
+  EMPTY_TAGS,
+  LIVE_VERSION,
+  SKILL,
+  settle,
+  showSkill,
+  text,
+} from './skill-page-harness'
 
 /**
  * One skill's sections, and the writes.
@@ -25,44 +33,6 @@ import { EMPTY_TAGS, settle, showSkill, text } from './skill-page-harness'
  * module registry to reset.
  */
 
-const LIVE_VERSION = {
-  name: '1.0.0',
-  digest: 'sha256:aaa',
-  draft_name: '第一版',
-  draft_id: null,
-  title: '第一版',
-  note: '第一版说明',
-  submitted_at: '2026-10-05T09:00:00Z',
-  submitted_by: 'demo-user',
-  state: 'published' as const,
-  status: 'live' as const,
-  state_at: '2026-10-05T10:00:00Z',
-  first_published_at: '2026-10-05T10:00:00Z',
-  is_current: true,
-  file_count: 1,
-  total_bytes: 90,
-  revoked_reason: null,
-}
-
-const DRAFT_VERSION = {
-  name: null,
-  digest: 'sha256:bbb',
-  draft_name: '第二版',
-  draft_id: 'd1',
-  title: '第二版',
-  note: '第二版说明',
-  submitted_at: '2026-10-06T09:00:00Z',
-  submitted_by: 'demo-user',
-  state: 'draft' as const,
-  status: 'draft' as const,
-  state_at: null,
-  first_published_at: null,
-  is_current: false,
-  file_count: 1,
-  total_bytes: 90,
-  revoked_reason: null,
-}
-
 /** A version a collaborator submitted — 「維護」 may discard it, 「寫入」 may not. */
 const OTHER_DRAFT = {
   ...DRAFT_VERSION,
@@ -70,30 +40,6 @@ const OTHER_DRAFT = {
   draft_name: '第三版',
   draft_id: 'd2',
   submitted_by: 'yuhan',
-}
-
-const SKILL = {
-  namespace: { slug: 'demo-user' },
-  name: 'pdf-tools',
-  title: 'PDF Tools',
-  description: '把 PDF 拆开再拼起来',
-  // The server lifts these two from the frontmatter (TD 附录 A); the page no longer parses it.
-  when_to_use: '需要拆分或合并 PDF 时',
-  compatibility: '需要 ghostscript',
-  visibility: 'private',
-  public_rung: null,
-  offline_at: null,
-  rung: 'owner',
-  pending_rung: null,
-  frontmatter: {
-    name: 'pdf-tools',
-    compatibility: '需要 ghostscript',
-    metadata: { when_to_use: '需要拆分或合并 PDF 时' },
-  },
-  version: DRAFT_VERSION,
-  versions: [DRAFT_VERSION, LIVE_VERSION],
-  files: [{ relpath: 'SKILL.md', sha256: 'sha256:ddd', size: 90, is_binary: false }],
-  resources: { body: '/web/skills/demo-user/pdf-tools@2.0.0/body' },
 }
 
 const GITHUB_ORIGIN = { kind: 'github', role: 'origin', label: 'GitHub', locator: 'coreyhaines31/marketingskills', path: 'skills/ab-testing', url: 'https://github.com/coreyhaines31/marketingskills', revision: null, checked_at: '2026-11-05T00:00:00Z', signals: [] }

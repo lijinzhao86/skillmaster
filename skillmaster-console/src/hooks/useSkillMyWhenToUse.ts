@@ -35,6 +35,15 @@ export function useSkillMyWhenToUse(
       setSentence(result.data.when_to_use ?? '')
       return true
     }
+    // **A 404 here is not "no such skill".** This read is optional and the page already resolved
+    // the skill: the one way it answers 404 while the skill is on screen is a server that does not
+    // know this route yet (a rolled-back release behind a newer console). Saying 「这个地址找不到」
+    // would contradict the page around it; the empty state is the true statement of what this
+    // caller knows.
+    if (result.status === 404) {
+      setSentence('')
+      return true
+    }
     onError(failureMessage(result))
     return false
   }, [namespace, name, onError])

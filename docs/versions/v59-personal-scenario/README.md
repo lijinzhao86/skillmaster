@@ -1,7 +1,7 @@
 # v59-personal-scenario · 个人适用场景与 SKILL.md 字段上限
 
 > **最后更新**：2026-11-11
-> **状态**：已完成（2026-11-11 合并 PR #169，release `a9eed7e`；服务端、控制台、官网与 CLI beta `1.1.0-beta (a9eed7e)` 均已发布；循环审计两轮，0 blocker / 0 high。**T11（P3 事件管道）与视觉验收未执行**，见 [`test-plan.md`](test-plan.md) §结果与 §已知问题）
+> **状态**：已完成（2026-11-11 合并 PR #169，release `a9eed7e`；服务端、控制台、官网与 CLI beta `1.1.0-beta (a9eed7e)` 均已发布；循环审计两轮，0 blocker / 0 high。后续修正（待发布）：可选读 404 按空态处理（[`iterations/0001`](iterations/0001-optional-read-404-is-empty.md)）。**T11（P3 事件管道）与视觉验收未执行**，见 [`test-plan.md`](test-plan.md) §结果与 §已知问题）
 > **含收费**：否
 
 ## 目标
@@ -32,6 +32,7 @@
 | [`prd.md`](prd.md) | 用户与场景、范围、控制台↔CLI 映射、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境、结果（含 T20 实测指标） |
+| [`iterations/0001`](iterations/0001-optional-read-404-is-empty.md) | 可选读 404 按空态处理，不冒充「整个 skill 找不到」 |
 
 ## 关键决定与剩余依赖
 
