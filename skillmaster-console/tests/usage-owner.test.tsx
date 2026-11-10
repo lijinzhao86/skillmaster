@@ -60,8 +60,12 @@ describe('使用页签的所有者视图', () => {
 
     const cards = Array.from(container.querySelectorAll('.stats .stat .stat-head'))
       .map((head) => head.textContent)
-    expect(cards).toEqual(['调用次数', '使用账号数', '入库人数', '最近使用'])
+    expect(cards).toEqual(['调用次数', '使用账号数', '累计入库', '最近使用'])
     expect(container.querySelector('#skillUsageUsers')).not.toBeNull()
+    // The card says the day in the design's month word and carries the clock beside it.
+    const lastCard = Array.from(container.querySelectorAll('.stats .stat')).at(-1)
+    expect(lastCard?.textContent).toContain('11 月 5 日')
+    expect(lastCard?.textContent).toContain('16:00')
     expect(container.querySelector('h2')?.textContent).toBe('使用者')
     expect(container.textContent).toContain('调用次数看采用，提交版本看贡献')
 
@@ -71,11 +75,44 @@ describe('使用页签的所有者视图', () => {
       expect.stringContaining('维护'),
     ])
     expect(container.textContent).not.toContain('maintain')
+    // 最近活跃 is the window's date, not the account's lifetime.
+    expect(rows[0]?.textContent).toContain('11-10')
+  })
+
+  it('writes the public note with the platform-signal pointer', async () => {
+    stubLocation('/skills/dev/pdf-tools', 'tab=usage')
+    stubFetch(() => json(200, { ...ALL, public: true, users: [], totals: { ...ALL.totals, calls: '10+', accounts: '少于 10 个账号' } }))
+
+    const { container } = render(<UsagePane skill={SKILL} namespace="dev" name="pdf-tools" />)
+    await flush()
+    await flush()
+
+    const note = container.querySelector('#skillUsagePublic')
+    expect(note?.textContent).toContain('近 30 天账号分桶在')
+    expect(note?.textContent).toContain('skmr skill show')
+    expect(container.querySelector('#skillUsageUsers')).toBeNull()
+  })
+
+  it('gives a non-owner the time按钮 without the view switch', async () => {
+    stubLocation('/skills/dev/pdf-tools', 'tab=usage&days=7')
+    const { requests } = stubFetch(() => json(200, MINE))
+
+    const { container } = render(
+      <UsagePane skill={{ rung: 'browse' } as unknown as AuthoredSkill}
+        namespace="dev" name="pdf-tools" />,
+    )
+    await flush()
+    await flush()
+
+    expect(container.querySelector('.usage-scope')).toBeNull()
+    expect(container.querySelector('#skillUsageRange')).not.toBeNull()
+    expect(container.querySelector('#skillUsageMine')).not.toBeNull()
+    expect(requests[0]?.path).toMatch(/^\/web\/usage\/skills\/dev\/pdf-tools\/mine\?since=/)
   })
 
   it('switches to 我的使用 and names the by-version table', async () => {
     stubLocation('/skills/dev/pdf-tools', 'tab=usage')
-    stubFetch(() => json(200, ALL), () => json(200, MINE))
+    const { requests } = stubFetch(() => json(200, ALL), () => json(200, MINE))
 
     const { container } = render(<UsagePane skill={SKILL} namespace="dev" name="pdf-tools" />)
     await flush()
@@ -92,5 +129,6 @@ describe('使用页签的所有者视图', () => {
     expect(container.querySelector('#skillUsageMine thead th')?.textContent).toBe('版本号')
     expect(container.querySelector('#skillUsageMine .chip-text')?.textContent).toBe('线上')
     expect(container.textContent).toContain('11-10 09:41')
+    expect(requests[1]?.path).toMatch(/^\/web\/usage\/skills\/dev\/pdf-tools\/mine\?since=/)
   })
 })

@@ -4,15 +4,26 @@
  * **明细是一张日志表**：固定时间列、事件一句话、结果与状态分开；最新在上。
  * 一次交互一行，搜索与直接调用共用同一套列——直接调用用终端图标区分，不写四个字。
  *
- * **搜索结果放在下拉里**，不推开表格：点行尾箭头，浮层按当时的排名列出返回结果。这样一行行
- * 扫历史时，行高不变；要看「当时还返回了什么」也只是一次点击。
+ * **搜索结果在行内展开**（2026-11-10 用户定）：面板与表格同宽，把后面的行往下推；不浮在
+ * 别的行上，也不盖住任何一行。
  */
 
 import { Fragment, useEffect } from 'react'
 import { replace } from '../address'
 import Pager from '../components/Pager'
-import { USAGE_INTERACTIONS, usageStats } from '../fixtures/usage'
-import type { SearchInteraction, UsageInteraction } from '../fixtures/usage'
+import SearchBox from '../components/SearchBox'
+import UsageRange from '../components/UsageRange'
+import {
+  DEFAULT_RANGE,
+  USAGE_INTERACTIONS,
+  inRange,
+  rangeFromParams,
+  rangeLabel,
+  rowMatchesSkill,
+  searchHitOnly,
+  usageStats,
+} from '../fixtures/usage'
+import type { SearchInteraction, UsageInteraction, UsageRange as UsageRangeValue } from '../fixtures/usage'
 import type { DemoPageProps } from './types'
 
 const PER_PAGE = 10
@@ -85,9 +96,11 @@ function SearchDetail({ row }: { row: SearchInteraction }) {
   )
 }
 
-function SearchRow({ row, open, onToggle }: {
+function SearchRow({ row, open, hitOnly, onToggle }: {
   row: SearchInteraction
   open: boolean
+  /** 筛选的 skill 只在结果里出现过、没有被调用：行上要说明它为什么在这里。 */
+  hitOnly: boolean
   onToggle: () => void
 }) {
   /* **0 条结果没有可展开的东西**：不画折角、整行不可点。总数可空（API 搜索不给总数），
@@ -115,6 +128,11 @@ function SearchRow({ row, open, onToggle }: {
         <span className="usage-log-icon" aria-hidden="true"><SearchMark /></span>
         <span className="usage-log-query" title={row.query}>“{row.query}”</span>
         <span className="usage-log-count">{total} 个结果</span>
+        {hitOnly && (
+          <span className="usage-hit" title="搜索结果里有它，随后没有调用">
+            搜到过
+          </span>
+        )}
       </span>
 
       <span className="usage-log-result" role="cell">
@@ -191,9 +209,17 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
   const openId = params.get('open')
   const long = params.get('long') === '1'
   const askedPage = parseInt(params.get('p') ?? '', 10)
+  const range = rangeFromParams(params)
+  const skill = (params.get('skill') ?? '').trim()
+
+  /* 时间先筛，skill 再筛：明细与统计读同一批时间行；统计还要知道 skill 词，
+     才能只数这条 skill 自己的单位（见 `usageStats` 的注释）。 */
+  const allRows = nothing ? [] : USAGE_INTERACTIONS
+  const timeRows = allRows.filter((row) => inRange(row.at, range))
 
   /* **倒序是日志表的第一条读法**：最近发生的在最上面。 */
-  const rows = (nothing ? [] : USAGE_INTERACTIONS)
+  const rows = timeRows
+    .filter((row) => rowMatchesSkill(row, skill))
     .slice()
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
     .map((row) => {
@@ -208,14 +234,46 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
       }
     })
 
-  /* 统计用样张本身算，不用被 `long` 改写过的 rows——那一张只改显示，不该改到数。 */
-  const stats = usageStats(nothing ? [] : USAGE_INTERACTIONS)
+  /* 统计用时间行算，skill 词交给它——被 `long` 改写过的 rows 只改显示，不该改到数。 */
+  const stats = usageStats(timeRows, skill)
   let page = Number.isNaN(askedPage) || askedPage < 1 ? 1 : askedPage
   const pages = Math.max(1, Math.ceil(rows.length / PER_PAGE))
   if (page > pages) page = pages
   const shown = rows.slice((page - 1) * PER_PAGE, (page - 1) * PER_PAGE + PER_PAGE)
 
-  const writeAddress = (next: { tab?: string; page?: number; open?: string | null }) => {
+  const withFilters = (copy: URLSearchParams): URLSearchParams => {
+    if (range.from !== null && range.to !== null) {
+      copy.set('from', range.from)
+      copy.set('to', range.to)
+    } else if ((range.days ?? DEFAULT_RANGE.days) !== DEFAULT_RANGE.days) {
+      copy.set('days', String(range.days))
+    }
+    if (skill !== '') copy.set('skill', skill)
+    return copy
+  }
+
+  const tabHref = (next: string): string => {
+    const copy = new URLSearchParams()
+    copy.set('page', 'usage')
+    if (next !== 'detail') copy.set('tab', next)
+    return '?' + withFilters(copy).toString()
+  }
+
+  const pageHref = (target: number): string => {
+    const copy = new URLSearchParams()
+    copy.set('page', 'usage')
+    if (tab !== 'detail') copy.set('tab', tab)
+    if (target > 1) copy.set('p', String(target))
+    return '?' + withFilters(copy).toString()
+  }
+
+  const writeAddress = (next: {
+    tab?: string
+    page?: number
+    open?: string | null
+    range?: UsageRangeValue
+    skill?: string
+  }) => {
     const copy = new URLSearchParams()
     copy.set('page', 'usage')
     const nextTab = next.tab ?? tab
@@ -224,6 +282,15 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
     if (nextPage > 1) copy.set('p', String(nextPage))
     const nextOpen = next.open === undefined ? openId : next.open
     if (nextOpen !== null && nextOpen !== '') copy.set('open', nextOpen)
+    const nextRange = next.range ?? range
+    if (nextRange.from !== null && nextRange.to !== null) {
+      copy.set('from', nextRange.from)
+      copy.set('to', nextRange.to)
+    } else if ((nextRange.days ?? DEFAULT_RANGE.days) !== DEFAULT_RANGE.days) {
+      copy.set('days', String(nextRange.days))
+    }
+    const nextSkill = (next.skill ?? skill).trim()
+    if (nextSkill !== '') copy.set('skill', nextSkill)
     const askedState = params.get('state')
     if (askedState !== null) copy.set('state', askedState)
     if (long) copy.set('long', '1')
@@ -263,11 +330,29 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
     <section className="page" id="page-usage" hidden={!active}>
       <header className="page-head">
         <h1>使用记录</h1>
-        <span className="count">近 90 天</span>
         {/* **先交代这一页的范围**：名字是「使用记录」，内容却只有搜索与调用。不说一句，
-            人会去找自己的读写与分享——找不到，就会以为记录丢了。挨着「近 90 天」，
-            与「待上线」那句「只列出了最近 500 个」同一条规矩。 */}
-        <span className="count-note">仅记录搜索与调用</span>
+            人会去找自己的读写与分享——找不到，就会以为记录丢了。范围（近 90 天）现在也是
+            那颗时间按钮的状态；这一句补的是数据边界，时间和内容各说各的。 */}
+        <span className="count-note">仅记录搜索与调用 · 数据保留近 90 天</span>
+        <div className="toolbar" data-when="ready" hidden={!settled}>
+          <SearchBox
+            id="usageSkill"
+            value={skill}
+            placeholder="搜索 skill 地址"
+            label="按 skill 筛选"
+            onChange={(value) => writeAddress({ skill: value, page: 1, open: null })}
+          />
+          <span className="usage-range">
+            <UsageRange
+              id="usageRange"
+              label="时间范围"
+              range={range}
+              initialOpen={params.get('range') === 'open'}
+              initialAsk={params.get('range') === 'custom'}
+              onChange={(next) => writeAddress({ range: next, page: 1, open: null })}
+            />
+          </span>
+        </div>
       </header>
 
       <nav className="skill-tabs list-tabs" id="usageTabs" aria-label="使用记录的两份列表" hidden={!settled}>
@@ -276,7 +361,7 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
             key={item.key}
             className={'skill-tab' + (tab === item.key ? ' is-current' : '')}
             data-show={item.key}
-            href={item.href}
+            href={tabHref(item.key)}
             aria-current={tab === item.key ? 'page' : undefined}
             onClick={(event) => { event.preventDefault(); writeAddress({ tab: item.key, page: 1, open: null }) }}
           >
@@ -318,10 +403,13 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
             </div>
           </div>
 
-          {/* **统计与明细同一份事实**：这里只说「搜索有没有把人带到 skill」，别的数交给上面四张卡。 */}
+          {/* **统计与明细同一份事实**：这里只说「搜索有没有把人带到 skill」，别的数交给上面四张卡。
+              **按 skill 过滤后换一句**：搜索次数是「结果里出现过它的搜索」，转化是「其中调用了它」。 */}
           {stats.searches > 0 && (
             <p className="usage-note" id="usageSearchOutcome">
-              {stats.searches} 次搜索中，{stats.converted} 次最终调用了结果，{stats.missed} 次未调用。
+              {skill === ''
+                ? `${stats.searches} 次搜索中，${stats.converted} 次最终调用了结果，${stats.missed} 次未调用。`
+                : `${stats.searches} 次搜索结果里出现了这条 skill，${stats.converted} 次最终调用了它，${stats.missed} 次未调用。`}
             </p>
           )}
 
@@ -369,7 +457,11 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
       {settled && tab === 'detail' && (
         <>
           {shown.length > 0 && (
-            <p className="usage-intro">搜索与随后的调用显示在同一行；点搜索行查看当次搜索结果。</p>
+            <p className="usage-intro">
+              {skill === ''
+                ? '搜索与随后的调用显示在同一行；点搜索行查看当次搜索结果。'
+                : `只看${rangeLabel(range)}内与「${skill}」有关的交互；搜索返回过它、随后没调用的行标「搜到过」。`}
+            </p>
           )}
           <div className="usage-log" id="usageList" role="table" aria-label="使用记录" hidden={shown.length === 0}>
             <div className="usage-log-head" role="row">
@@ -385,6 +477,7 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
                   <SearchRow
                     row={row}
                     open={openId === row.id}
+                    hitOnly={searchHitOnly(row, skill)}
                     onToggle={() => writeAddress({ open: openId === row.id ? null : row.id })}
                   />
                 ) : (
@@ -401,22 +494,30 @@ export default function UsagePage({ active, state, params }: DemoPageProps) {
                 id="usagePager"
                 total={rows.length}
                 page={page}
-                hrefFor={(target) => {
-                  const copy = new URLSearchParams()
-                  copy.set('page', 'usage')
-                  if (target > 1) copy.set('p', String(target))
-                  const askedState = params.get('state')
-                  if (askedState !== null) copy.set('state', askedState)
-                  if (long) copy.set('long', '1')
-                  return '?' + copy.toString()
-                }}
+                hrefFor={pageHref}
                 onGo={(target) => writeAddress({ page: target, open: null })}
               />
             </div>
           )}
 
-          <p className="empty" id="usageEmpty" hidden={!settled || shown.length > 0}>
+          {/* 没有记录与「筛掉了」是两件事：前者说这一页是什么，后者给一个出口。 */}
+          <p className="empty" id="usageEmpty" hidden={!settled || allRows.length > 0}>
             暂无使用记录。搜索或调用 skill 后，记录会显示在这里。
+          </p>
+          <p
+            className="empty"
+            id="usageFilterEmpty"
+            hidden={!settled || allRows.length === 0 || rows.length > 0}
+          >
+            没有匹配的使用记录。
+            <button
+              type="button"
+              className="link-button"
+              id="usageFilterClear"
+              onClick={() => writeAddress({ skill: '', range: DEFAULT_RANGE, page: 1, open: null })}
+            >
+              清除筛选
+            </button>
           </p>
         </>
       )}

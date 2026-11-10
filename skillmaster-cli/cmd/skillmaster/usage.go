@@ -23,8 +23,40 @@ func usageVerb(ctx context.Context, args []string) error {
 	page := 1
 	limit := 50
 	address := ""
+	days := ""
+	since := ""
+	until := ""
+	skill := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--days":
+			if i+1 >= len(args) {
+				return versionErr(jsonMode, usagef("--days 后面要跟一个 1–90 的数。%s",
+					usageAt("usage")), "")
+			}
+			days = args[i+1]
+			i++
+		case "--since":
+			if i+1 >= len(args) {
+				return versionErr(jsonMode, usagef("--since 后面要跟 YYYY-MM-DD。%s",
+					usageAt("usage")), "")
+			}
+			since = args[i+1]
+			i++
+		case "--until":
+			if i+1 >= len(args) {
+				return versionErr(jsonMode, usagef("--until 后面要跟 YYYY-MM-DD。%s",
+					usageAt("usage")), "")
+			}
+			until = args[i+1]
+			i++
+		case "--skill":
+			if i+1 >= len(args) {
+				return versionErr(jsonMode, usagef("--skill 后面要跟一段地址或关键词。%s",
+					usageAt("usage")), "")
+			}
+			skill = args[i+1]
+			i++
 		case "--stats":
 			stats = true
 		case "--users":
@@ -85,6 +117,15 @@ func usageVerb(ctx context.Context, args []string) error {
 		return versionErr(jsonMode, usagef("--expand 只用于我的明细，不接地址。%s",
 			usageAt("usage")), "")
 	}
+	if address != "" && skill != "" {
+		return versionErr(jsonMode, usagef("地址已经指定了一条 skill，不用再给 --skill。%s",
+			usageAt("usage")), "")
+	}
+	window, err := usageWindowOf(days, since, until, skill, time.Now())
+	if err != nil {
+		return versionErr(jsonMode, err, "")
+	}
+	filter := api.UsageFilter{Since: window.Since, Until: window.Until, Skill: window.Skill}
 
 	if address != "" {
 		namespace, name, err := usageAddress(address)
@@ -94,83 +135,96 @@ func usageVerb(ctx context.Context, args []string) error {
 		if mine {
 			if jsonMode {
 				return usageRaw(ctx, func(client api.Client) ([]byte, error) {
-					return client.SkillUsageRaw(ctx, namespace, name, "/mine")
+					return client.SkillUsageRaw(ctx, namespace, name, "/mine", filter)
 				}, usageLookupError)
 			}
 			result, err := authenticated(ctx, func(client api.Client) (api.UsageMine, error) {
-				return client.SkillUsageMine(ctx, namespace, name)
+				return client.SkillUsageMine(ctx, namespace, name, filter)
 			})
 			if err != nil {
 				return versionErr(jsonMode, usageLookupError(err), "")
 			}
-			printMine(result)
+			printMine(result, window.Label)
 			return nil
 		}
 		if users {
 			if jsonMode {
 				return usageRaw(ctx, func(client api.Client) ([]byte, error) {
-					return client.SkillUsageRaw(ctx, namespace, name, "/users")
+					return client.SkillUsageRaw(ctx, namespace, name, "/users", filter)
 				}, usageLookupError)
 			}
 			result, err := authenticated(ctx, func(client api.Client) (api.UsageUsers, error) {
-				return client.SkillUsageUsers(ctx, namespace, name)
+				return client.SkillUsageUsers(ctx, namespace, name, filter)
 			})
 			if err != nil {
 				return versionErr(jsonMode, usageLookupError(err), "")
+			}
+			fmt.Printf("%s %s\n", namespace+"/"+name, window.Label)
+			if result.Public {
+				fmt.Println("公开 skill 仅提供聚合，不按协作者统计。区间数不是平台信号；累计调用与近 30 天账号分桶看 skmr skill show。")
+				return nil
 			}
 			printUsers(result.Users)
 			return nil
 		}
 		if jsonMode {
 			return usageRaw(ctx, func(client api.Client) ([]byte, error) {
-				return client.SkillUsageRaw(ctx, namespace, name, "")
+				return client.SkillUsageRaw(ctx, namespace, name, "", filter)
 			}, usageLookupError)
 		}
 		result, err := authenticated(ctx, func(client api.Client) (api.SkillUsage, error) {
-			return client.SkillUsage(ctx, namespace, name)
+			return client.SkillUsage(ctx, namespace, name, filter)
 		})
 		if err != nil {
 			return versionErr(jsonMode, usageLookupError(err), "")
 		}
-		printSkillUsage(result)
+		printSkillUsage(result, window.Label)
 		return nil
 	}
 
 	if stats {
 		if jsonMode {
 			return usageRaw(ctx, func(client api.Client) ([]byte, error) {
-				return client.UsageStatsRaw(ctx)
+				return client.UsageStatsRaw(ctx, filter)
 			}, nil)
 		}
 		result, err := authenticated(ctx, func(client api.Client) (api.UsageStats, error) {
-			return client.UsageStats(ctx)
+			return client.UsageStats(ctx, filter)
 		})
 		if err != nil {
 			return versionErr(jsonMode, err, "")
 		}
-		printUsageStats(result)
+		printUsageStats(result, window)
 		return nil
 	}
 
 	if jsonMode {
 		return usageRaw(ctx, func(client api.Client) ([]byte, error) {
-			return client.UsageRaw(ctx, page, limit)
+			return client.UsageRaw(ctx, page, limit, filter)
 		}, nil)
 	}
 	result, err := authenticated(ctx, func(client api.Client) (api.UsagePage, error) {
-		return client.ListUsage(ctx, page, limit)
+		return client.ListUsage(ctx, page, limit, filter)
 	})
 	if err != nil {
 		return versionErr(jsonMode, err, "")
 	}
 	if len(result.Items) == 0 {
-		fmt.Println("暂无使用记录。搜索或调用 skill 后，记录会显示在这里。")
+		// Two different sentences: the account has nothing at all in the retention window, or the
+		// filters kept nothing. `has_any` is the server's answer to the first question; the CLI's
+		// own flags cannot tell (a default 30-day window can be empty while older rows exist).
+		if result.HasAny {
+			fmt.Println(usageEmptyFiltered)
+		} else {
+			fmt.Println("暂无使用记录。搜索或调用 skill 后，记录会显示在这里。")
+		}
 		return nil
 	}
 	for _, row := range result.Items {
 		printUsageRow(row, expand)
 	}
-	fmt.Printf("共 %d 条，第 %d 页，近 %d 天。\n", result.Total, result.Page, result.WindowDays)
+	fmt.Printf("共 %d 条，第 %d 页 · %s%s\n", result.Total, result.Page, window.Label,
+		usageSkillSuffix(window.Skill))
 	return nil
 }
 
@@ -277,7 +331,8 @@ func printUsageRow(row api.UsageInteraction, expand bool) {
 	}
 }
 
-func printUsageStats(stats api.UsageStats) {
+func printUsageStats(stats api.UsageStats, window usageWindow) {
+	fmt.Printf("%s%s\n", window.Label, usageSkillSuffix(window.Skill))
 	fmt.Printf("调用次数      %d\n", stats.Calls)
 	fmt.Printf("搜索次数      %d\n", stats.Searches)
 	fmt.Printf("使用过的 skill %d\n", stats.Skills)
@@ -286,8 +341,13 @@ func printUsageStats(stats api.UsageStats) {
 	} else {
 		fmt.Printf("最近使用      %s\n", usageTime(*stats.Latest))
 	}
-	fmt.Printf("\n%d 次搜索中，%d 次最终调用了结果，%d 次未调用。\n",
-		stats.Searches, stats.Converted, stats.Missed)
+	if window.Skill != "" {
+		fmt.Printf("\n%d 次搜索结果里出现了这条 skill，%d 次最终调用了它，%d 次未调用。\n",
+			stats.Searches, stats.Converted, stats.Missed)
+	} else {
+		fmt.Printf("\n%d 次搜索中，%d 次最终调用了结果，%d 次未调用。\n",
+			stats.Searches, stats.Converted, stats.Missed)
+	}
 	if len(stats.Top) == 0 {
 		return
 	}
@@ -314,16 +374,16 @@ func stateText(state string) string {
 	}
 }
 
-func printSkillUsage(usage api.SkillUsage) {
-	fmt.Printf("%s 近 %d 天\n", usage.Skill, usage.WindowDays)
-	fmt.Printf("调用次数 %s · 使用账号数 %s · 入库人数 %d", usage.Totals.Calls,
+func printSkillUsage(usage api.SkillUsage, label string) {
+	fmt.Printf("%s %s\n", usage.Skill, label)
+	fmt.Printf("调用次数 %s · 使用账号数 %s · 累计入库 %d", usage.Totals.Calls,
 		usage.Totals.Accounts, usage.Totals.Joins)
 	if usage.Totals.LastUsed != nil {
 		fmt.Printf(" · 最近使用 %s", usageTime(*usage.Totals.LastUsed))
 	}
 	fmt.Println()
 	if usage.Public {
-		fmt.Println("\n公开 skill 仅提供聚合，不按协作者统计。")
+		fmt.Println("\n公开 skill 仅提供聚合，不按协作者统计。区间数不是平台信号；累计调用与近 30 天账号分桶看 skmr skill show。")
 		return
 	}
 	fmt.Println()
@@ -348,8 +408,8 @@ func printUsers(users []api.UsageUser) {
 	}
 }
 
-func printMine(mine api.UsageMine) {
-	fmt.Printf("%s 上的我的使用（近 %d 天）\n", mine.Skill, mine.WindowDays)
+func printMine(mine api.UsageMine, label string) {
+	fmt.Printf("%s 上的我的使用 · %s\n", mine.Skill, label)
 	fmt.Printf("调用次数 %d · 使用过的版本 %d", mine.Calls, mine.Versions)
 	if mine.Latest != nil {
 		fmt.Printf(" · 最近使用 %s", usageTime(*mine.Latest))

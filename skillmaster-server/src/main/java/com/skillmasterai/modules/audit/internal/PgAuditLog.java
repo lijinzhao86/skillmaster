@@ -63,4 +63,18 @@ public final class PgAuditLog implements AuditLog, AuditCounts {
                         rs.getInt("versions"), rs.getString("last_at")))
                 .list();
     }
+
+    @Override
+    public List<SubmissionCount> submissionsOfSkill(String skillId, String from, String until) {
+        return jdbc.sql("SELECT actor_user_id, count(*) AS versions, max(at) AS last_at"
+                        + " FROM audit_event WHERE action = 'submit' AND target_type = 'skill'"
+                        + " AND target_id = :skill AND at >= :from AND at < :until"
+                        + " GROUP BY actor_user_id")
+                .param("skill", skillId)
+                .param("from", from)
+                .param("until", until)
+                .query((rs, rowNum) -> new SubmissionCount(rs.getString("actor_user_id"),
+                        rs.getInt("versions"), rs.getString("last_at")))
+                .list();
+    }
 }

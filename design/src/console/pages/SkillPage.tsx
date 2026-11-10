@@ -31,6 +31,8 @@ import type { AtLeast, Grant, Sub, Version, Visibility } from '../fixtures/skill
 import SkillAvatar from '../components/SkillAvatar'
 import { CATEGORIES, DEMO_LICENSE, DEMO_ORIGIN, DEMO_USAGE, LIBRARY, MY_TAGS, PUBLIC_TAGS, membershipOf, tierForMembership } from '../fixtures/library'
 import type { Membership } from '../fixtures/library'
+import { DEFAULT_RANGE, rangeFromParams } from '../fixtures/usage'
+import type { UsageRange } from '../fixtures/usage'
 import {
   BASE_VERSIONS,
   DEMO_NOW,
@@ -268,6 +270,24 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
     query.set('tab', 'usage')
     if (next === 'mine') query.set('use', 'mine')
     else query.delete('use')
+    replace('?' + query.toString())
+  }
+  /* **「使用」页签的时间范围也走地址**（v60）：与使用记录页共用同一组 `days` / `from` / `to`；
+     深链、刷新、从记录页过来都还原同一屏。切视图（全部 / 我的）不丢区间。 */
+  const usageRange = rangeFromParams(params)
+  const setUsageRange = (next: UsageRange) => {
+    const query = new URLSearchParams(params)
+    query.set('page', 'skill')
+    query.set('tab', 'usage')
+    query.delete('days')
+    query.delete('from')
+    query.delete('to')
+    if (next.from !== null && next.to !== null) {
+      query.set('from', next.from)
+      query.set('to', next.to)
+    } else if ((next.days ?? DEFAULT_RANGE.days) !== DEFAULT_RANGE.days) {
+      query.set('days', String(next.days))
+    }
     replace('?' + query.toString())
   }
   const askedVis = params.get('vis')
@@ -873,6 +893,10 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           versions={versions}
           scope={usageScope}
           onScope={setUsageScope}
+          range={usageRange}
+          onRange={setUsageRange}
+          rangeOpen={params.get('range') === 'open'}
+          rangeAsk={params.get('range') === 'custom'}
         />
 
         <SettingsPane

@@ -31,22 +31,32 @@ public final class PgActivity implements ActivityRecorder, UsageHistory {
     }
 
     @Override
-    public Page interactions(String actorUserId, int page, int limit, String at) {
-        return repository.interactions(actorUserId, page, limit, at);
+    public Page interactions(String actorUserId, int page, int limit, Window window) {
+        return repository.interactions(actorUserId, page, limit, window);
     }
 
     @Override
-    public Stats stats(String actorUserId, String at) {
-        return repository.stats(actorUserId, at);
+    public boolean hasAny(String actorUserId) {
+        return repository.hasAny(actorUserId);
     }
 
     @Override
-    public java.util.List<UserDay> userDays(String skillId, String at) {
-        return repository.userDays(skillId, at);
+    public Stats stats(String actorUserId, Window window) {
+        return repository.stats(actorUserId, window);
     }
 
     @Override
-    public Mine mine(String skillId, String actorUserId, String at) {
-        return repository.mine(skillId, actorUserId, at);
+    public java.util.List<ActorInvokes> collaboratorDays(String skillId, Window window) {
+        return repository.collaboratorDays(skillId, window);
+    }
+
+    @Override
+    public PublicRange skillRange(String skillId, Window window) {
+        return repository.skillRange(skillId, window);
+    }
+
+    @Override
+    public Mine mine(String skillId, String actorUserId, Window window) {
+        return repository.mine(skillId, actorUserId, window);
     }
 }

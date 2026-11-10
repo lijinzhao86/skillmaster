@@ -70,7 +70,8 @@ export const SHOTS = [
   { name: 'usage-ready', query: '?page=usage', page: 'usage', nav: '使用记录', scrolls: false },
   /* **统计页可以有第二屏**：按调用次数那张表的长度取决于数据，样张里 9 行就比 900px 高出 18px。
      这一条原先按 7 行写死成「不滚动」，是把取景当成了规矩。 */
-  { name: 'usage-stats', query: '?page=usage&tab=stats', page: 'usage', nav: '使用记录', scrolls: true },
+  /* 默认是近 30 天；统计要拍「有第二屏」的那一态，所以显式给 90 天。 */
+  { name: 'usage-stats', query: '?page=usage&tab=stats&days=90', page: 'usage', nav: '使用记录', scrolls: true },
   { name: 'usage-long', query: '?page=usage&long=1', page: 'usage', nav: '使用记录', scrolls: false },
   /* **展开是行内展开**（2026-11-10 用户定）：面板把后面的行往下推，页面自然变长——所以这一态滚动。 */
   { name: 'usage-open', query: '?page=usage&open=e1', page: 'usage', nav: '使用记录', scrolls: true },
@@ -80,6 +81,22 @@ export const SHOTS = [
   { name: 'usage-loading', query: '?page=usage&state=loading', page: 'usage', nav: '使用记录', scrolls: false },
   { name: 'usage-failed', query: '?page=usage&state=failed', page: 'usage', nav: '使用记录', scrolls: false },
   { name: 'usage-narrow', query: '?page=usage', page: 'usage', nav: '使用记录', width: 400, height: 900, scrolls: true },
+  /* **筛选（v60）**：时间预设、自定义起止、按 skill 名筛、筛到空。菜单与弹窗各一拍，
+     它们是控件打开之后的样子，靠地址进不去。 */
+  { name: 'usage-range', query: '?page=usage&days=7', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-custom', query: '?page=usage&from=2026-11-01&to=2026-11-10', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-skill', query: '?page=usage&skill=pdf', page: 'usage', nav: '使用记录', scrolls: false },
+  /* 命中只在结果里：`annotate` 出现在一次搜索的返回列表里，当次调用的是 `pdf-tools`。
+     这一行必须标「搜到过」，否则读的人不知道它为什么被留下。 */
+  { name: 'usage-skill-hit', query: '?page=usage&skill=annotate', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-skill-range', query: '?page=usage&days=7&skill=pdf', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-stats-filtered', query: '?page=usage&tab=stats&days=7&skill=pdf', page: 'usage', nav: '使用记录', scrolls: false },
+  { name: 'usage-filter-empty', query: '?page=usage&skill=nosuch', page: 'usage', nav: '使用记录', scrolls: false },
+  /* 浮层开着的那一屏也走地址（`range=open` / `range=custom`），与 `?new=open` 同一套；
+     整页截图会撑大视口，所以只拍首屏。 */
+  { name: 'usage-range-open', query: '?page=usage&range=open', page: 'usage', nav: '使用记录', scrolls: false, fullPage: false },
+  { name: 'usage-range-custom', query: '?page=usage&range=custom', page: 'usage', nav: '使用记录', scrolls: false, fullPage: false },
+  { name: 'usage-range-narrow', query: '?page=usage&range=open', page: 'usage', nav: '使用记录', width: 400, height: 900, scrolls: true, fullPage: false },
   { name: 'skills-ready', query: '?page=skills', page: 'skills', nav: '我的 skill', scrolls: true },
   /* **真实长度的说明（v35）**：前四条换成实测的 321 / 949 字（两条原文）。这一态是截断那条
      规则的凭据——默认夹具每条只有一句，画不出它要防的那种失败。 */
@@ -208,6 +225,12 @@ export const SHOTS = [
   { name: 'skill-usage-member', query: '?page=skill&tab=usage&in=shared', page: 'skill', nav: '我的 skill', scrolls: false },
   /* **管理档看不到别人的用量**（2026-11-10 用户定）：它管名单与档位，按人的用量只给所有者。 */
   { name: 'skill-usage-admin', query: '?page=skill&tab=usage&as=admin', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* **区间视图（v60）**：所有者、我的使用、公开聚合各一拍；累计入库不随区间变。 */
+  { name: 'skill-usage-range', query: '?page=skill&tab=usage&days=7', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-usage-range-mine', query: '?page=skill&tab=usage&use=mine&days=7', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-usage-public-range', query: '?page=skill&tab=usage&official=1&vis=public-invoke&days=7', page: 'skill', nav: '我的 skill', scrolls: false },
+  { name: 'skill-usage-range-open', query: '?page=skill&tab=usage&range=open', page: 'skill', nav: '我的 skill', scrolls: false, fullPage: false },
+  { name: 'skill-usage-range-custom', query: '?page=skill&tab=usage&range=custom', page: 'skill', nav: '我的 skill', scrolls: false, fullPage: false },
   /* 信息页在 400px：右栏折到正文下面，两组标签跟着走。 */
   { name: 'skill-narrow', query: '?page=skill&in=joined', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **文件栏**：这一版的文件清单与提交行。提交行右端的版本名是进这一版的链接（2026-10-20 定）。 */

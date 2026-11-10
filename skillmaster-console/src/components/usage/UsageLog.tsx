@@ -1,6 +1,7 @@
 import { Fragment, useEffect } from 'react'
 import type { UsageInteraction, UsageSearch } from '../../api/usage'
-import { formatTime } from '../../time'
+import { fullStamp, formatTime } from '../../time'
+import { addressMatches } from '../../usageRange'
 
 /**
  * 使用记录的一张日志表（v58）。
@@ -116,11 +117,14 @@ function SearchRow({
   row,
   index,
   open,
+  hitOnly,
   onToggle,
 }: {
   row: UsageSearch
   index: number
   open: boolean
+  /** 筛选的 skill 只在结果里出现过、没有被调用：行上要说明它为什么在这里。 */
+  hitOnly: boolean
   onToggle: () => void
 }) {
   const key = searchKey(row, index)
@@ -144,7 +148,7 @@ function SearchRow({
         onToggle()
       }}
     >
-      <time className="usage-log-time" role="cell" title={formatTime(row.at)}>
+      <time className="usage-log-time" role="cell" title={fullStamp(row.at)}>
         {stamp(row.at)}
       </time>
 
@@ -156,6 +160,11 @@ function SearchRow({
           “{row.query}”
         </span>
         <span className="usage-log-count">{total} 个结果</span>
+        {hitOnly && (
+          <span className="usage-hit" title="搜索结果里有它，随后没有调用">
+            搜到过
+          </span>
+        )}
       </span>
 
       <span className="usage-log-result" role="cell">
@@ -172,7 +181,7 @@ function SearchRow({
                   #{invocation.rank}
                 </span>
                 {row.invocations.length > 1 && (
-                  <span className="usage-invocation-at" title={formatTime(invocation.at)}>
+                  <span className="usage-invocation-at" title={fullStamp(invocation.at)}>
                     {stamp(invocation.at).slice(6)}
                   </span>
                 )}
@@ -206,7 +215,7 @@ function SearchRow({
 function DirectRow({ row }: { row: Extract<UsageInteraction, { kind: 'direct' }> }) {
   return (
     <div className="usage-log-row" role="row" data-kind="direct">
-      <time className="usage-log-time" role="cell" title={formatTime(row.at)}>
+      <time className="usage-log-time" role="cell" title={fullStamp(row.at)}>
         {stamp(row.at)}
       </time>
 
@@ -230,10 +239,13 @@ function DirectRow({ row }: { row: Extract<UsageInteraction, { kind: 'direct' }>
 
 export default function UsageLog({
   items,
+  skill,
   open,
   onToggle,
 }: {
   items: UsageInteraction[]
+  /** The address keyword in the address bar; empty when nothing is filtered. */
+  skill: string
   open: string | null
   onToggle: (key: string | null) => void
 }) {
@@ -265,7 +277,7 @@ export default function UsageLog({
   }, [open, onToggle])
 
   return (
-    <div className="usage-log" role="table" aria-label="使用记录">
+    <div className="usage-log" id="usageList" role="table" aria-label="使用记录">
       <div className="usage-log-head" role="row">
         <span role="columnheader">时间</span>
         <span role="columnheader">操作</span>
@@ -282,6 +294,8 @@ export default function UsageLog({
                 row={row}
                 index={index}
                 open={open === key}
+                hitOnly={skill !== ''
+                  && row.invocations.every((invocation) => !addressMatches(invocation.skill, skill))}
                 onToggle={() => onToggle(open === key ? null : key)}
               />
             ) : (

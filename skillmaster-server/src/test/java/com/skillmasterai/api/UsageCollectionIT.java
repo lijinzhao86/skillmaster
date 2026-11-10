@@ -201,6 +201,187 @@ class UsageCollectionIT extends AbstractAccountIT {
         assertThat(count("SELECT count(*) FROM activity_event")).isZero();
     }
 
+    @Test
+    void theWindowAndSkillAreEchoedAndCounted() {
+        insertSkill();
+        String token = token();
+        get("/api/v1/skills?q=pdf-tools", token);
+        assertThat(get(DEMO_SKILL + "/body", token).statusCode()).isEqualTo(200);
+
+        String since = Timestamps.format(java.time.Instant.now().minusSeconds(86_400));
+        String until = Timestamps.format(java.time.Instant.now().plusSeconds(86_400));
+        JsonNode page = body(get(INTERACTIONS + "?since=" + since + "&until=" + until
+                + "&skill=PDF", token));
+        assertThat(page.get("window_days").asInt()).isEqualTo(2);
+        assertThat(page.get("since").asText()).isEqualTo(since);
+        assertThat(page.get("until").asText()).isEqualTo(until);
+        assertThat(page.get("skill").asText()).isEqualTo("PDF");
+        assertThat(page.get("has_any").asBoolean()).as("this account has rows").isTrue();
+        assertThat(page.get("total").asLong()).as("the search that returned it").isEqualTo(1);
+
+        JsonNode stats = body(get("/api/v1/usage/stats?since=" + since + "&until=" + until
+                + "&skill=PDF", token));
+        assertThat(stats.get("skill").asText()).isEqualTo("PDF");
+        assertThat(stats.get("searches").asLong()).isEqualTo(1);
+        assertThat(stats.get("calls").asLong()).isEqualTo(1);
+    }
+
+    @Test
+    void theOwnerSeesACollaboratorsCallsAndSubmissionsInsideTheWindow() {
+        insertSkill();
+        String token = token();
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).single();
+        String collaborator = "01M3HTG7GDQ71Q28CCP7J0HM8T"; // the seeded `other` account
+        String at = Timestamps.now();
+        jdbc.sql("INSERT INTO skill_grant (skill_id, grantee_id, role, granted_by, created_at)"
+                        + " VALUES (:skill, :grantee, 'browse', :by, :at)")
+                .param("skill", skillId).param("grantee", collaborator)
+                .param("by", SUBJECT_USER_ID).param("at", at).update();
+
+        String inside = Timestamps.format(java.time.Instant.now().minusSeconds(600));
+        String outside = Timestamps.format(java.time.Instant.now().minusSeconds(3600));
+        insertInvokeFor(collaborator, skillId, inside);
+        insertInvokeFor(collaborator, skillId, inside);
+        insertInvokeFor(collaborator, skillId, outside);
+        jdbc.sql("INSERT INTO audit_event (actor_user_id, action, target_type, target_id, at)"
+                        + " VALUES (:actor, 'submit', 'skill', :skill, :at)")
+                .param("actor", collaborator).param("skill", skillId).param("at", inside).update();
+
+        String since = Timestamps.format(java.time.Instant.now().minusSeconds(1800));
+        String until = Timestamps.format(java.time.Instant.now().plusSeconds(3600));
+        JsonNode usage = body(get("/api/v1/usage/skills/demo/pdf-tools?since=" + since
+                + "&until=" + until, token));
+
+        assertThat(usage.get("totals").get("calls").asText()).isEqualTo("2");
+        assertThat(usage.get("totals").get("accounts").asText()).isEqualTo("1");
+        JsonNode row = usage.get("users").get(1);
+        assertThat(usage.get("users").get(0).get("owner").asBoolean())
+                .as("the owner row comes first").isTrue();
+        assertThat(row.get("who").asText()).isEqualTo("other");
+        assertThat(row.get("invoke").asLong()).as("the two calls inside the window").isEqualTo(2);
+        assertThat(row.get("submitted").asLong()).isEqualTo(1);
+        assertThat(row.get("last").asText()).isEqualTo(inside);
+
+        // The same rows seen through a wider window include the call before it.
+        String wider = Timestamps.format(java.time.Instant.now().minusSeconds(7200));
+        JsonNode all = body(get("/api/v1/usage/skills/demo/pdf-tools?since=" + wider
+                + "&until=" + until, token));
+        assertThat(all.get("totals").get("calls").asText()).isEqualTo("3");
+    }
+
+    @Test
+    void theWebPlaneReadsTheSameRowsAsTheApiPlane() {
+        insertSkill();
+        String token = token();
+        get("/api/v1/skills?q=pdf-tools", token);
+        assertThat(get(DEMO_SKILL + "/body", token).statusCode()).isEqualTo(200);
+
+        String since = Timestamps.format(java.time.Instant.now().minusSeconds(86_400));
+        String until = Timestamps.format(java.time.Instant.now().plusSeconds(86_400));
+        String query = "?since=" + since + "&until=" + until + "&page=1&limit=10";
+
+        JsonNode api = body(get(INTERACTIONS + query, token));
+        JsonNode web = body(webGet("/web/usage/interactions" + query));
+
+        assertThat(web.get("total")).isEqualTo(api.get("total"));
+        assertThat(web.get("items")).isEqualTo(api.get("items"));
+        assertThat(web.get("window_days")).isEqualTo(api.get("window_days"));
+        assertThat(web.get("since")).isEqualTo(api.get("since"));
+        assertThat(web.get("until")).isEqualTo(api.get("until"));
+        assertThat(web.get("has_any")).isEqualTo(api.get("has_any"));
+    }
+
+    @Test
+    void anAccountWithNothingYetSaysSo() {
+        String token = token();
+
+        JsonNode page = body(get(INTERACTIONS, token));
+        assertThat(page.get("total").asLong()).isZero();
+        assertThat(page.get("has_any").asBoolean())
+                .as("no records at all, which is a different sentence from 'filters kept nothing'")
+                .isFalse();
+
+        // The same call with a keyword still reports the account's own emptiness, not the filter's.
+        JsonNode filtered = body(get(INTERACTIONS + "?skill=zzz", token));
+        assertThat(filtered.get("total").asLong()).isZero();
+        assertThat(filtered.get("has_any").asBoolean()).isFalse();
+    }
+
+    @Test
+    void aWindowTheServerCannotUseIsA400WithTheReason() {
+        insertSkill();
+        String token = token();
+        String since = Timestamps.format(java.time.Instant.now().minusSeconds(3600));
+        String until = Timestamps.format(java.time.Instant.now().plusSeconds(3600));
+
+        HttpResponse<String> missing = get(INTERACTIONS + "?since=" + since, token);
+        assertThat(missing.statusCode()).isEqualTo(400);
+        assertThat(missing.body()).contains("since 与 until");
+
+        HttpResponse<String> backwards = get(INTERACTIONS + "?since=" + until + "&until=" + since,
+                token);
+        assertThat(backwards.statusCode()).isEqualTo(400);
+        assertThat(backwards.body()).contains("until 要晚于 since");
+    }
+
+    @Test
+    void theOwnerViewIsTheWindowNotTheCumulativeSignal() {
+        insertSkill();
+        String token = token();
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).single();
+        String older = Timestamps.format(java.time.Instant.now().minusSeconds(3600));
+        String newer = Timestamps.format(java.time.Instant.now().minusSeconds(600));
+        String since = Timestamps.format(java.time.Instant.now().minusSeconds(1800));
+        String until = Timestamps.format(java.time.Instant.now().plusSeconds(3600));
+        insertInvoke(skillId, older);
+        insertInvoke(skillId, newer);
+
+        // Only the newer call falls inside this window.
+        JsonNode usage = body(get("/api/v1/usage/skills/demo/pdf-tools?since=" + since
+                + "&until=" + until, token));
+        assertThat(usage.get("window_days").asInt()).isEqualTo(1);
+        assertThat(usage.get("totals").get("calls").asText()).isEqualTo("1");
+        assertThat(usage.get("users").get(0).get("invoke").asLong()).isEqualTo(1);
+
+        JsonNode mine = body(get("/api/v1/usage/skills/demo/pdf-tools/mine?since=" + since
+                + "&until=" + until, token));
+        assertThat(mine.get("calls").asLong()).isEqualTo(1);
+    }
+
+    @Test
+    void aPublicSkillBucketsTheWindowAggregate() {
+        insertSkill();
+        String token = token();
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).single();
+        jdbc.sql("UPDATE skill SET visibility = 'public' WHERE id = :id")
+                .param("id", skillId).update();
+        String now = Timestamps.now();
+        for (int i = 0; i < 12; i++) {
+            insertInvoke(skillId, now);
+        }
+
+        String since = Timestamps.format(java.time.Instant.now().minusSeconds(3600));
+        String until = Timestamps.format(java.time.Instant.now().plusSeconds(3600));
+        JsonNode usage = body(get("/api/v1/usage/skills/demo/pdf-tools?since=" + since
+                + "&until=" + until, token));
+        assertThat(usage.get("public").asBoolean()).isTrue();
+        assertThat(usage.get("totals").get("calls").asText()).isEqualTo("10+");
+        assertThat(usage.get("totals").get("accounts").asText()).isEqualTo("少于 10 个账号");
+        assertThat(usage.get("totals").get("last_used").asText())
+                .as("the public view keeps the instant; the client picks the display day")
+                .matches("\\d{4}-\\d{2}-\\d{2}T.*Z");
+        assertThat(usage.get("users")).as("the public view carries no collaborator rows").isEmpty();
+
+        JsonNode users = body(get("/api/v1/usage/skills/demo/pdf-tools/users?since=" + since
+                + "&until=" + until, token));
+        assertThat(users.get("public").asBoolean()).as("the CLI can tell this apart from unused")
+                .isTrue();
+        assertThat(users.get("users")).isEmpty();
+    }
+
     /**
      * The fixture {@code SkillContentIT} uses, reduced to the one file these tests read: a live
      * private skill owned by the seeded account, with one published version.
@@ -245,6 +426,19 @@ class UsageCollectionIT extends AbstractAccountIT {
                 """)
                 .param("version", versionId).param("sha", sha).param("size", body.length)
                 .update();
+    }
+
+    private void insertInvoke(String skillId, String at) {
+        insertInvokeFor(SUBJECT_USER_ID, skillId, at);
+    }
+
+    private void insertInvokeFor(String actor, String skillId, String at) {
+        jdbc.sql("""
+                INSERT INTO activity_event (actor_user_id, kind, skill_id, skill_address,
+                                            version_label, target, detail, at)
+                VALUES (:actor, 'invoke', :skill, 'demo/pdf-tools', '1.0.0', NULL, '{}', :at)
+                """)
+                .param("actor", actor).param("skill", skillId).param("at", at).update();
     }
 
     private static String sha256Hex(byte[] bytes) {
