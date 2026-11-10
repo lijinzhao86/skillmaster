@@ -52,7 +52,10 @@ export function stubFetch(...responses: Array<() => Response | Promise<Response>
     // truth, for the same reason as the two reads above; a test about the block calls
     // `stubMyWhenToUse` first.
     if (method === 'GET' && path.endsWith('/my-when-to-use')) {
-      return json(200, myWhenToUseAnswer)
+      // A whole `Response` describes a refusal; anything else is the 200 body.
+      return myWhenToUseAnswer instanceof Response
+        ? myWhenToUseAnswer.clone()
+        : json(200, myWhenToUseAnswer)
     }
     const next = responses.shift()
     if (next === undefined) {

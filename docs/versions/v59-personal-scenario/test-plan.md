@@ -133,7 +133,7 @@
 
 - **前置**：A 已入库一条 skill，未写过我的适用场景。
 - **步骤**：打开信息页看空态 → 点「添加」看编辑态 → 点「取消」→ 再打开、输入「循环审计时用它」、保存 → 重新打开、点「清除」。
-- **期望**：信息页依次是「适用场景」（skill 自带，一整块）与「我的适用场景」；空态说明写了之后检索怎么用它，并给出「添加」；能改这个 skill 的人（写入及以上）的空态多一句「上面那句随 skill 发布…改了不用出新版本」，只能调用 / 浏览的人没有这句；编辑态是卡片里的 `textarea`（不是弹窗），200 字上限、`0/200` 计数、空着时「保存」禁用；取消不改数据；保存后两块都在、作者那块在上；清除后回到空态、作者那块仍在。
+- **期望**：信息页依次是「适用场景」（skill 自带，一整块）与「我的适用场景」；空态说明写了之后检索怎么用它，并给出「添加」；能改这个 skill 的人（写入及以上）的空态多一句「上面那句随 skill 发布…改了不用出新版本」，只能调用 / 浏览的人没有这句；编辑态是卡片里的 `textarea`（不是弹窗），200 字上限、`0/200` 计数、空着时「保存」禁用；取消不改数据；保存后两块都在、作者那块在上；清除后回到空态、作者那块仍在。**读这一块失败时**：404 按空态显示、不弹整页横幅（页面已经画出这个 skill）；其他失败仍弹页面横幅。
 - **判定**：通过 / 失败（附四个态截图）。
 
 ### T16 · CLI 命令面
@@ -199,7 +199,7 @@
 | T12 | 通过 | `skillmaster-site/tests/legal-page.test.tsx`（版本 1.1）；隐私政策 §五含「我的适用场景」 |
 | T13 | 通过 | `read_write_contract_test.go` 的 `TestGetAllWritesTheWholeVersion`；`SkillDocumentTest` |
 | T14 | 通过 | `PersonalScenarioSearchIT.aConfidentPersonalRewriteOutranksTheAuthorsExactSentence`、`theAuthorsExactSentenceBeatsGenericSemanticEvidence` |
-| T15 | 通过 | `tests/skills.test.tsx`（空态 / 编辑 / 清除 / 字段错误） |
+| T15 | 通过 | `tests/skills.test.tsx`（空态 / 编辑 / 清除 / 字段错误）；`tests/my-when-to-use-skew.test.tsx`（读 404 → 空态、读 500 → 横幅，见 [`iterations/0001`](iterations/0001-optional-read-404-is-empty.md)） |
 | T16 | 通过 | `my_when_to_use_test.go`（set / clear / 空文本 / 版本 pin / 搜索标记 / 零结果提示） |
 | T17 | 通过 | `SkillDocumentTest`；`MyWhenToUseApiIT.theLimitIsTwoHundredUnicodeCodePoints`；`tests/errors.test.ts` |
 | T18 | 通过 | `SyncPipelineIT.aSkillMdThatBreaksTheTextFieldContractFailsOnlyItsOwnEntry`；`SkillDocumentTest` |
@@ -215,3 +215,4 @@
 - **T11 未执行**：事件管道（`search_id` / adopt / exclude / note）。v58 的「个人调用记录」已合并且提供了依赖，但本 PR 不建第二套管道，P3 留后续单独做；后续待办见 [`TODO.md`](../../current/TODO.md)「搜索事件管道（v59 P3）」。状态：未执行（不在本 PR 范围）。
 - **休眠条目的说明在控制台不可见**：`GET /my-when-to-use` 在库条目休眠时仍可读，`skill show` 现在也读；但控制台信息页按「库条目有效」才画这一块，休眠时看不到。这与「控制台只在库里画」的决定一致，三端差异留给后续设计态。状态：按决定保留。
 - **近似键告警只进服务端日志**：`whenToUse` / `when-to-use` 只会让作者在日志里看到，响应与 CLI / 控制台都不带 warnings。状态：本版按此实现，回执里的结构化 warnings 留后续。
+- **读失败的整页横幅不在设计件里**：设计件只画「我的适用场景」的空态与编辑态，没有页面横幅；读失败时沿用控制台既有的通用 `.banner`（不是本次新增视觉）。状态：既有缺口，待设计件补这一态。
