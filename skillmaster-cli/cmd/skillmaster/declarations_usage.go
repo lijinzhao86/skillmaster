@@ -7,7 +7,7 @@ var usageSpecs = []*help.Spec{
 	{
 		Path:    "usage",
 		Summary: "使用记录",
-		Usage: "skmr usage [<地址>] [--stats] [--expand] [--users] [--mine] [--page <页码>] [--limit <条数>] [--json]",
+		Usage:   "skmr usage [<地址>] [--stats] [--expand] [--users] [--mine] [--page <页码>] [--limit <条数>] [--json]",
 		Flags: []help.Flag{
 			{Name: "--expand", Summary: "展开搜索结果（截断时说明）"},
 			{Name: "--page", Value: "<页码>", Summary: "明细第几页，默认 1"},
