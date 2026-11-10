@@ -23,7 +23,7 @@
 
 ## 技能文本字段的上限
 
-单位是 **Unicode 码点**：一个汉字、一个英文字母、一个标点都算 1，emoji 也按 1 个码点计（ADR 0179）。作者字段由 `SkillTextFields.inspect` 校验：写入时经 `SkillDocument.parse`，发布时经 `SkillMetadataService` 各调用一次；「我的适用场景」由它自己的写接口校验。
+单位是 **Unicode 码点**：一个汉字、一个英文字母、一个标点都算 1，emoji 也按 1 个码点计（ADR 0181）。作者字段由 `SkillTextFields.inspect` 校验：写入时经 `SkillDocument.parse`，发布时经 `SkillMetadataService` 各调用一次；「我的适用场景」由它自己的写接口校验。
 
 | 常量 | 原始表达式 | 码点 |
 |---|---|---|

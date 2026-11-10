@@ -179,6 +179,9 @@ func TestTheUpdateCheckSurvivesAScriptsOwnHelp(t *testing.T) {
 }
 
 func TestTheCheckIsThrottledToOnceADay(t *testing.T) {
+	// The developer machine may carry SKILLMASTER_AUTO_UPDATE=0; these tests are about the
+	// automatic path being on, and the switch itself has its own test.
+	t.Setenv(AutoUpdateEnv, "")
 	isolateConfig(t)
 	c := newChannel(t, "1.0.0", []byte("一样"))
 	pretendRelease(t, c.URL)
@@ -197,6 +200,9 @@ func TestTheCheckIsThrottledToOnceADay(t *testing.T) {
 }
 
 func TestANewerBuildIsInstalledAndTheCommandIsUntouched(t *testing.T) {
+	// The developer machine may carry SKILLMASTER_AUTO_UPDATE=0; these tests are about the
+	// automatic path being on, and the switch itself has its own test.
+	t.Setenv(AutoUpdateEnv, "")
 	if runtime.GOOS == "windows" {
 		// The swap is handed to a helper that has to be a real executable.
 		t.Skip("covered by the Windows end-to-end test")
@@ -226,6 +232,9 @@ func TestANewerBuildIsInstalledAndTheCommandIsUntouched(t *testing.T) {
 }
 
 func TestATamperedPackageLeavesTheBinaryAlone(t *testing.T) {
+	// The developer machine may carry SKILLMASTER_AUTO_UPDATE=0; these tests are about the
+	// automatic path being on, and the switch itself has its own test.
+	t.Setenv(AutoUpdateEnv, "")
 	isolateConfig(t)
 	c := newChannel(t, "2.0.0", []byte("新版本"))
 	c.Config.Handler = tampering(c.Server.Config.Handler.(http.Handler))

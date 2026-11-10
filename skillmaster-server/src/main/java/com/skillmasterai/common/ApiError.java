@@ -33,7 +33,7 @@ public record ApiError(Error error) {
      * <p>A size refusal also carries the actual and allowed counts, so a client can write the
      * sentence in its own language with both numbers (v39 A9). Bytes and Unicode code points are
      * separate components rather than one "amount": a file limit counts bytes, while a text limit
-     * counts code points (ADR 0179), and a client that read a code-point count as bytes would
+     * counts code points (ADR 0181), and a client that read a code-point count as bytes would
      * render the wrong unit. The nullable components are omitted from JSON when absent; every other
      * detail keeps the original two-field shape.
      */

@@ -55,7 +55,7 @@ public final class SkillDocument {
                 .orElse(name);
         requireUsableName(name);
 
-        // One contract for both author text fields, and every problem at once (ADR 0179). The
+        // One contract for both author text fields, and every problem at once (ADR 0181). The
         // same report is what publish re-evaluates from the stored frontmatter. The description
         // goes in raw: a non-text value is one of the problems to report, not a reason to stop
         // before the when_to_use check.

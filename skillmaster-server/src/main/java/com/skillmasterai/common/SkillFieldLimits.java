@@ -1,7 +1,7 @@
 package com.skillmasterai.common;
 
 /**
- * The three text limits of a skill, in Unicode code points (ADR 0179).
+ * The three text limits of a skill, in Unicode code points (ADR 0181).
  *
  * <p><strong>One source for parse, publish and the personal API.</strong> The author's fields are
  * checked when {@code SKILL.md} is written and again when a version is published; the personal

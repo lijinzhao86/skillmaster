@@ -71,7 +71,8 @@ export default function AccountPage() {
                   <p className="danger-title">注销账号</p>
                   <p className="hint">
                     注销后立即生效，不能撤销：账号立即不能登录，你个人空间里的 skill 立即不可用；30
-                    天后删除这些内容与你的个人数据，访问日志按法律要求保留 6 个月。
+                    天后删除或去标识化处理这些内容与你的账号资料；行为日志不随注销删除（在线明细
+                    90 天、归档最多 3 年、汇总 12 个月）。
                   </p>
                   <p className="hint">
                     你在别人 skill 里的贡献会保留，作者显示为「已注销账号」；分享给别人的访问会失效，并通知对方。

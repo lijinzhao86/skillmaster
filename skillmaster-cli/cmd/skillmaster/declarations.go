@@ -107,9 +107,9 @@ logout 会清本机；CLI 登录还会结束服务端那次登录，key 只清�
 `,
 		},
 	},
-	specs: append(append(append(append(append(append(append(append(topSpecs, skillSpecs...),
+	specs: append(append(append(append(append(append(append(append(append(topSpecs, skillSpecs...),
 		skillFileSpecs...), skillRoleSpecs...), skillPageSpecs...), otherSpecs...),
-		draftSpecs...), notificationSpecs...), secretSpecs...),
+		draftSpecs...), notificationSpecs...), usageSpecs...), secretSpecs...),
 }
 
 // topSpecs is the root, the six pure groups, the three top-level commands, and auth status.
@@ -117,7 +117,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "",
 		Summary:   "SkillMaster 命令行",
-		Children:  []string{"skill", "skills", "version", "draft", "notifications", "secret", "auth", "login", "logout", "startup", "prompt", "update", "run", "doctor"},
+		Children:  []string{"skill", "skills", "version", "draft", "notifications", "usage", "secret", "auth", "login", "logout", "startup", "prompt", "update", "run", "doctor"},
 		PureGroup: true,
 	},
 	{

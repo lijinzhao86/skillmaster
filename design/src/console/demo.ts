@@ -9,8 +9,8 @@
  */
 
 export const CONSOLE_PAGES = [
-  'discover', 'skills', 'my-tags', 'publish', 'skill', 'editor', 'account', 'keys', 'sessions',
-  'secrets', 'notifications',
+  'discover', 'skills', 'usage', 'my-tags', 'publish', 'skill', 'editor', 'account', 'keys',
+  'sessions', 'secrets', 'notifications',
 ] as const
 export const AUTH_PAGES = ['login', 'register', 'reset', 'logout'] as const
 
@@ -114,6 +114,16 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
     { key: 'loading', label: '加载中' },
     { key: 'failed', label: '出错' },
   ],
+  /* **使用记录（v58）**：三份列表由 `tab` 分开，空态是「还没有记录」那一屏；
+     加载中与出错是读不到服务端答案的两态。 */
+  usage: [
+    { key: 'ready', label: '交互明细' },
+    { key: 'stats', label: '统计', href: '?page=usage&tab=stats' },
+    { key: 'long', label: '长文本', href: '?page=usage&long=1' },
+    { key: 'empty', label: '还没有记录' },
+    { key: 'loading', label: '加载中' },
+    { key: 'failed', label: '出错' },
+  ],
   /**
    * **The editor's states are the ones a screenshot has to show and a click cannot reach.**
    * 新建 with nothing typed is the default; 已有草稿 is the ordinary working state; the rest are the
@@ -153,6 +163,7 @@ export const STATES: Record<ConsolePage, StateOption[]> = {
 export const DEFAULT_STATE: Record<ConsolePage, string> = {
   discover: 'first',
   skills: 'ready',
+  usage: 'ready',
   publish: 'ready',
   'my-tags': 'ready',
   skill: 'ready',

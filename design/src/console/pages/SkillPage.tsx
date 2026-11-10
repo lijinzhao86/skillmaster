@@ -25,6 +25,7 @@ import InfoPane from '../components/skill/InfoPane'
 import FilesPane from '../components/skill/FilesPane'
 import VersionsPane from '../components/skill/VersionsPane'
 import SettingsPane from '../components/skill/SettingsPane'
+import UsagePane from '../components/skill/UsagePane'
 import VersionDetail from '../components/skill/VersionDetail'
 import type { AtLeast, Grant, Sub, Version, Visibility } from '../fixtures/skill'
 import SkillAvatar from '../components/SkillAvatar'
@@ -238,6 +239,9 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const openTabs = ['info']
     .concat(atLeast('browse') ? ['files'] : [])
     .concat(inLibraryForTabs ? ['versions'] : [])
+    /* **「使用」对每个能打开这一页的人都有一份**（v58）：所有者读到聚合与协作者统计，
+       其他人读到自己在这个 skill 上的记录——两种都在这一个页签里，按关系分。 */
+    .concat(['usage'])
     .concat(atLeast('admin') ? ['settings'] : [])
   const askedPath = params.get('path') || null
   const askedFile = params.get('file') || null
@@ -255,6 +259,17 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
   const official = params.get('official') === '1'
   /* 演示件用地址里的一个参数代替服务端的 `can_publish_public`，所以分区间走动时要带着它。 */
   const officialQuery = official ? '&official=1' : ''
+  /* **使用页签的两个视图走地址**（2026-11-10）：`use=mine` 是「我的使用」，不带就是「全部使用」。
+     和页签、版本选择同一条规矩——能深链的视图都写在地址里。 */
+  const usageScope: 'all' | 'mine' = params.get('use') === 'mine' ? 'mine' : 'all'
+  const setUsageScope = (next: 'all' | 'mine') => {
+    const query = new URLSearchParams(params)
+    query.set('page', 'skill')
+    query.set('tab', 'usage')
+    if (next === 'mine') query.set('use', 'mine')
+    else query.delete('use')
+    replace('?' + query.toString())
+  }
   const askedVis = params.get('vis')
   /* **`in=visible` 与 `in=joined` 在演示件里只能是公开 skill**：没有关系就看不见，而只有公开的
     才能入库。所以这两种归属默认按公开算——否则这两屏会自相矛盾（看见一个你既没创建也没被共享的
@@ -684,6 +699,16 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
               </span>
             </a>
             <a
+              className={'skill-tab' + (tab === 'usage' ? ' is-current' : '')}
+              data-tab="usage"
+              href={'?page=skill&tab=usage' + officialQuery}
+              aria-current={tab === 'usage' ? 'page' : undefined}
+              hidden={!openTabs.includes('usage')}
+            >
+              <svg className="skill-tab-icon" aria-hidden="true"><use href="#clockMark" /></svg>
+              <span className="skill-tab-label">使用</span>
+            </a>
+            <a
               className={'skill-tab' + (tab === 'settings' ? ' is-current' : '')}
               data-tab="settings"
               href={'?page=skill&tab=settings' + officialQuery}
@@ -837,6 +862,18 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
             <div id="versionDetail" hidden></div>
           )}
         </VersionsPane>
+
+        <UsagePane
+          hidden={tab !== 'usage'}
+          tier={tier}
+          visibility={visibility}
+          usage={visibility === 'private'
+            ? { bucket: '3', calls: '12', lastUsed: '2026-11-05', joins: 45 }
+            : demoUsage}
+          versions={versions}
+          scope={usageScope}
+          onScope={setUsageScope}
+        />
 
         <SettingsPane
           hidden={tab !== 'settings'}

@@ -274,6 +274,12 @@ skillmaster:
     # or a role name is refused at startup.
     role-name: ${SKILLMASTER_OSS_ROLE_NAME:}
 
+  # Where the activity log's expired weekly partitions are written before they are dropped (v58).
+  # The file is uploaded through the same private OSS bucket the blobs use; this is only the
+  # staging directory, and it must have room for one week of events.
+  archive:
+    dir: ${SKILLMASTER_ARCHIVE_DIR:${java.io.tmpdir}/skillmaster-archive}
+
   # How service credentials are sealed at rest (v52, ADR 0172). The root key belongs in a cloud
   # KMS in every deployment that serves real users; `local` is a 32-byte AES key for a laptop and
   # the test suite, and `config.SecretSettingsConfig` refuses it when the `prod` profile is active.

@@ -167,15 +167,28 @@ public final class SkillDistributionService {
      * buffered path by passing a boolean. The consumer and author planes share this shape and differ
      * only in which resolver found the snapshot.
      */
-    public Optional<StreamLookup> streamFileOf(Namespace namespace, Access access, VersionPin pin,
+    public Optional<ResolvedStream> streamFileOf(Namespace namespace, Access access, VersionPin pin,
             String relpath) {
-        return streamFrom(readableIn(access, pin), relpath);
+        return resolvedStream(readableIn(access, pin), relpath);
     }
 
     /** The author plane's streaming read: a version that need not be published. */
-    public Optional<StreamLookup> authorStreamFileOf(Namespace namespace, Access access,
+    public Optional<ResolvedStream> authorStreamFileOf(Namespace namespace, Access access,
             VersionPin pin, String relpath) {
-        return streamFrom(versions.authorSnapshot(access, pin), relpath);
+        return resolvedStream(versions.authorSnapshot(access, pin), relpath);
+    }
+
+    /**
+     * The lookup together with the snapshot it came from.
+     *
+     * <p>The snapshot is what lets a caller record which version was read without resolving it a
+     * second time. M9 still knows nothing about usage: it only hands back the version it already
+     * had to resolve in order to find the file.
+     */
+    private Optional<ResolvedStream> resolvedStream(Optional<SkillSnapshot> snapshot,
+            String relpath) {
+        return snapshot.flatMap(resolved -> streamFrom(Optional.of(resolved), relpath)
+                .map(lookup -> new ResolvedStream(lookup, resolved)));
     }
 
     /**
@@ -323,6 +336,10 @@ public final class SkillDistributionService {
 
     /** A file's bytes together with the entry that named them. */
     public record StoredFile(ManifestEntry entry, byte[] bytes) {
+    }
+
+    /** A streaming lookup and the version snapshot it was resolved from. */
+    public record ResolvedStream(StreamLookup lookup, SkillSnapshot snapshot) {
     }
 
     /** Streaming's two nothings, the same distinction {@link FileLookup} keeps. */

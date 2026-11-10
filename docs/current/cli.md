@@ -98,6 +98,7 @@
 | `skmr skills search` | 按意思找 skill | `skmr skills search <问题> [--scope library\|public\|all] [--limit <条数>] [--exclude <地址>]... [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--semantic=false] [--verbose] [--no-login]` |
 | `skmr startup` | 开始入门旅程 | `skmr startup` |
 | `skmr update` | 更新这个 CLI | `skmr update [--check]` |
+| `skmr usage` | 使用记录 | `skmr usage [<地址>] [--stats] [--expand] [--users] [--mine] [--page <页码>] [--limit <条数>] [--json]` |
 | `skmr version` | 作者面的版本管理 | — |
 | `skmr version diff` | 与上一版比较 | `skmr version diff <命名空间>/<名字>@<版本> [--from <版本>] [--patch] [--file <路径>] [--max-lines <n>] [--json]` |
 | `skmr version discard` | 丢弃一版草稿 | `skmr version discard <命名空间>/<名字>@<版本码> [--json]` |

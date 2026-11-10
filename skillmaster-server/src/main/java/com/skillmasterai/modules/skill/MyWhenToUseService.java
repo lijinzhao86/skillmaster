@@ -14,7 +14,7 @@ import java.util.Optional;
  * <p><strong>Spelling is decided here, once.</strong> The browser and the CLI send what a person
  * typed; {@link #parse} trims it, folds every internal run of whitespace (newlines included) into one
  * space, and counts the result in Unicode code points. The limit is the same 200 the private tag's
- * description uses, and the unit is the same one ADR 0179 chose for every text field.
+ * description uses, and the unit is the same one ADR 0181 chose for every text field.
  *
  * <p><strong>An empty sentence is not a clear.</strong> Clearing is the DELETE route; a PUT with
  * nothing left after normalization is refused so that "I meant to clear" and "I sent an empty body"
@@ -23,7 +23,7 @@ import java.util.Optional;
 public final class MyWhenToUseService {
 
     /** 1–200 Unicode code points; one han character, one Latin letter and one punctuation mark each
-     * count as one (ADR 0179). */
+     * count as one (ADR 0181). */
     public static final int MAX_CODE_POINTS = SkillFieldLimits.MY_WHEN_TO_USE_MAX_CODE_POINTS;
 
     private final MyWhenToUseRepository repository;

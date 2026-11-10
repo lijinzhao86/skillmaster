@@ -1,7 +1,10 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.account.Account;
 import com.skillmasterai.modules.account.AccountDirectory;
+import com.skillmasterai.modules.activity.ActivityEvent;
+import com.skillmasterai.modules.activity.ActivityKinds;
 import com.skillmasterai.modules.account.CaptchaChallenge;
 import com.skillmasterai.modules.account.WebSessionRegistry;
 import com.skillmasterai.modules.account.VerificationPurpose;
@@ -14,6 +17,7 @@ import com.skillmasterai.usecase.SendVerificationCodeUseCase;
 import com.skillmasterai.usecase.WelcomeLibraryUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -57,6 +61,7 @@ class WebAccountController {
     private final WebSessionRegistry sessions;
     private final SecurityContextRepository contexts;
     private final CsrfTokenRepository csrf;
+    private final ActivityLog activity;
 
     WebAccountController(SendVerificationCodeUseCase sendVerificationCode,
             RegisterAccountUseCase registerAccount, DeleteAccountUseCase deleteAccount,
@@ -64,7 +69,8 @@ class WebAccountController {
             ResetPasswordUseCase resetPassword, CheckUsernameUseCase checkUsername,
             WelcomeLibraryUseCase welcomeLibrary, CaptchaChallenge captchas,
             AccountDirectory accounts, WebSessionRegistry sessions,
-            SecurityContextRepository contexts, CsrfTokenRepository csrf) {
+            SecurityContextRepository contexts, CsrfTokenRepository csrf,
+            ActivityLog activity) {
         this.sendVerificationCode = sendVerificationCode;
         this.registerAccount = registerAccount;
         this.deleteAccount = deleteAccount;
@@ -77,6 +83,7 @@ class WebAccountController {
         this.sessions = sessions;
         this.contexts = contexts;
         this.csrf = csrf;
+        this.activity = activity;
     }
 
     /**
@@ -133,6 +140,8 @@ class WebAccountController {
         Account account = loginAccount.login(body.phone(), body.password(), clientIp(request))
                 .orElseThrow(InvalidCredentialsException::new);
         WebSession.establish(request, response, contexts, csrf, account.userId());
+        activity.record(new ActivityEvent(account.userId(), null, ActivityKinds.LOGIN, null, null,
+                null, null, null, Map.of("method", "password"), Timestamps.now()));
         return ResponseEntity.ok(WebAccount.of(account));
     }
 
@@ -169,7 +178,13 @@ class WebAccountController {
      * same answer as one that was signed in.
      */
     @PostMapping(WebRoutes.LOGOUT)
-    ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
+    ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response,
+            Authentication caller) {
+        if (caller != null && caller.isAuthenticated()
+                && !"anonymousUser".equals(caller.getName())) {
+            activity.record(new ActivityEvent(caller.getName(), null, ActivityKinds.LOGOUT, null,
+                    null, null, null, null, Map.of("method", "session"), Timestamps.now()));
+        }
         WebSession.clear(request, response);
         return ResponseEntity.noContent().build();
     }

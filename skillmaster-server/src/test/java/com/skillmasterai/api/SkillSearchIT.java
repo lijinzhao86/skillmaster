@@ -513,6 +513,40 @@ class SkillSearchIT extends AbstractAccountIT {
         assertThat(get("/api/v1/skills?sort=alphabetical", token()).statusCode()).isEqualTo(400);
     }
 
+    @Test
+    void anApiCursorPageMergesIntoTheSearchWithTheSameFilters() {
+        // Both planes compare filters when merging a second page (TD B20): a page of
+        // `scope=public` cannot continue a `scope=library` search with the same words. The cursor
+        // request resends the narrowing, so both planes are asking the same question.
+        for (int i = 0; i < 3; i++) {
+            insertSkill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "widget-" + i, "Widget " + i, "widget");
+        }
+
+        JsonNode first = JSON.readTree(
+                get("/api/v1/skills?q=widget&scope=public&limit=1", token()).body());
+        String cursor = first.get("next_cursor").asText();
+        get("/api/v1/skills?q=widget&scope=library&limit=1", token());
+        assertThat(get("/api/v1/skills?q=widget&scope=public&limit=1&cursor=" + cursor,
+                token()).statusCode()).isEqualTo(200);
+
+        List<String> details = jdbc.sql("SELECT detail FROM activity_event"
+                        + " WHERE actor_user_id = :actor AND kind = 'search' ORDER BY at, id")
+                .param("actor", DEMO_USER_ID)
+                .query(String.class)
+                .list();
+        assertThat(details).hasSize(2);
+        assertThat(details).anySatisfy(detail -> {
+            JsonNode node = JSON.readTree(detail);
+            assertThat(node.get("filters").get("scope").asText()).isEqualTo("public");
+            assertThat(node.get("pages").asInt()).isEqualTo(2);
+        });
+        assertThat(details).anySatisfy(detail -> {
+            JsonNode node = JSON.readTree(detail);
+            assertThat(node.get("filters").get("scope").asText()).isEqualTo("library");
+            assertThat(node.get("pages").asInt()).isEqualTo(1);
+        });
+    }
+
     // ---------------------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------------------

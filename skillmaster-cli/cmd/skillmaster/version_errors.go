@@ -140,7 +140,7 @@ func versionRefusal(err error) error {
 		// that says what to change — so it is looked up first. Without this, a refusal that carries
 		// `bad_pattern` reads as 「提交的内容有问题」, which names nothing the caller can act on.
 		if server.Code == "invalid_request" || server.Code == "invalid_upload" {
-			// ADR 0179's text refusals carry the field's actual and allowed code points. Read
+			// ADR 0181's text refusals carry the field's actual and allowed code points. Read
 			// them before the issue table, whose single `too_long` line is about a tag's 200-word
 			// note and would put that number under a description with a 1024 ceiling.
 			if sentence, ok := textRefusal(server); ok {
@@ -159,7 +159,7 @@ func versionRefusal(err error) error {
 	return err
 }
 
-// textRefusal writes the sentence for a skill-text field refusal (ADR 0179). It exists because
+// textRefusal writes the sentence for a skill-text field refusal (ADR 0181). It exists because
 // `too_long` alone does not say which field or which ceiling: description is 1024 code points and
 // the author's when_to_use is 200, and the tag note has its own `too_long` in the issue table.
 func textRefusal(server *api.ServerError) (string, bool) {

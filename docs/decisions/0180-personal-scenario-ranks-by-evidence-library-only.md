@@ -3,7 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-11-11
 - **所属版本**：[`v59-personal-scenario`](../versions/v59-personal-scenario/README.md)
-- **相关**：[ADR 0179](0179-text-limits-use-unicode-code-points.md)（三个字段的上限与契约）、[`research/search-ranking-and-personal-triggers.md`](../research/search-ranking-and-personal-triggers.md)
+- **相关**：[ADR 0181](0181-text-limits-use-unicode-code-points.md)（三个字段的上限与契约）、[`research/search-ranking-and-personal-triggers.md`](../research/search-ranking-and-personal-triggers.md)
 
 ## 背景
 
@@ -45,4 +45,4 @@
 - S2 要把个人说明发给 DashScope `text-embedding-v4`；**隐私政策 §五 的 DashScope 条目必须先补**，否则 S2 不上线。
 - 事件关联（P3）依赖「个人调用记录」管道（尚未开版）；没有样本前不训练。
 - 标注集不达标（个人触发组 Top-1 / 改写组 Recall@5）不算交付；阈值与 margin 的实现值以评测结果为准。
-- 个人说明的字段上限与写入/发布契约由 [ADR 0179](0179-text-limits-use-unicode-code-points.md) 定；本 ADR 只管排序与作用域。
+- 个人说明的字段上限与写入/发布契约由 [ADR 0181](0181-text-limits-use-unicode-code-points.md) 定；本 ADR 只管排序与作用域。

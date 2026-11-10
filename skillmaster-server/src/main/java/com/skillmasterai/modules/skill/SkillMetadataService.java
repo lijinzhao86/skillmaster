@@ -239,7 +239,7 @@ public final class SkillMetadataService {
     }
 
     /**
-     * Re-applies the write-time text contract to the stored version (ADR 0179).
+     * Re-applies the write-time text contract to the stored version (ADR 0181).
      *
      * <p><strong>Why publish checks again.</strong> A draft can be older than the rule that now
      * governs it; without this, a value written before the ceiling existed would go live and only

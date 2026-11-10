@@ -1,6 +1,7 @@
 package com.skillmasterai.config;
 
 import com.skillmasterai.modules.account.SessionPolicy;
+import com.skillmasterai.modules.activity.ArchiveSettings;
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.blob.BlobSettings;
 import com.skillmasterai.modules.distribution.DiffLimits;
@@ -55,7 +56,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
-        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Sync sync, Secret secret) {
+        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Sync sync, Secret secret,
+        ArchiveSettings archive) {
 
     public SkillmasterProperties {
         Objects.requireNonNull(publicBaseUrl,
@@ -77,6 +79,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
         Objects.requireNonNull(welcome, "skillmaster.welcome is required");
         Objects.requireNonNull(sync, "skillmaster.sync is required");
         Objects.requireNonNull(secret, "skillmaster.secret is required");
+        Objects.requireNonNull(archive, "skillmaster.archive is required");
     }
 
     private static String stripTrailingSlashes(String baseUrl) {

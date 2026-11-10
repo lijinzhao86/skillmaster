@@ -98,6 +98,8 @@ func run(ctx context.Context, args []string) (err error) {
 		return draftVerb(ctx, args[1:])
 	case "notifications":
 		return notificationsVerb(ctx, args[1:])
+	case "usage":
+		return usageVerb(ctx, args[1:])
 	case "secret":
 		return secretVerb(ctx, args[1:])
 	default:

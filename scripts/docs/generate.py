@@ -223,7 +223,7 @@ def gen_limits() -> str:
     else:
         fail("BlobSettings.defaults() 的形状变了，解析不到两个默认值")
 
-    # ADR 0179: the three skill text limits are code points, not bytes. A separate table rather
+    # ADR 0181: the three skill text limits are code points, not bytes. A separate table rather
     # than reusing the byte one, because the unit is the fact a client has to respect.
     fields_source = read(SERVER / "common/SkillFieldLimits.java")
     fields = LIMIT_RE.findall(fields_source)
@@ -233,7 +233,7 @@ def gen_limits() -> str:
     lines.append("## 技能文本字段的上限\n")
     lines.append(
         "单位是 **Unicode 码点**：一个汉字、一个英文字母、一个标点都算 1，emoji 也按 1 个"
-        "码点计（ADR 0179）。作者字段由 `SkillTextFields.inspect` 校验：写入时经 "
+        "码点计（ADR 0181）。作者字段由 `SkillTextFields.inspect` 校验：写入时经 "
         "`SkillDocument.parse`，发布时经 `SkillMetadataService` 各调用一次；"
         "「我的适用场景」由它自己的写接口校验。\n"
     )
@@ -589,7 +589,14 @@ def gen_schema() -> str:
             found = len(regex.findall(text))
             if found != expected:
                 fail(f"{path.name}：{label} 出现 {expected} 次，只解析到 {found} 次")
-        for name, body in CREATE_RE.findall(text):
+        # A partitioned table ends `) PARTITION BY RANGE (at);`. The non-greedy body would stop
+        # at the `)` inside `(at)` and turn the clause into part of the last column, so the
+        # partition suffix is removed before the body is read. The table itself is still the same
+        # table; partitioning is a runtime property, not a column.
+        create_text = re.sub(
+            r"\)\s*PARTITION BY\s+RANGE\s*\([^)]*\)\s*;", ");", text, flags=re.I
+        )
+        for name, body in CREATE_RE.findall(create_text):
             ensure(name)
             for definition in split_definitions(body):
                 # A CHECK constraint spans lines and contains commas of its own; splitting by line

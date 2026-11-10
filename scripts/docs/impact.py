@@ -76,7 +76,8 @@ TYPE_RE = re.compile(
     r"`([A-Z][A-Za-z0-9]*(?:Service|Controller|Repository|UseCase|Validator|"
     r"Store|Config|Configuration|Properties|Limits|Policy|Settings|Map|Code|"
     r"Cache|Reader|Writer|Artifact|Recorder|Registry|Handler|Advice|Filter|"
-    r"Resolver|Adapter|Exception|Row|Document|Upload|Plan|Gate|Tests?|IT))`"
+    r"Resolver|Adapter|Exception|Row|Document|Upload|Plan|Gate|History|Counts|Log|"
+    r"Tests?|IT))`"
 )
 COMMENT_RE = re.compile(r"^\s*(//|/\*|\*|\{/\*)")
 FILE_SUFFIXES = (

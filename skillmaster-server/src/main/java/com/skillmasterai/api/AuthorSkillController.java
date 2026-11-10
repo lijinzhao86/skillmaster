@@ -1,6 +1,9 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.account.AccountDirectory;
+import com.skillmasterai.modules.activity.ActivityEvent;
+import com.skillmasterai.modules.activity.ActivityKinds;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.auth.Scopes;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
@@ -14,6 +17,7 @@ import com.skillmasterai.usecase.GrepVersionUseCase;
 import com.skillmasterai.usecase.ListAuthorVersionsUseCase;
 import com.skillmasterai.usecase.ReadAuthorVersionUseCase;
 import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
+import com.skillmasterai.usecase.SkillConsumption;
 import com.skillmasterai.usecase.model.CountResult;
 import com.skillmasterai.usecase.model.GrepResult;
 import tools.jackson.databind.ObjectMapper;
@@ -59,6 +63,7 @@ class AuthorSkillController {
     private final DraftRecorder drafts;
     private final AccountDirectory accounts;
     private final ObjectMapper objectMapper;
+    private final ActivityLog activity;
 
     AuthorSkillController(ArchiveSkillVersionUseCase archiveVersion,
             ListAuthorVersionsUseCase listVersions,
@@ -69,7 +74,8 @@ class AuthorSkillController {
             CountVersionUseCase countVersion,
             DraftRecorder drafts,
             AccountDirectory accounts,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ActivityLog activity) {
         this.archiveVersion = archiveVersion;
         this.listVersions = listVersions;
         this.readVersion = readVersion;
@@ -80,6 +86,7 @@ class AuthorSkillController {
         this.drafts = drafts;
         this.accounts = accounts;
         this.objectMapper = objectMapper;
+        this.activity = activity;
     }
 
     @GetMapping(AuthorSkillRoutes.VERSIONS)
@@ -172,6 +179,9 @@ class AuthorSkillController {
             throw new com.skillmasterai.modules.skill.NotPermittedException(
                     "listing '" + name + "' files needs the `browse` rung");
         }
+        activity.record(new ActivityEvent(subject.userId(), null, ActivityKinds.FILE_LIST,
+                authored.skillId(), namespace + "/" + name, selected.id(), selected.version(),
+                null, Map.of("returned", selected.manifest().entries().size()), Timestamps.now()));
         return ResponseEntity.ok()
                 // The manifest's own version digest, so `ls` and the `write` that follows agree
                 // about the baseline without a second request (v7 TD §读响应的头).
@@ -195,11 +205,12 @@ class AuthorSkillController {
             @PathVariable String namespace, @PathVariable String name,
             @PathVariable String version, @PathVariable String relpath,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        SkillDistributionService.StreamLookup lookup = readAuthored
-                .streamFile(namespace, name, pinOf(version),
-                        CapturedPath.relativeToSkillRoot(relpath), subject)
+        String path = CapturedPath.relativeToSkillRoot(relpath);
+        ReadAuthoredSkillUseCase.StreamedFile streamed = readAuthored
+                .streamFile(namespace, name, pinOf(version), path, subject)
                 .orElseThrow(SkillNotFoundException::new);
-        return switch (lookup) {
+        recordFileRead(streamed.consumption(), path, subject);
+        return switch (streamed.lookup()) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams.stream(found.file());
             case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
@@ -216,9 +227,11 @@ class AuthorSkillController {
     ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> archive(
             @PathVariable String namespace, @PathVariable String name,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        return ArchiveStreams.stream(archiveVersion
+        var artifact = archiveVersion
                 .archive(namespace, name, new VersionPin.Latest(), subject)
-                .orElseThrow(SkillNotFoundException::new));
+                .orElseThrow(SkillNotFoundException::new);
+        recordDownload(namespace + "/" + name, false, subject);
+        return ArchiveStreams.stream(artifact);
     }
 
     /** Any readable version as one zip, addressed by the same pins the file routes accept. */
@@ -227,9 +240,28 @@ class AuthorSkillController {
             versionArchive(@PathVariable String namespace, @PathVariable String name,
                     @PathVariable String version,
                     @AuthenticationPrincipal AuthenticatedSubject subject) {
-        return ArchiveStreams.stream(archiveVersion
+        var artifact = archiveVersion
                 .archive(namespace, name, pinOf(version), subject)
-                .orElseThrow(SkillNotFoundException::new));
+                .orElseThrow(SkillNotFoundException::new);
+        recordDownload(namespace + "/" + name, true, subject);
+        return ArchiveStreams.stream(artifact);
+    }
+
+    private void recordFileRead(SkillConsumption consumed, String path,
+            AuthenticatedSubject subject) {
+        if (consumed == null) {
+            return;
+        }
+        String cut = ActivityTargets.cut(path);
+        activity.record(new ActivityEvent(subject.userId(), consumed.ownerUserId(),
+                ActivityKinds.FILE_READ, consumed.skillId(), consumed.address(),
+                consumed.versionId(), consumed.versionLabel(), cut, Map.of("path", cut),
+                Timestamps.now()));
+    }
+
+    private void recordDownload(String address, boolean pinned, AuthenticatedSubject subject) {
+        activity.record(new ActivityEvent(subject.userId(), null, ActivityKinds.DOWNLOAD, null,
+                address, null, null, null, Map.of("pinned", pinned), Timestamps.now()));
     }
 
     /**

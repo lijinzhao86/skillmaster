@@ -2,7 +2,7 @@
 
 > **最后更新**：2026-11-11
 > **所属版本**：[`README.md`](README.md)
-> **状态**：P0/P1/P2 已实现并跑过机械检查；T11（事件）依赖「个人调用记录」，本版未执行。
+> **状态**：P0/P1/P2 已实现并跑过机械检查；T11（事件）的依赖 v58 已合并，但本 PR 未执行 P3。
 
 ## 验收映射
 
@@ -18,7 +18,7 @@
 | #8 清除后不再按说明匹配 | T8 | 通过 |
 | #9 校验：空文本、超长、非法地址 | T9 | 通过 |
 | #10 控制台与 CLI 一致 | T10、T16 | 通过 |
-| #11 事件可关联 | T11 | 未执行（P3 依赖「个人调用记录」） |
+| #11 事件可关联 | T11 | 未执行（P3 不在本 PR） |
 | #12 隐私口径已补 | T12 | 通过 |
 | #13 下载→提交后作者字段不变 | T13 | 通过 |
 | #14 个人说明不删除作者的那段 | T14 | 通过 |
@@ -195,7 +195,7 @@
 | T8 | 通过 | `PersonalScenarioSearchIT.clearingTheSentenceRemovesItFromRanking` |
 | T9 | 通过 | `MyWhenToUseApiIT.theLimitIsTwoHundredUnicodeCodePoints`；`my_when_to_use_test.go` |
 | T10 | 通过 | 控制台 `tests/skills.test.tsx`；CLI `my_when_to_use_test.go` |
-| T11 | 未执行 | P3 依赖 `TODO.md`「个人调用记录（只看自己）」；本版未建事件管道 |
+| T11 | 未执行 | v58 已合并；本 PR 未建事件管道 |
 | T12 | 通过 | `skillmaster-site/tests/legal-page.test.tsx`（版本 1.1）；隐私政策 §五含「我的适用场景」 |
 | T13 | 通过 | `read_write_contract_test.go` 的 `TestGetAllWritesTheWholeVersion`；`SkillDocumentTest` |
 | T14 | 通过 | `PersonalScenarioSearchIT.aConfidentPersonalRewriteOutranksTheAuthorsExactSentence`、`theAuthorsExactSentenceBeatsGenericSemanticEvidence` |
@@ -212,6 +212,6 @@
 
 ## 已知问题
 
-- **T11 未执行**：事件管道（`search_id` / adopt / exclude / note）依赖「个人调用记录」，后者未开版；本版不建第二套管道。状态：未执行（依赖未就绪）。
+- **T11 未执行**：事件管道（`search_id` / adopt / exclude / note）。v58 的「个人调用记录」已合并且提供了依赖，但本 PR 不建第二套管道，P3 留后续单独做。状态：未执行（不在本 PR 范围）。
 - **休眠条目的说明在控制台不可见**：`GET /my-when-to-use` 在库条目休眠时仍可读，`skill show` 现在也读；但控制台信息页按「库条目有效」才画这一块，休眠时看不到。这与「控制台只在库里画」的决定一致，三端差异留给后续设计态。状态：按决定保留。
 - **近似键告警只进服务端日志**：`whenToUse` / `when-to-use` 只会让作者在日志里看到，响应与 CLI / 控制台都不带 warnings。状态：本版按此实现，回执里的结构化 warnings 留后续。

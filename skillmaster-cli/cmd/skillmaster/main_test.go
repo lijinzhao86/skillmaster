@@ -1247,7 +1247,7 @@ func topLevelHelpCommands(text string) map[string]bool {
 func TestTopLevelHelpListsTheCommands(t *testing.T) {
 	want := map[string]bool{
 		"login": true, "logout": true, "auth": true, "startup": true,
-		"skills": true, "skill": true, "version": true, "draft": true, "notifications": true,
+		"skills": true, "skill": true, "version": true, "draft": true, "notifications": true, "usage": true,
 		"secret": true, "prompt": true, "update": true, "run": true, "doctor": true,
 	}
 

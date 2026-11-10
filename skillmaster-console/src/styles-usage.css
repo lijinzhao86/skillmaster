@@ -1,0 +1,145 @@
+/* ---------------------------------------------------------------------------------------------
+   使用记录（v58）。结构、数值、断点都从 design/README.md §使用记录 与演示件搬来；
+   页面只把夹具换成接口，类名没有第二套。
+   拆成独立文件是因为 `styles.css` 已到通用上限：基线条数只许减，不许涨。
+   --------------------------------------------------------------------------------------------- */
+
+.usage-version{font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:6px}
+.usage-intro{margin:16px 0 0;max-width:65ch;font-size:13px;line-height:1.6;color:var(--muted)}
+
+.usage-log{margin:18px 0 0;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.usage-log-head,
+.usage-log-row{
+  display:grid;grid-template-columns:96px minmax(0,0.6fr) minmax(0,1.4fr) 32px;
+  align-items:center;gap:16px;padding:0 16px;
+}
+.usage-log-head{
+  height:34px;border-bottom:1px solid var(--line);background:var(--wash);
+  border-radius:var(--radius) var(--radius) 0 0;
+  font-size:12px;letter-spacing:0.04em;color:var(--faint);
+}
+.usage-log-row{
+  position:relative;min-height:44px;border-bottom:1px solid var(--line);
+  font-size:13px;
+}
+.usage-log-row:hover{background:var(--wash)}
+.usage-log-row.is-toggleable{cursor:pointer}
+.usage-log-row.is-open{background:var(--surface)}
+.usage-log-row:last-child{border-bottom:0;border-radius:0 0 var(--radius) var(--radius)}
+.usage-log-time{
+  font-family:var(--mono);font-size:12px;color:var(--faint);
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.usage-log-event{display:flex;align-items:center;gap:8px;min-width:0}
+.usage-log-icon{
+  width:24px;height:24px;flex:none;border-radius:999px;background:var(--wash);
+  display:inline-flex;align-items:center;justify-content:center;color:var(--muted);
+}
+.usage-log-icon svg{width:13px;height:13px}
+.usage-log-icon.is-direct{color:var(--muted)}
+.usage-log-query{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13.5px;font-weight:500;color:var(--ink);
+}
+.usage-log-count{flex:none;font-size:12px;color:var(--faint);white-space:nowrap}
+.usage-log-result{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+.usage-log-result .notice-skill,
+.usage-log-skill{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.usage-log-none{color:var(--faint)}
+.usage-log-toggle{
+  width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
+  justify-self:end;border:0;background:transparent;border-radius:6px;color:var(--muted);cursor:pointer;
+}
+.usage-log-toggle:hover{background:var(--line);color:var(--ink)}
+.usage-log-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.usage-log-toggle svg{width:16px;height:16px}
+.usage-log-toggle-placeholder{width:28px;height:28px}
+.usage-rank{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.usage-rank-short{display:none}
+.usage-invocations{display:flex;flex-direction:column;gap:4px;min-width:0}
+.usage-invocation{display:flex;align-items:center;gap:8px;min-width:0}
+.usage-invocation-at{font-family:var(--mono);font-size:12px;color:var(--faint);white-space:nowrap}
+.usage-log-row.is-multi{align-items:start;padding-top:9px;padding-bottom:9px}
+.usage-log-row.is-multi .usage-log-time{padding-top:4px}
+.usage-log-row.is-multi .usage-log-toggle{align-self:center}
+
+.stat-unit{font-size:12px;color:var(--muted)}
+#skillUsage .stats{margin-top:18px;margin-bottom:8px}
+.usage-scope{display:inline-flex;gap:2px;margin-top:18px;padding:3px;border-radius:999px;background:var(--wash)}
+.usage-scope button{
+  height:26px;padding:0 12px;border:0;border-radius:999px;background:transparent;
+  color:var(--muted);font:inherit;font-size:13px;cursor:pointer;
+}
+.usage-scope button:hover{color:var(--ink)}
+.usage-scope button.is-current{background:var(--surface);color:var(--ink)}
+.usage-scope button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.usage-scope + .stats{margin-top:16px}
+
+.usage-note{margin:14px 0 0;max-width:65ch;font-size:13px;line-height:1.6;color:var(--muted)}
+
+.usage-top{margin-top:12px}
+.usage-table.usage-top th.is-bar,
+.usage-table.usage-top td.is-bar{width:184px;text-align:left}
+.usage-bar-track{
+  display:inline-block;width:100%;max-width:160px;height:8px;border-radius:999px;
+  background:var(--wash);overflow:hidden;vertical-align:middle;
+}
+.usage-bar-fill{display:block;height:100%;border-radius:999px;background:var(--accent)}
+@media (max-width:720px){
+  .usage-top th.is-bar,
+  .usage-top td.is-bar{display:none}
+  .usage-invocation-at{display:none}
+}
+.usage-result-rank{
+  flex:none;padding:1px 7px;border-radius:999px;background:var(--wash);
+  font-size:11px;color:var(--muted);
+}
+
+.usage-detail{padding:12px 16px 14px;background:var(--wash);border-bottom:1px solid var(--line)}
+.usage-detail:last-child{border-bottom:0;border-radius:0 0 var(--radius) var(--radius)}
+.usage-detail-head{margin:0;font-size:12px;color:var(--muted)}
+.usage-detail-list{
+  list-style:none;margin:10px 0 0;padding:0;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 24px;
+  max-height:300px;overflow:auto;
+}
+.usage-detail-list li{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:13px;color:var(--muted)}
+.usage-detail-list li.is-invoked{color:var(--ink);font-weight:500}
+.usage-detail-invoked{font-size:11px;color:var(--faint);font-weight:400;white-space:nowrap}
+.usage-detail .usage-result-rank{background:var(--surface)}
+.usage-detail .notice-skill{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media (max-width:720px){
+  .usage-log-head{display:none}
+  .usage-log-row{
+    grid-template-columns:1fr auto;
+    grid-template-areas:"time toggle" "event event" "result result";
+    gap:4px 8px;padding:10px 14px;
+  }
+  .usage-log-time{grid-area:time}
+  .usage-log-toggle{grid-area:toggle}
+  .usage-log-toggle-placeholder{grid-area:toggle}
+  .usage-log-event{grid-area:event}
+  .usage-log-result{grid-area:result}
+  .usage-rank-full{display:none}
+  .usage-rank-short{display:inline}
+  .usage-detail{padding:10px 14px 12px}
+  .usage-detail-list{grid-template-columns:1fr;max-height:320px}
+}
+
+.usage-table{width:100%;border-collapse:collapse;font-size:14px}
+.usage-table th{
+  text-align:left;font-weight:500;color:var(--muted);font-size:13px;
+  padding:8px 12px;border-bottom:1px solid var(--line);
+}
+.usage-table td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--ink)}
+.usage-table tr:last-child td{border-bottom:0}
+.usage-table th:not(:first-child),
+.usage-table td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.usage-handle{font-family:var(--mono);font-size:13px}
+.usage-last{color:var(--faint);font-variant-numeric:tabular-nums}
+
+#page-usage .page-head{border-bottom:0;padding-bottom:0}
+.stats.is-three{grid-template-columns:repeat(3,1fr)}
+#skillUsageMine .chip{margin-left:8px}
+#skillUsage .stats{margin-top:18px;margin-bottom:8px}

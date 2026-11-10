@@ -157,7 +157,7 @@ func TestDroppedFilesAreNamedOnSuccess(t *testing.T) {
 	}
 }
 
-// ADR 0179: a text refusal reaches the person as the field and both numbers, not as raw JSON.
+// ADR 0181: a text refusal reaches the person as the field and both numbers, not as raw JSON.
 func TestASubmitRefusedForItsTextPrintsTheFieldSentence(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/me" {

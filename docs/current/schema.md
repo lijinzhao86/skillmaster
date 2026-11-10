@@ -53,6 +53,8 @@
 | `credential_share` | M16 |
 | `skill_copy` | M12 |
 | `legal_consent` | M1 |
+| `activity_event` | M17 |
+| `skill_collaborator_day` | M17 |
 | `my_skill_when_to_use` | M12 |
 | `my_skill_when_to_use_embedding` | M13 |
 
@@ -521,6 +523,32 @@
 - `terms_version` — TEXT NOT NULL
 - `privacy_version` — TEXT NOT NULL
 - `consented_at` — TEXT NOT NULL
+
+## `activity_event`
+
+- `id` — BIGINT GENERATED ALWAYS AS IDENTITY
+- `actor_user_id` — TEXT NOT NULL
+- `owner_user_id` — TEXT
+- `kind` — TEXT NOT NULL
+- `skill_id` — TEXT
+- `skill_address` — TEXT
+- `version_id` — TEXT
+- `version_label` — TEXT
+- `target` — TEXT
+- `detail` — TEXT NOT NULL DEFAULT '{}'
+- `search_event_id` — BIGINT
+- `search_rank` — INT
+- `at` — TEXT NOT NULL
+
+## `skill_collaborator_day`
+
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `actor_user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `owner_user_id` — TEXT
+- `day` — TEXT NOT NULL
+- `invokes` — INT NOT NULL DEFAULT 0
+- `versions` — INT NOT NULL DEFAULT 0
+- `last_at` — TEXT NOT NULL
 
 ## `my_skill_when_to_use`
 

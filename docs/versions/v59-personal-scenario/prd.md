@@ -145,8 +145,8 @@
 - **外部依赖**：embedding 服务（DashScope `text-embedding-v4`）。S2 需要把说明文本发给它；隐私政策 §五 的 DashScope 条目必须先补，否则 S2 不上线。
 - **内部前提**：
   - [ADR 0180](../../decisions/0180-personal-scenario-ranks-by-evidence-library-only.md)：证据分级 + 个人层只在库内生效 + v1 不训练。
-  - [ADR 0179](../../decisions/0179-text-limits-use-unicode-code-points.md)：文本上限统一按 Unicode 码点；`SKILL.md` 是作者元数据的唯一事实源；写入与发布同契约；未知字段保留、近似键告警。
-  - 「个人调用记录」（[`TODO.md`](../../current/TODO.md)「个人调用记录（只看自己）」）的 query 原文与事件管道；本版只补 `search_id` 关联与个人层命中标记，不重复落原文。两条分支要先约定事件字段。
+  - [ADR 0181](../../decisions/0181-text-limits-use-unicode-code-points.md)：文本上限统一按 Unicode 码点；`SKILL.md` 是作者元数据的唯一事实源；写入与发布同契约；未知字段保留、近似键告警。
+  - 「个人调用记录」的 query 原文与事件管道（v58 已合并）；P3 的 `search_id` 关联与个人层命中标记由后续 PR 补，不重复落原文。
   - `design/` 的信息页新增块与搜索结果命中原因；第 2 关出设计稿。
   - 阈值校准集（正例 + 近义负例），第 4 关定口径。
 - **排除了什么前置**：不需要先做公域 ANN 索引（个人层只在库内）；不需要先做同义词表（换说法交给语义）；不需要先有训练数据（规则版先落）。

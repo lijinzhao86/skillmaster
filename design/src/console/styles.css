@@ -1184,6 +1184,181 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .notice-acts{display:flex;align-items:center;gap:8px;flex:none}
 .notice-acts .button{height:30px;padding:0 12px;font-size:13px}
 
+/* ------------------------------------------------------- usage (v58) */
+
+/* 使用记录的两个列表与 skill 的「使用」页签共用这几条：地址与版本、搜索词、协作者表。
+   行本身仍走 `.notice`，所以图标槽、正文栏、时间栏的尺寸没有第二套。 */
+.usage-list .notice{align-items:center}
+.usage-version{font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:6px}
+.usage-intro{margin:16px 0 0;max-width:65ch;font-size:13px;line-height:1.6;color:var(--muted)}
+
+/* **明细是一张日志表。** 固定时间列、事件、结果、折角；最新在上。
+   时间用等宽、地址用等宽；搜索词是 13.5px 的正文，结果是 600 的地址——先扫时间与事件，
+   需要核对再往右看结果。 */
+.usage-log{margin:18px 0 0;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.usage-log-head,
+.usage-log-row{
+  display:grid;grid-template-columns:96px minmax(0,0.6fr) minmax(0,1.4fr) 32px;
+  align-items:center;gap:16px;padding:0 16px;
+}
+.usage-log-head{
+  height:34px;border-bottom:1px solid var(--line);background:var(--wash);
+  border-radius:var(--radius) var(--radius) 0 0;
+  font-size:12px;letter-spacing:0.04em;color:var(--faint);
+}
+.usage-log-row{
+  position:relative;min-height:44px;border-bottom:1px solid var(--line);
+  font-size:13px;
+}
+.usage-log-row:hover{background:var(--wash)}
+/* 搜索行整行可点：折角太小，没人会专门去找它。 */
+.usage-log-row.is-toggleable{cursor:pointer}
+.usage-log-row.is-open{background:var(--surface)}
+/* **最后一行 / 展开面板谁在最下面，谁收圆角**：展开时面板在行之后，行要有下边线。 */
+.usage-log-row:last-child{border-bottom:0;border-radius:0 0 var(--radius) var(--radius)}
+.usage-log-time{
+  font-family:var(--mono);font-size:12px;color:var(--faint);
+  font-variant-numeric:tabular-nums;white-space:nowrap;
+}
+.usage-log-event{display:flex;align-items:center;gap:8px;min-width:0}
+.usage-log-icon{
+  width:24px;height:24px;flex:none;border-radius:999px;background:var(--wash);
+  display:inline-flex;align-items:center;justify-content:center;color:var(--muted);
+}
+.usage-log-icon svg{width:13px;height:13px}
+.usage-log-icon.is-direct{color:var(--muted)}
+.usage-log-query{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:13.5px;font-weight:500;color:var(--ink);
+}
+.usage-log-count{flex:none;font-size:12px;color:var(--faint);white-space:nowrap}
+.usage-log-result{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+.usage-log-result .notice-skill,
+.usage-log-skill{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.usage-log-none{color:var(--faint)}
+.usage-log-toggle{
+  width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;
+  justify-self:end;border:0;background:transparent;border-radius:6px;color:var(--muted);cursor:pointer;
+}
+.usage-log-toggle:hover{background:var(--line);color:var(--ink)}
+.usage-log-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.usage-log-toggle svg{width:16px;height:16px}
+.usage-log-toggle-placeholder{width:28px;height:28px}
+.usage-rank{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.usage-rank-short{display:none}
+/* **一次搜索调了几条就列几行**（2026-11-10 用户定）：藏进悬停的「+2」没人会注意。
+   多行时整行改成顶部对齐；折角仍居中，因为它管的是整行的下拉。 */
+.usage-invocations{display:flex;flex-direction:column;gap:4px;min-width:0}
+.usage-invocation{display:flex;align-items:center;gap:8px;min-width:0}
+.usage-invocation-at{font-family:var(--mono);font-size:12px;color:var(--faint);white-space:nowrap}
+.usage-log-row.is-multi{align-items:start;padding-top:9px;padding-bottom:9px}
+.usage-log-row.is-multi .usage-log-time{padding-top:4px}
+.usage-log-row.is-multi .usage-log-toggle{align-self:center}
+
+/* **数卡数字下面的小字是注解，不是入口**（使用记录的「最近使用」用它放时间）。`stat-go` 是给
+   可点的卡留的主色，用在这里会读成链接。单位本身不进这一行：标签写「调用次数」「入库人数」，
+   数字下面再来一个「次」「人」是同一件事说两遍。 */
+.stat-unit{font-size:12px;color:var(--muted)}
+/* **使用页签的第一块要离开页签那条线。** 其它页签的第一块都自带 18px（`.file-table`、
+   `.settings`），数卡没有——不留这一档，卡片会顶在分割线上，切换页签时整页还会跳一下。 */
+#skillUsage .stats{margin-top:18px;margin-bottom:8px}
+/* **所有者「使用」页签的两个视图**（2026-11-10 用户定）：一枚分段开关。壳是 `--wash`、
+   当前项是白底——与数卡同一个「壳 + 白底」的配方，读起来是这一页的一部分，不是又一行页签。 */
+.usage-scope{display:inline-flex;gap:2px;margin-top:18px;padding:3px;border-radius:999px;background:var(--wash)}
+.usage-scope button{
+  height:26px;padding:0 12px;border:0;border-radius:999px;background:transparent;
+  color:var(--muted);font:inherit;font-size:13px;cursor:pointer;
+}
+.usage-scope button:hover{color:var(--ink)}
+.usage-scope button.is-current{background:var(--surface);color:var(--ink)}
+.usage-scope button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.usage-scope + .stats{margin-top:16px}
+
+/* **统计页的句子**：搜索效果的读法、列表的边界——与明细的 `usage-intro` 同一档。 */
+.usage-note{margin:14px 0 0;max-width:65ch;font-size:13px;line-height:1.6;color:var(--muted)}
+
+/* **按调用次数**：名字、次数、一条按最大值取的横条、最近使用。只有一种量，所以只有一种颜色；
+   条是注解，数在左边——读表先读数，条负责一眼看出分布。 */
+.usage-top{margin-top:12px}
+.usage-table.usage-top th.is-bar,
+.usage-table.usage-top td.is-bar{width:184px;text-align:left}
+.usage-bar-track{
+  display:inline-block;width:100%;max-width:160px;height:8px;border-radius:999px;
+  background:var(--wash);overflow:hidden;vertical-align:middle;
+}
+.usage-bar-fill{display:block;height:100%;border-radius:999px;background:var(--accent)}
+/* 窄屏收掉横条：名字与次数还在，占比这一列让位给名字。 */
+@media (max-width:720px){
+  .usage-top th.is-bar,
+  .usage-top td.is-bar{display:none}
+  /* 窄屏下每次调用的时刻让位给名字与名次——时间戳在 title 里。 */
+  .usage-invocation-at{display:none}
+}
+.usage-result-rank{
+  flex:none;padding:1px 7px;border-radius:999px;background:var(--wash);
+  font-size:11px;color:var(--muted);
+}
+
+/* **候选是下拉，不是推开表格。** 浮在行下面，按当时的排名列出；命中的那条高亮。
+   只开一条（地址里的 `open`），点折角或点别处收起。 */
+/* **展开面板与表格同宽**（2026-11-10 用户定）：行内展开、把后面的行往下推，不浮在别的行上，
+   左右也正好接住表格的边。底色用 `--wash`，与白底的日志行分开——它是这一行脚下的一段附录。 */
+.usage-detail{padding:12px 16px 14px;background:var(--wash);border-bottom:1px solid var(--line)}
+.usage-detail:last-child{border-bottom:0;border-radius:0 0 var(--radius) var(--radius)}
+.usage-detail-head{margin:0;font-size:12px;color:var(--muted)}
+.usage-detail-list{
+  list-style:none;margin:10px 0 0;padding:0;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 24px;
+  max-height:300px;overflow:auto;
+}
+.usage-detail-list li{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:13px;color:var(--muted)}
+.usage-detail-list li.is-invoked{color:var(--ink);font-weight:500}
+/* 被调用的那几条：加粗之外再写一句「调用了」——50 条里靠字重猜，不够明白。 */
+.usage-detail-invoked{font-size:11px;color:var(--faint);font-weight:400;white-space:nowrap}
+.usage-detail .usage-result-rank{background:var(--surface)}
+.usage-detail .notice-skill{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 窄屏：表头收掉，一行变三行——时间与折角、事件、结果；不把地址切成两截。 */
+@media (max-width:720px){
+  .usage-log-head{display:none}
+  .usage-log-row{
+    grid-template-columns:1fr auto;
+    grid-template-areas:"time toggle" "event event" "result result";
+    gap:4px 8px;padding:10px 14px;
+  }
+  .usage-log-time{grid-area:time}
+  .usage-log-toggle{grid-area:toggle}
+  .usage-log-toggle-placeholder{grid-area:toggle}
+  .usage-log-event{grid-area:event}
+  .usage-log-result{grid-area:result}
+  .usage-rank-full{display:none}
+  .usage-rank-short{display:inline}
+  /* 窄屏：展开面板一列，与日志行同宽。 */
+  .usage-detail{padding:10px 14px 12px}
+  .usage-detail-list{grid-template-columns:1fr;max-height:320px}
+}
+
+/* 协作者统计是「谁 × 三种动作 × 最后活跃」，读的是列，不是句子——所以用表，不用清单行。
+   数字列右对齐、等宽，扫一眼能比较。 */
+.usage-table{width:100%;border-collapse:collapse;font-size:14px}
+.usage-table th{
+  text-align:left;font-weight:500;color:var(--muted);font-size:13px;
+  padding:8px 12px;border-bottom:1px solid var(--line);
+}
+.usage-table td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--ink)}
+.usage-table tr:last-child td{border-bottom:0}
+.usage-table th:not(:first-child),
+.usage-table td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.usage-handle{font-family:var(--mono);font-size:13px}
+.usage-last{color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* 窄屏：时间不跟地址抢同一行。地址是这一行的主键，被压成「dev/pdf- / tools」两截就分不清
+   两个相近的 skill；时间落到下一行，缩进与图标对齐（28 + 12 = 40，和通知的动作同一档）。 */
+@media (max-width:720px){
+  .usage-list .notice{flex-wrap:wrap}
+  .usage-list .notice-meta{width:100%;padding-left:40px;margin-top:0}
+}
+
 @media (max-width:720px){
   /* 窄屏：动作整行落到正文下面，与图标对齐的缩进是 28 + 12。 */
   .notice{flex-wrap:wrap}
@@ -2248,6 +2423,10 @@ select.confirm-input.is-select{
    file table. One shape, three places — which is the other half of why it reads as a system. */
 
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+/* 三个数的一行（「使用」页签里非所有者的读法）：三张学卡平分，不留第四格的空位。 */
+.stats.is-three{grid-template-columns:repeat(3,1fr)}
+/* 「使用」页签的按版本表：版本号后面跟一枚状态章，与版本列表读同一个事实。 */
+#skillUsageMine .chip{margin-left:8px;font-family:var(--sans)}
 .stat{
   display:flex;flex-direction:column;
   padding:4px;
@@ -4388,6 +4567,8 @@ a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offs
 #page-skills .page-head{border-bottom:0;padding-bottom:0}
 /* **标签页也长出了页签**：页头与页签之间再有一条线，会看起来像两个页头——与「我的 skill」同一条处理。 */
 #page-my-tags .page-head{border-bottom:0;padding-bottom:0}
+/* 使用记录的页签与上面两页同一处理：页头下面紧跟着页签，再画一条线就成了两个页头。 */
+#page-usage .page-head{border-bottom:0;padding-bottom:0}
 .list-tabs{margin-top:2px}
 
 .demo-bar{

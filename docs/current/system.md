@@ -15,11 +15,12 @@
 | M7 | version | `.version` | `skill_version`、`version_file` | `Manifest`、`ManifestEntry`、`SkillSnapshot`、`SkillVersionService`、`VersionPin`、`VersionState`、`VersionSummary`、`VersionProjectionSink` |
 | M8 | search | `.search` | — | — |
 | M9 | distribution | `.distribution` | — | — |
-| M10 | audit | `.audit` | `audit_event` | `AuditEvent`、`AuditLog` |
+| M10 | audit | `.audit` | `audit_event` | `AuditCounts`、`AuditEvent`、`AuditLog` |
 | M13 | retrieval | `.retrieval` | `skill_embedding`、`my_skill_when_to_use_embedding` | `EmbeddingTextSource` |
 | M12 | skill | `.skill` | `skill`、`skill_grant`、`skill_access_request`、`skill_invitation`、`skill_library_join`、`skill_public_tag`、`my_tag_definition`、`my_tag_attachment`、`my_skill_when_to_use`、`skill_category`、`skill_source`、`skill_source_snapshot`、`skill_version_license`、`skill_copy` | `Access`、`Caller`、`DraftProjection`、`GrantRole`、`NotPermittedException`、`SkillCatalogService`、`SkillMetadata`、`SkillMetadataService`、`VersionProjection` |
 | M14 | notification | `.notification` | `notification`、`notification_recipient` | `Notification`、`NotificationDraft`、`NotificationKinds`、`NotificationOutcome`、`NotificationPage`、`NotificationQuery`、`NotificationService`、`NotificationStateException`、`NotificationNotFoundException` |
 | M15 | metrics | `.metrics` | `skill_usage_day`、`skill_usage_total` | `SkillLoad`、`UsageQuery`、`UsageRecorder`、`UsageScope`、`UsageSnapshot` |
 | M16 | secret | `.secret` | `service_credential`、`credential_binding`、`credential_use`、`credential_share` | `SecretService`、`CredentialRef`、`CredentialBinding`、`CredentialLease`、`CredentialValue`、`IncomingBinding`、`SecretSettings`、`SecretNotFoundException`、`CredentialBindingNotFoundException`、`BindingConflictException`、`SecretValueTooLargeException`、`QuotaExceededException`、`NotShareableException`、`ShareNotFoundException`、`CredentialVaultUnavailableException` |
+| M17 | activity | `.activity` | `activity_event`、`skill_collaborator_day` | `ActivityEvent`、`ActivityKinds`、`ActivityRecorder`、`ArchiveSettings`、`InvokeActivity`、`SearchActivity`、`SearchHit`、`UsageHistory` |
 
 包结构、依赖规则与它们的强制强度见 [`rules.md`](rules.md)；每个模块为什么这样切见 [`modules/`](modules/)。

@@ -14,7 +14,7 @@ import {
 } from './support'
 
 /**
- * One skill's four sections, and the writes.
+ * One skill's sections, and the writes.
  *
  * **Ported from the Vue file's `one skill` half.** The list half is `skills-list.test.tsx`; this is
  * what `SkillPage` does — the sections a rung can reach, the information it draws, the files, the
@@ -218,12 +218,12 @@ async function showSkill(
 }
 
 describe('one skill: the sections a rung can reach', () => {
-  it('gives the owner all four sections', async () => {
+  it('gives the owner every section', async () => {
     const { container } = await showSkill(SKILL)
 
     expect(
       [...container.querySelectorAll('.skill-tab .skill-tab-label')].map((tab) => text(tab)),
-    ).toEqual(['信息', '文件', '版本', '设置'])
+    ).toEqual(['信息', '文件', '版本', '使用', '设置'])
   })
 
   it('draws no 设置 for 浏览, and says the skill is private without linking to what they cannot set', async () => {
@@ -231,7 +231,7 @@ describe('one skill: the sections a rung can reach', () => {
 
     expect(
       [...container.querySelectorAll('.skill-tab .skill-tab-label')].map((tab) => text(tab)),
-    ).toEqual(['信息', '文件', '版本'])
+    ).toEqual(['信息', '文件', '版本', '使用'])
     // The badge leads to the page that owns the fact, and that page is 管理's — so below it the
     // whole mark is absent, not greyed (design: 够不到的东西不画).
     expect(container.querySelector('.skill-name-row .chip')).toBeNull()
@@ -242,7 +242,7 @@ describe('one skill: the sections a rung can reach', () => {
 
     expect(
       [...container.querySelectorAll('.skill-tab .skill-tab-label')].map((tab) => text(tab)),
-    ).toEqual(['信息', '版本'])
+    ).toEqual(['信息', '版本', '使用'])
   })
 })
 

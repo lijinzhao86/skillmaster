@@ -193,7 +193,7 @@ const CODE_MESSAGES: Record<string, string> = {
 const IMPORT_CEILING_BYTES = 128 * 1024 * 1024
 
 /**
- * ADR 0179's skill-text refusal, written from the field and the code-point numbers the server
+ * ADR 0181's skill-text refusal, written from the field and the code-point numbers the server
  * sends. It exists apart from {@link sizeSentence} because the unit is different: a description is
  * 1024 code points, not a byte ceiling, and a tag's description shares the `description` field name
  * with a 200-code-point ceiling.

@@ -204,7 +204,7 @@ export function importFailure(
   // top-level folder mismatch or a duplicate path is about — a sentence that is wrong is worse than
   // one that is untranslated, and the design addendum will replace this branch's output.
   if (result.code === 'invalid_upload') {
-    // ADR 0179's text refusal is a detail, not a code: without this an over-limit description
+    // ADR 0181's text refusal is a detail, not a code: without this an over-limit description
     // reaches the import sheet as the server's English sentence.
     for (const detail of result.details) {
       const text = textSentence(detail)

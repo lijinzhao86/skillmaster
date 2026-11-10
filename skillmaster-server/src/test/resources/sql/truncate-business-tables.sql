@@ -42,6 +42,10 @@
 -- vocabulary, and because skill.category_key points at it, TRUNCATE ... CASCADE would take `skill`
 -- with it. The category tests change a state or a skill's assignment, never the vocabulary.
 TRUNCATE TABLE
+    -- v58: usage history. The detail log has no foreign keys; the daily rollup points at both
+    -- skill and app_user, so it must be emptied before either is considered.
+    activity_event,
+    skill_collaborator_day,
     blob_content,
     version_file,
     skill_version,

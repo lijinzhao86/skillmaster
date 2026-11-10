@@ -402,7 +402,7 @@ func (c Client) MyWhenToUse(ctx context.Context, address string) (string, error)
 }
 
 // SetMyWhenToUse writes or replaces that sentence. The server normalizes whitespace and counts
-// Unicode code points; an over-limit value is refused, never truncated (v59, ADR 0179).
+// Unicode code points; an over-limit value is refused, never truncated (v59, ADR 0181).
 func (c Client) SetMyWhenToUse(ctx context.Context, address, whenToUse string) (Change, error) {
 	path, err := SkillPath(address)
 	if err != nil {

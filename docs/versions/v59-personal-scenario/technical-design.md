@@ -128,7 +128,7 @@ CREATE TABLE my_skill_when_to_use_embedding (
 
 ## 字段上限与契约
 
-**三个上限一次收口**（详见 [ADR 0179](../../decisions/0179-text-limits-use-unicode-code-points.md)）：
+**三个上限一次收口**（详见 [ADR 0181](../../decisions/0181-text-limits-use-unicode-code-points.md)）：
 
 | 字段 | 位置 | 必填 | 上限 | 空值 |
 |---|---|---|---|---|
@@ -151,7 +151,7 @@ CREATE TABLE my_skill_when_to_use_embedding (
 | **P0** | 表 + CRUD 接口 + CLI `skill my-when-to-use` + 控制台信息页显示 / 编辑 / 清除；**同时收口三个字段上限与契约（写入 / 发布 / 同步）**；不参与检索 | PRD 验收 #1–#4、#9、#10、#15–#18 |
 | **P1** | S1 精确：最长公共子串 ≥ 3 汉字 / ≥ 5 拉丁字符；个人层定级在 S0 之后、S3 之前 | PRD 验收 #5 |
 | **P2** | S2 语义：说明按句切、向量、阈值 + margin；隐私政策补 DashScope 条目 | PRD 验收 #6、#12 |
-| **P3** | 事件：`search_id` / adopt / exclude / note；复用「个人调用记录」管道；离线评测集与指标 | PRD 验收 #7、#8、#11；§指标 |
+| **P3** | 事件：`search_id` / adopt / exclude / note；复用 v58 的「个人调用记录」管道；离线评测集与指标 | PRD 验收 #7、#8、#11；§指标（本 PR 未执行） |
 
 **每期明确不做**：P0 不做检索；P1 不做语义；P2 不做训练；P3 不训练，只记录。
 
@@ -163,7 +163,7 @@ CREATE TABLE my_skill_when_to_use_embedding (
 | Q2 | S2 的阈值与 margin 取多少？ | 高阈值 + `top1 - top2 ≥ margin`；具体值不拍 | 20–50 条人工标注（正例 + 近义负例）扫 precision/recall |
 | Q3 | 说明向量在写入时算还是查询时算？ | 写入时算、按句存；查询只做点积 | 写入时算一次，避免查询时按条调 provider |
 | Q4 | scope=all 怎么合并库内与公域？ | 库内带个人层，公域不带；两路用 RRF | 用同一评测集看合并后的 Top-1 是否退步 |
-| Q5 | 事件管道复用「个人调用记录」还是本版自建？ | 复用「个人调用记录」的 query 原文与 invoke 记录；本版只补 `search_id` 与个人命中标记 | 与「个人调用记录」分支约定字段；先看它的表结构 |
+| Q5 | 事件管道复用「个人调用记录」还是本版自建？ | 复用 v58「个人调用记录」的 query 原文与 invoke 记录；本 PR 不建第二套 | 后续单独实现时与 v58 的表结构对齐 |
 | Q6 | 排序游标的 `orderingId` 要不要改？ | 库内语义路径无游标；关键词路径若加个人分，`orderingId` 必须带上权重 | 实现时按 `RelevanceWeights.orderingId` 的现有规则处理 |
 | Q7 | 界面最终叫「我的适用场景」还是别的？ | 「我的适用场景」，字段名复用 `when_to_use`；不新造 `scenario`。CLI 用 `my-when-to-use`，与 `skills my-tags` 同一命名法 | 第 2 关已定；`voice-spec.md` 与 CLI help 同步 |
 | Q8 | 离开库后，用户怎么找到并清理看不见的说明？ | 离开不删；CLI `my-when-to-use clear` 不要求在库，按地址可清；控制台暂时只能在库里看到 | 先看 P0 的真实使用；若孤儿多，再加「我的说明」列表页 |

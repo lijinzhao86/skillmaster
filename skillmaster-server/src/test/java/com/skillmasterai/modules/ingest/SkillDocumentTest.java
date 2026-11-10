@@ -7,7 +7,7 @@ import com.skillmasterai.common.ApiError;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
-/** The author-text contract at the write door (ADR 0179, v59 T17). */
+/** The author-text contract at the write door (ADR 0181, v59 T17). */
 class SkillDocumentTest {
 
     @Test

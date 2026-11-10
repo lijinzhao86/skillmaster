@@ -141,13 +141,27 @@ public class ReadAuthoredSkillUseCase {
      * reads, and nothing is buffered to know the length — the manifest already says it.
      */
     @Transactional(readOnly = true)
-    public Optional<SkillDistributionService.StreamLookup> streamFile(String namespaceSlug,
-            String name, VersionPin pin, String relpath, AuthenticatedSubject subject) {
+    public Optional<StreamedFile> streamFile(String namespaceSlug, String name, VersionPin pin,
+            String relpath, AuthenticatedSubject subject) {
         return namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> metadata.accessFor(namespace.id(), name,
                                 Callers.of(namespaces, subject))
                         .flatMap(access -> distribution.authorStreamFileOf(namespace, access, pin,
-                                relpath)));
+                                        relpath)
+                                .map(resolved -> new StreamedFile(resolved.lookup(),
+                                        resolved.lookup() instanceof SkillDistributionService
+                                                .StreamLookup.Found
+                                                ? new SkillConsumption(access.skillId(),
+                                                        namespace.ownerUserId(),
+                                                        resolved.snapshot().id(),
+                                                        resolved.snapshot().version(),
+                                                        namespace.slug() + "/" + access.name())
+                                                : null))));
+    }
+
+    /** A resolved stream and, when the file exists, the facts M17 records. */
+    public record StreamedFile(SkillDistributionService.StreamLookup lookup,
+            SkillConsumption consumption) {
     }
 
     /**

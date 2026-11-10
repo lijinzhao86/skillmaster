@@ -1,5 +1,8 @@
 package com.skillmasterai.api;
 
+import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.activity.ActivityEvent;
+import com.skillmasterai.modules.activity.ActivityKinds;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.distribution.SkillDistributionService;
 import com.skillmasterai.modules.skill.SkillRequestException;
@@ -8,7 +11,9 @@ import com.skillmasterai.usecase.ArchiveSkillVersionUseCase;
 import com.skillmasterai.usecase.DiffAuthoredSkillUseCase;
 import com.skillmasterai.usecase.ListAuthoredSkillsUseCase;
 import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
+import com.skillmasterai.usecase.SkillConsumption;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -56,6 +61,7 @@ class WebSkillController {
     private final ObjectMapper objectMapper;
     private final com.skillmasterai.modules.skill.SourceService sources;
     private final com.skillmasterai.modules.metrics.UsageQuery usage;
+    private final ActivityLog activity;
 
     WebSkillController(ListAuthoredSkillsUseCase listAuthored,
             ReadAuthoredSkillUseCase readAuthored,
@@ -63,7 +69,8 @@ class WebSkillController {
             ArchiveSkillVersionUseCase archiveVersion,
             ObjectMapper objectMapper,
             com.skillmasterai.modules.skill.SourceService sources,
-            com.skillmasterai.modules.metrics.UsageQuery usage) {
+            com.skillmasterai.modules.metrics.UsageQuery usage,
+            ActivityLog activity) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
         this.diffAuthored = diffAuthored;
@@ -71,6 +78,7 @@ class WebSkillController {
         this.objectMapper = objectMapper;
         this.sources = sources;
         this.usage = usage;
+        this.activity = activity;
     }
 
     /**
@@ -120,8 +128,17 @@ class WebSkillController {
                         ? readAuthored.detail(namespace, address.name(), address.pin(), subject)
                         : Optional.<com.skillmasterai.usecase.model.AuthoredSkill>empty();
         return authored
-                .map(a -> ResponseEntity.ok(
-                        AuthoredSkillResponse.of(a, objectMapper, sources, usage)))
+                .map(a -> {
+                    String kind = address.pin() instanceof VersionPin.Latest
+                            ? ActivityKinds.SKILL_VIEW : ActivityKinds.VERSION_VIEW;
+                    activity.record(new ActivityEvent(subject.userId(), null, kind, a.skillId(),
+                            a.namespaceSlug() + "/" + a.name(),
+                            a.selected() == null ? null : a.selected().id(),
+                            a.selected() == null ? null : a.selected().version(), null,
+                            Map.of(), Timestamps.now()));
+                    return ResponseEntity.ok(
+                            AuthoredSkillResponse.of(a, objectMapper, sources, usage));
+                })
                 .orElseThrow(() -> base != null && !"none".equals(base)
                         ? new com.skillmasterai.common.RequestException(
                                 com.skillmasterai.common.ErrorCode.INVALID_REQUEST,
@@ -136,11 +153,12 @@ class WebSkillController {
     ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody> body(
             @PathVariable String namespace, @PathVariable String name, Authentication caller) {
         SkillAddress address = addressOf(name);
-        SkillDistributionService.StreamLookup lookup = readAuthored.streamFile(namespace,
+        ReadAuthoredSkillUseCase.StreamedFile streamed = readAuthored.streamFile(namespace,
                         address.name(), address.pin(), SkillDistributionService.BODY_RELPATH,
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
-        return switch (lookup) {
+        recordFileRead(streamed.consumption(), SkillDistributionService.BODY_RELPATH, caller);
+        return switch (streamed.lookup()) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams
                     .streamBody(found.file());
             case SkillDistributionService.StreamLookup.NotFoundInManifest missing -> throw
@@ -165,16 +183,34 @@ class WebSkillController {
             file(@PathVariable String namespace, @PathVariable String name,
                     @PathVariable String relpath, Authentication caller) {
         SkillAddress address = addressOf(name);
-        SkillDistributionService.StreamLookup lookup = readAuthored
-                .streamFile(namespace, address.name(), address.pin(),
-                        CapturedPath.relativeToSkillRoot(relpath),
+        String path = CapturedPath.relativeToSkillRoot(relpath);
+        ReadAuthoredSkillUseCase.StreamedFile streamed = readAuthored
+                .streamFile(namespace, address.name(), address.pin(), path,
                         AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
-        return switch (lookup) {
+        recordFileRead(streamed.consumption(), path, caller);
+        return switch (streamed.lookup()) {
             case SkillDistributionService.StreamLookup.Found found -> FileStreams.stream(found.file());
             case SkillDistributionService.StreamLookup.NotFoundInManifest missing ->
                     throw new FileNotInManifestException(missing.relpath());
         };
+    }
+
+    /**
+     * A content preview, not an invocation (v58).
+     *
+     * <p>The browser opening {@code SKILL.md} is somebody reading the skill, not running it. Only
+     * the API's {@code /body} route counts as an invoke; this plane records a read of the file.
+     */
+    private void recordFileRead(SkillConsumption consumed, String path, Authentication caller) {
+        if (consumed == null) {
+            return;
+        }
+        String cut = ActivityTargets.cut(path);
+        activity.record(new ActivityEvent(AuthenticatedSubject.ofSession(caller.getName()).userId(),
+                consumed.ownerUserId(), ActivityKinds.FILE_READ, consumed.skillId(),
+                consumed.address(), consumed.versionId(), consumed.versionLabel(), cut,
+                Map.of("path", cut), Timestamps.now()));
     }
 
     /**
@@ -189,10 +225,15 @@ class WebSkillController {
             archive(@PathVariable String namespace, @PathVariable String name,
                     Authentication caller) {
         SkillAddress address = addressOf(name);
-        return ArchiveStreams.stream(archiveVersion
+        var artifact = archiveVersion
                 .archive(namespace, address.name(), address.pin(),
                         AuthenticatedSubject.ofSession(caller.getName()))
-                .orElseThrow(SkillNotFoundException::new));
+                .orElseThrow(SkillNotFoundException::new);
+        activity.record(new ActivityEvent(
+                AuthenticatedSubject.ofSession(caller.getName()).userId(), null,
+                ActivityKinds.DOWNLOAD, null, namespace + "/" + address.name(), null, null, null,
+                Map.of("pinned", !(address.pin() instanceof VersionPin.Latest)), Timestamps.now()));
+        return ArchiveStreams.stream(artifact);
     }
 
     /**

@@ -183,7 +183,7 @@ type IssueDetail struct {
 	// which is every detail that is not about a size.
 	ActualBytes int64
 	LimitBytes  int64
-	// ADR 0179's text limits, in code points; zero means the server did not say.
+	// ADR 0181's text limits, in code points; zero means the server did not say.
 	ActualCodePoints int64
 	LimitCodePoints  int64
 }

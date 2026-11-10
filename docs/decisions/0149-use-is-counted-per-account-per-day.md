@@ -4,7 +4,7 @@
 - **日期**：2026-11-05
 - **所属版本**：[`v49-public-signals`](../versions/v49-public-signals/README.md)
 - **依赖**：[ADR 0082](0082-public-and-private-with-my-library.md)（库是引用，加入数读现有库表）、[ADR 0048](0048-visibility-hands-out-a-rung.md)（公开把一档交给所有人）
-- **修订**：决定 1 的主键由 [ADR 0153](0153-usage-metrics-is-its-own-module.md) 加 `scope`；决定 4 的「达到阈值后给精确值」由 0153 收窄为任何情况下都只给分桶；`lastUsed` 取保留期内（90 天）的最后一次记录，不是页面查询窗口的 30 天（见 v49 TD §使用信号）
+- **修订**：决定 1 的主键由 [ADR 0153](0153-usage-metrics-is-its-own-module.md) 加 `scope`；决定 4 的「达到阈值后给精确值」由 0153 收窄为任何情况下都只给分桶；`lastUsed` 取保留期内（90 天）的最后一次记录，不是页面查询窗口的 30 天（见 v49 TD §使用信号）；后果中「没有『谁用过』的接口」由 [ADR 0179](0179-personal-usage-is-visible-only-to-its-owner.md) 切成「别人看不到你的个人行为」与「你自己看得到」，公开面仍只给分桶
 
 ## 背景
 
