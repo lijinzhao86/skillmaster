@@ -25,7 +25,7 @@ public class RetrievalConfiguration {
     EmbeddingSettings embeddingSettings(RetrievalProperties properties) {
         return new EmbeddingSettings(properties.enabled(), properties.apiKey(), properties.model(),
                 properties.dimensions(), properties.timeout(), properties.threshold(),
-                properties.overFetch());
+                properties.overFetch(), properties.personalThreshold(), properties.personalMargin());
     }
 
     @Bean
@@ -53,5 +53,11 @@ public class RetrievalConfiguration {
     EmbeddingIndex embeddingIndex(EmbeddingRepository repository, EmbeddingTextSource source,
             ObjectProvider<Embedder> embedder) {
         return new EmbeddingIndex(repository, source, embedder.getIfAvailable());
+    }
+
+    @Bean
+    PersonalEmbeddingIndex personalEmbeddingIndex(EmbeddingRepository repository,
+            ObjectProvider<Embedder> embedder) {
+        return new PersonalEmbeddingIndex(repository, embedder.getIfAvailable());
     }
 }

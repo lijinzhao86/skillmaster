@@ -481,6 +481,11 @@ func writeBaselineRefusal(ctx context.Context, err error, address string) error 
 func writeRefusal(err error, address string) error {
 	var server *api.ServerError
 	if errors.As(err, &server) {
+		if server.Code == "invalid_upload" || server.Code == "invalid_request" {
+			if sentence, ok := textRefusal(server); ok {
+				return errors.New(sentence)
+			}
+		}
 		switch server.Code {
 		case "digest_mismatch":
 			return fmt.Errorf("这一版在读过之后被改动过；重新读一遍再改。%w", err)

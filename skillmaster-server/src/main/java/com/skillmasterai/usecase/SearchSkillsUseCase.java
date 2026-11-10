@@ -110,6 +110,7 @@ public class SearchSkillsUseCase {
         Map<String, String> slugs = namespaces.slugsOf(
                 page.rows().stream().map(com.skillmasterai.modules.skill.SkillCatalogService.CatalogRow::namespaceId)
                         .distinct().toList());
-        return new SkillListing(page, slugs, cards.assemble(page.rows(), subject.userId()));
+        return new SkillListing(page, slugs,
+                cards.assemble(page.rows(), subject.userId(), !publicOnly));
     }
 }

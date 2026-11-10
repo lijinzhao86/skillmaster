@@ -29,6 +29,7 @@ var dispatchFunctions = map[string]string{
 	"myTagsCmd":         "skills my-tags",
 	"tagVerb":           "skill tag",
 	"categoryVerb":      "skill category",
+	"myWhenToUseVerb":   "skill my-when-to-use",
 	"promptVerb":        "prompt",
 }
 

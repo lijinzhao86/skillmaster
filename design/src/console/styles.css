@@ -1524,6 +1524,22 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   line-height:1.75;
   color:var(--ink);
 }
+/* **我的适用场景：标题行右侧一颗编辑键，下面是正文或就地编辑的 textarea。**
+   编辑键与标签那颗「+」同一档（24 的框、15 的图标、hover 用 accent-tint），
+   动作是「编辑」所以用铅笔；空态用「+」。作者那句仍在上面、仍是 16px 正文，不降档。 */
+.info-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.info-label-row .info-label{margin-bottom:0}
+.info-edit{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
+  padding:0;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--muted);cursor:pointer}
+.info-edit svg{width:15px;height:15px}
+.info-edit:hover{background:var(--accent-tint);color:var(--accent)}
+.info-edit:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.info-when-input{display:block;box-sizing:border-box;width:100%;min-height:96px;padding:10px 12px;
+  border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);
+  color:var(--ink);font:inherit;font-size:16px;line-height:1.75;resize:vertical}
+.info-when-input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.info-when-actions{display:flex;align-items:center;gap:12px;margin-top:10px}
+.info-when-count{margin-right:auto;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
 /* **事实区：正文卡页脚的三条事实**（v49）。来源、许可与使用是「核对」而不是「阅读」，
    所以它们比正文小一档，一行一件事：标签在左、值在右。
    放在正文卡里而不是右栏：许可带一句可做/要做什么，URL 在 200px 的右栏会折成六行——

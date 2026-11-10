@@ -3,13 +3,16 @@ import { fireEvent, render } from '@testing-library/react'
 import SkillPage from '../src/pages/SkillPage'
 import {
   clearCookies,
+  errorBody,
   flush,
   json,
   setCookie,
   stubFetch,
   stubLocation,
+  stubMyWhenToUse,
   type RecordedRequest,
 } from './support'
+import { EMPTY_TAGS, settle, showSkill, text } from './skill-page-harness'
 
 /**
  * One skill's sections, and the writes.
@@ -117,6 +120,8 @@ let location = stubLocation('/')
 
 beforeEach(() => {
   location = stubLocation('/')
+  // v59's read is answered by the harness; a test about the block sets its own value.
+  stubMyWhenToUse({ when_to_use: null })
   setCookie('XSRF-TOKEN', 'token-one')
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
 })
@@ -127,91 +132,6 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const text = (element: Element | null | undefined): string => (element?.textContent ?? '').trim()
-
-/**
- * Lets a chain of reads settle.
- *
- * Vue's `flush()` was one microtask turn, which was enough for a ref update to reach the DOM. React
- * commits an effect's state change on its own scheduler turn, and this page reads in chains (the
- * detail, then a child component's own list, then the count); one `setTimeout(0)` only covers the
- * first of them. Several turns, each `flush()`'s own, keep the same intent without asserting on how
- * many turns a render takes.
- */
-async function settle(): Promise<void> {
-  for (let turn = 0; turn < 6; turn += 1) {
-    await flush()
-  }
-}
-
-
-/**
- * Renders the skill page with the reads it makes on the way in already answered: the detail, then
- * the file when the address names one, then the comparison when it names one.
- */
-/**
- * The three word groups the information page reads (v14). An empty, read-only answer is enough for
- * every test that is about the rest of the page; the tag tests below supply their own.
- */
-export const EMPTY_TAGS = {
-  category: null,
-  public_tags: [],
-  my_tags: { readable: false, reason: 'not_in_library', tags: [] },
-  /* An entry the author owns: active, and neither joinable nor removable. */
-  library: { source: 'created', active: true, joinable: false, can_remove: false },
-}
-
-/** `GET /web/categories`: the information page's category menu reads it. */
-const CATEGORY_VOCABULARY = {
-  categories: [
-    { key: 'doc', name: '文档与演示', state: 'enabled', public_total: 4 },
-    { key: 'data', name: '数据与分析', state: 'enabled', public_total: 7 },
-    { key: 'ops', name: '运维与云', state: 'stopped', public_total: 2 },
-  ],
-}
-
-async function showSkill(
-  skill: Record<string, unknown>,
-  options: {
-    query?: string
-    relpath?: string
-    file?: () => Response
-    diff?: () => Response
-    version?: string
-    tags?: () => Response
-  } = {},
-): Promise<{ container: HTMLElement; requests: RecordedRequest[] }> {
-  stubLocation('/skills/demo-user/pdf-tools', options.query ?? '')
-  const query = options.query ?? ''
-  const responders: Array<() => Response> = [() => json(200, skill)]
-  /* A comparison is read by a child panel, whose effect runs before the page's own; the file and
-     the word groups are the other way round. */
-  if (options.diff !== undefined) {
-    responders.push(options.diff)
-  }
-  /* The word groups and the vocabulary are read on every tab (the page head's join/remove action
-     lives there), before the files section's own reads. */
-  responders.push(options.tags ?? (() => json(200, EMPTY_TAGS)))
-  responders.push(() => json(200, CATEGORY_VOCABULARY))
-  if (options.relpath !== undefined) {
-    responders.push(options.file ?? (() => new Response('# 标题\n\n正文\n', { status: 200 })))
-  }
-  if (skill.rung === 'owner' || skill.rung === 'admin') {
-    // The settings nav's count: "somebody is waiting" has two homes, and this is one.
-    responders.push(() => json(200, { requests: [], total: 0 }))
-  }
-  const stub = stubFetch(...responders)
-  const { container } = render(
-    <SkillPage
-      namespace="demo-user"
-      name="pdf-tools"
-      version={options.version}
-      relpath={options.relpath}
-    />,
-  )
-  await settle()
-  return { container, requests: stub.requests }
-}
 
 describe('one skill: the sections a rung can reach', () => {
   it('gives the owner every section', async () => {
@@ -251,8 +171,10 @@ describe('one skill: 信息', () => {
     expect(text(blocks[0])).toContain('把 PDF 拆开再拼起来')
     expect(text(blocks[1])).toContain('适用场景')
     expect(text(blocks[1])).toContain('需要拆分或合并 PDF 时')
-    expect(text(blocks[2])).toContain('运行环境')
-    expect(text(blocks[2])).toContain('需要 ghostscript')
+    expect(text(blocks[2])).toContain('我的适用场景')
+    expect(text(blocks[2])).toContain('搜索时先按你的说法找')
+    expect(text(blocks[3])).toContain('运行环境')
+    expect(text(blocks[3])).toContain('需要 ghostscript')
     expect(text(container.querySelector('.info-rail-value'))).toBe('@1.0.0')
   })
 
@@ -383,7 +305,76 @@ describe('one skill: 信息', () => {
       frontmatter: { name: 'pdf-tools' },
     })
 
-    expect(container.querySelectorAll('.info-block')).toHaveLength(1)
+    expect(container.querySelectorAll('.info-block')).toHaveLength(2)
+    expect(text(container.querySelectorAll('.info-block')[1])).toContain('我的适用场景')
+    // The extra sentence points at 「上面那句」; with no author sentence there is nothing to point at.
+    expect(text(container.querySelector('#infoMyWhen'))).not.toContain('上面那句')
+  })
+
+  it('adds, edits and clears my when-to-use sentence in place', async () => {
+    stubMyWhenToUse({ when_to_use: '当我说循环审计时用它' })
+    const { container } = await showSkill(SKILL)
+
+    expect(text(container.querySelector('#infoMyWhen'))).toContain('当我说循环审计时用它')
+    const put = stubFetch(() => json(200, { changed: true }))
+
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>('#infoMyWhen .info-edit') as HTMLButtonElement,
+    )
+    const textarea = container.querySelector<HTMLTextAreaElement>(
+      '#infoMyWhen .info-when-input',
+    ) as HTMLTextAreaElement
+    fireEvent.change(textarea, { target: { value: '当我说反复审查时用它' } })
+    expect(text(container.querySelector('#infoMyWhen .info-when-count'))).toBe('10/200')
+    fireEvent.click(
+      [...container.querySelectorAll<HTMLButtonElement>('#infoMyWhen .info-when-actions button')]
+        .find((button) => text(button) === '保存') as HTMLButtonElement,
+    )
+    await settle()
+
+    expect(put.requests.at(-1)?.method).toBe('PUT')
+    expect(put.requests.at(-1)?.body).toEqual({ when_to_use: '当我说反复审查时用它' })
+    expect(text(container.querySelector('#infoMyWhen'))).toContain('当我说反复审查时用它')
+
+    const clear = stubFetch(() => json(200, { changed: true }))
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>('#infoMyWhen .info-edit') as HTMLButtonElement,
+    )
+    fireEvent.click(
+      [...container.querySelectorAll<HTMLButtonElement>('#infoMyWhen .info-when-actions button')]
+        .find((button) => text(button) === '清除') as HTMLButtonElement,
+    )
+    await settle()
+
+    expect(clear.requests.at(-1)?.method).toBe('DELETE')
+    expect(text(container.querySelector('#infoMyWhen'))).toContain('搜索时先按你的说法找')
+  })
+
+  it('keeps the editor open when the sentence is refused', async () => {
+    stubMyWhenToUse({ when_to_use: '当我说循环审计时用它' })
+    const { container } = await showSkill(SKILL)
+    stubFetch(() =>
+      json(
+        400,
+        errorBody('my_when_to_use_too_long', 'too long', [
+          { field: 'when_to_use', issue: 'too_long' },
+        ]),
+      ),
+    )
+
+    fireEvent.click(
+      container.querySelector<HTMLButtonElement>('#infoMyWhen .info-edit') as HTMLButtonElement,
+    )
+    fireEvent.click(
+      [...container.querySelectorAll<HTMLButtonElement>('#infoMyWhen .info-when-actions button')]
+        .find((button) => text(button) === '保存') as HTMLButtonElement,
+    )
+    await settle()
+
+    // The field error lives inside the editor; closing first would hide the only sentence that
+    // says what to fix.
+    expect(container.querySelector('#infoMyWhen .info-when-input')).not.toBeNull()
+    expect(text(container.querySelector('#infoMyWhen .field-error'))).toContain('200')
   })
 
   it('offers 申请 to 浏览, and posts the rung that was asked for', async () => {
@@ -572,7 +563,7 @@ describe('one skill: the three word groups (v14)', () => {
     fireEvent.click(container.querySelector('#removeSkill') as HTMLButtonElement)
     expect(text(container.querySelector('.confirm-title'))).toBe('从我的 skill 移除？')
     expect(text(container.querySelector('.confirm-body'))).toBe(
-      '标签会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。',
+      '我的标签与我的适用场景会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。',
     )
     // Removing a reference takes nothing away: the sheet is not red (ADR 0056).
     expect(container.querySelector('.confirm-acts .button.is-danger')).toBeNull()
@@ -1137,7 +1128,8 @@ describe('one skill: 设置 › 常规', () => {
 
     expect(text(container.querySelector('.confirm'))).toContain('已经发生的下载与复制无法收回')
     // Nothing written until the answer, and the selector is back on the state that is true.
-    expect(requests).toHaveLength(2)
+    // Three reads: the skill, the word groups, and v59's own sentence.
+    expect(requests).toHaveLength(3)
     const radios = [...container.querySelectorAll<HTMLInputElement>('input[name="skill-visibility"]')]
     expect(radios[0]!.checked).toBe(true)
     expect(radios[2]!.checked).toBe(false)

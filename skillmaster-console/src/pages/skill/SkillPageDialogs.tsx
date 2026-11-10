@@ -117,7 +117,7 @@ export default function SkillPageDialogs({
       <ConfirmDialog
         open={removeOpen}
         title="从我的 skill 移除？"
-        body="标签会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。"
+        body="我的标签与我的适用场景会保留，重新入库后会回来。这个 skill 仍在公域，仍可直接调用。"
         confirmLabel="确认移除"
         pendingLabel="正在移除…"
         danger={false}

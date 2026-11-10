@@ -5,6 +5,7 @@ import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.retrieval.EmbeddingSettings;
 import com.skillmasterai.modules.retrieval.RetrievalService;
 import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.MyWhenToUseService;
 import com.skillmasterai.modules.skill.SearchFilters;
 import com.skillmasterai.modules.skill.SearchScope;
 import com.skillmasterai.modules.skill.SkillCatalogService;
@@ -39,6 +40,7 @@ public class SemanticSearchUseCase {
     public static final int MAX_LIMIT = 50;
     public static final int DEFAULT_LIMIT = 10;
 
+
     private final NamespaceService namespaces;
     private final SkillCatalogService catalog;
     private final SkillCategoryService categories;
@@ -46,10 +48,11 @@ public class SemanticSearchUseCase {
     private final SkillCardAssembler cards;
     private final RetrievalService retrieval;
     private final EmbeddingSettings settings;
+    private final MyWhenToUseService notes;
 
     public SemanticSearchUseCase(NamespaceService namespaces, SkillCatalogService catalog,
             SkillCategoryService categories, SkillTagService tags, SkillCardAssembler cards,
-            RetrievalService retrieval, EmbeddingSettings settings) {
+            RetrievalService retrieval, EmbeddingSettings settings, MyWhenToUseService notes) {
         this.namespaces = namespaces;
         this.catalog = catalog;
         this.categories = categories;
@@ -57,10 +60,19 @@ public class SemanticSearchUseCase {
         this.cards = cards;
         this.retrieval = retrieval;
         this.settings = settings;
+        this.notes = notes;
     }
 
-    /** @param score the cosine similarity the ranking used; 0–1, larger is closer */
-    public record Hit(SkillCardView card, double score) {
+    /**
+     * @param score the cosine similarity or exact-run length the ranking used
+     * @param tier  the evidence tier: 0 name, 1 personal exact, 2 personal semantic,
+     *              3 author exact, 4 generic semantic
+     */
+    public record Hit(SkillCardView card, double score, int tier) {
+        /** A semantic hit that no exact or personal evidence promoted. */
+        public Hit(SkillCardView card, double score) {
+            this(card, score, 4);
+        }
     }
 
     /**
@@ -139,6 +151,40 @@ public class SemanticSearchUseCase {
             List<String> admissibleIds = excluded.isEmpty()
                     ? admissible.ids()
                     : admissible.ids().stream().filter(id -> !excluded.contains(id)).toList();
+            if (scope == SearchScope.LIBRARY || scope == SearchScope.ALL) {
+                // The library is small enough to rank in one pass: exact name/note evidence and
+                // S2 are available for every entry, not only for the vector's top-k. One provider
+                // call answers both semantic reads.
+                List<String> libraryIds = scope == SearchScope.LIBRARY
+                        ? admissibleIds
+                        : libraryIds(filters, caller, excluded);
+                RetrievalService.LibraryOutcome semantic = retrieval.searchLibrary(query,
+                        subject.userId(), libraryIds, limit);
+                List<Hit> libraryHits = libraryRank(query, libraryIds, semantic, filters, caller,
+                        limit, subject);
+                if (scope == SearchScope.LIBRARY) {
+                    if (libraryHits.isEmpty() && semantic.degraded()) {
+                        return new Outcome(List.of(), semantic.fallbackReason());
+                    }
+                    return new Outcome(libraryHits, null);
+                }
+                // scope=all: ADR 0180 puts library rows through the personal tiers and leaves
+                // public rows on the generic semantic ranking. The public slice is the nearest
+                // vectors minus the library ids already ranked above.
+                RetrievalService.Outcome exact = retrieval.nearestWithin(query, admissibleIds,
+                        Math.min(MAX_LIMIT * 2, limit + libraryIds.size()));
+                if (exact.degraded() && libraryHits.isEmpty()) {
+                    return new Outcome(List.of(), exact.fallbackReason());
+                }
+                java.util.Set<String> inLibrary = java.util.Set.copyOf(libraryIds);
+                List<RetrievalService.Candidate> publicOnly = exact.degraded()
+                        ? List.of()
+                        : exact.candidates().stream()
+                                .filter(candidate -> !inLibrary.contains(candidate.skillId()))
+                                .toList();
+                return new Outcome(mergeRanked(libraryHits,
+                        rank(publicOnly, scope, filters, caller, limit, subject), limit), null);
+            }
             RetrievalService.Outcome exact =
                     retrieval.nearestWithin(query, admissibleIds, limit);
             if (exact.degraded()) {
@@ -154,6 +200,30 @@ public class SemanticSearchUseCase {
         // takes a wider slice and the exclusion is applied to it. Widening by the excluded size is
         // the same compensation the literal path uses — approximate, like the visibility filter that
         // already runs here.
+        if (scope == SearchScope.ALL) {
+            // Library rows stay enumerable even when the public corpus is not, so their personal
+            // tiers are computed in full and the public slice is asked for a little larger to
+            // survive removing them.
+            List<String> libraryIds = libraryIds(filters, caller, excluded);
+            RetrievalService.LibraryOutcome semantic = retrieval.searchLibrary(query,
+                    subject.userId(), libraryIds, limit);
+            List<Hit> libraryHits = libraryRank(query, libraryIds, semantic, filters, caller,
+                    limit, subject);
+            RetrievalService.Outcome wide = retrieval.nearest(query,
+                    limit * settings.overFetch() + excluded.size() + libraryIds.size());
+            if (wide.degraded() && libraryHits.isEmpty()) {
+                return new Outcome(List.of(), wide.fallbackReason());
+            }
+            java.util.Set<String> inLibrary = java.util.Set.copyOf(libraryIds);
+            List<RetrievalService.Candidate> publicOnly = wide.degraded()
+                    ? List.of()
+                    : wide.candidates().stream()
+                            .filter(candidate -> !excluded.contains(candidate.skillId()))
+                            .filter(candidate -> !inLibrary.contains(candidate.skillId()))
+                            .toList();
+            return new Outcome(mergeRanked(libraryHits,
+                    rank(publicOnly, scope, filters, caller, limit, subject), limit), null);
+        }
         RetrievalService.Outcome wide =
                 retrieval.nearest(query, limit * settings.overFetch() + excluded.size());
         if (wide.degraded()) {
@@ -167,6 +237,140 @@ public class SemanticSearchUseCase {
         return new Outcome(rank(candidates, scope, filters, caller, limit, subject), null);
     }
 
+    /** The caller's visible library ids, less the ids this request excluded. */
+    private List<String> libraryIds(SearchFilters filters, Caller caller,
+            java.util.Set<String> excluded) {
+        return catalog.admissibleIds(SearchScope.LIBRARY, filters, caller).ids().stream()
+                .filter(id -> !excluded.contains(id))
+                .toList();
+    }
+
+    /** Personal-tier hits first, then the generic ranking, as one reproducible list. */
+    private static List<Hit> mergeRanked(List<Hit> tiered, List<Hit> generic, int limit) {
+        List<Hit> all = new ArrayList<>(tiered.size() + generic.size());
+        all.addAll(tiered);
+        all.addAll(generic);
+        all.sort((left, right) -> {
+            int byTier = Integer.compare(left.tier(), right.tier());
+            if (byTier != 0) {
+                return byTier;
+            }
+            int byScore = Double.compare(right.score(), left.score());
+            return byScore != 0 ? byScore : left.card().id().compareTo(right.card().id());
+        });
+        return all.stream().limit(limit).toList();
+    }
+
+    /**
+     * Library ranking by evidence tier, then score (v59 P1).
+     *
+     * <p><strong>S0 name &gt; S1 personal exact &gt; S2 personal semantic &gt; S3 author exact &gt;
+     * S4 generic semantic.</strong> The exact evidence is computed over every admissible library
+     * row, so a note match that the vector query did not put in its top-k still appears. A provider
+     * outage does not erase S0/S1/S3: if the vector search degrades but an exact hit exists, those
+     * hits are the answer; only when there is no exact hit does the caller fall back to the keyword
+     * path with the provider's reason.
+     */
+    private List<Hit> libraryRank(String query, List<String> admissibleIds,
+            RetrievalService.LibraryOutcome vector, SearchFilters filters, Caller caller, int limit,
+            AuthenticatedSubject subject) {
+        List<SkillCatalogService.CatalogRow> rows = catalog.admissibleAmong(admissibleIds,
+                SearchScope.LIBRARY, filters, caller);
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Map<String, SkillCatalogService.CatalogRow> rowById = new LinkedHashMap<>();
+        for (SkillCatalogService.CatalogRow row : rows) {
+            rowById.put(row.id(), row);
+        }
+        Map<String, String> personal = notes.allFor(subject.userId());
+
+        record Ranked(int tier, double score, boolean personal) {
+        }
+        Map<String, Ranked> ranked = new LinkedHashMap<>();
+        for (SkillCatalogService.CatalogRow row : rows) {
+            // S0/S1 first; the author's own sentence is S3 and only applies when the caller has no
+            // stronger exact evidence on this row.
+            Optional<PersonalTriggers.Match> exact =
+                    PersonalTriggers.exact(query, row.name(), row.title(), personal.get(row.id()));
+            if (exact.isEmpty()) {
+                exact = PersonalTriggers.authorExact(query, row.whenToUse());
+            }
+            exact.ifPresent(hit -> ranked.put(row.id(),
+                    new Ranked(hit.tier(), hit.score(), hit.personal())));
+        }
+
+        // S2: the caller's own sentence vectors, one best score per skill. Threshold and margin
+        // are applied before any of them are allowed to claim a tier.
+        // Rows already claimed by S0/S1/S3 are not S2's rivals: their personal score never decided
+        // anything, and letting it set the margin can suppress the only row S2 would promote.
+        List<RetrievalService.PersonalHit> personalHits = vector.personal().stream()
+                .filter(hit -> rowById.containsKey(hit.skillId()))
+                .filter(hit -> {
+                    Ranked existing = ranked.get(hit.skillId());
+                    return existing == null || existing.tier() >= 3;
+                })
+                .filter(hit -> hit.score() >= settings.personalThreshold())
+                .sorted((left, right) -> Double.compare(right.score(), left.score()))
+                .toList();
+        double second = personalHits.size() > 1 ? personalHits.get(1).score() : 0;
+        boolean personalConfident = !personalHits.isEmpty()
+                && personalHits.getFirst().score() - second >= settings.personalMargin();
+        if (personalConfident) {
+            for (RetrievalService.PersonalHit hit : personalHits) {
+                Ranked existing = ranked.get(hit.skillId());
+                // S2 beats S3: "both halves matched, rank by mine" is the spec's rule. It never
+                // beats S0/S1, which are the caller's stronger exact evidence.
+                if (existing == null || existing.tier() >= 3) {
+                    ranked.put(hit.skillId(), new Ranked(2, hit.score(), true));
+                }
+            }
+        }
+
+        if (!vector.degraded()) {
+            for (RetrievalService.Candidate candidate : vector.corpus()) {
+                if (!rowById.containsKey(candidate.skillId())) {
+                    continue;
+                }
+                Ranked already = ranked.get(candidate.skillId());
+                // A library skill's vector is the author's text — name, title, description and
+                // when_to_use — so it is S3. S4 is the public/general semantic ranking, which is
+                // produced by this use case's other branch and never reaches this map.
+                if (already == null) {
+                    ranked.put(candidate.skillId(), new Ranked(3, candidate.score(), false));
+                } else if (already.tier() == 3) {
+                    ranked.put(candidate.skillId(),
+                            new Ranked(3, Math.max(already.score(), candidate.score()), false));
+                }
+            }
+        } else if (ranked.isEmpty()) {
+            return List.of();
+        }
+
+        List<SkillCatalogService.CatalogRow> selected = ranked.keySet().stream()
+                .map(rowById::get).toList();
+        Map<String, SkillCardView> viewById = new LinkedHashMap<>();
+        for (SkillCardView view : cards.assemble(selected, subject.userId())) {
+            Ranked rank = ranked.get(view.id());
+            viewById.put(view.id(), rank.personal()
+                    ? view.withMyWhenToUseMatched(true)
+                    : view);
+        }
+        return viewById.values().stream()
+                .map(view -> new Hit(view, ranked.get(view.id()).score(),
+                        ranked.get(view.id()).tier()))
+                .sorted((left, right) -> {
+                    int byTier = Integer.compare(left.tier(), right.tier());
+                    if (byTier != 0) {
+                        return byTier;
+                    }
+                    int byScore = Double.compare(right.score(), left.score());
+                    return byScore != 0 ? byScore : left.card().id().compareTo(right.card().id());
+                })
+                .limit(limit)
+                .toList();
+    }
+
     private List<Hit> rank(List<RetrievalService.Candidate> candidates, SearchScope scope,
             SearchFilters filters, Caller caller, int limit, AuthenticatedSubject subject) {
         if (candidates.isEmpty()) {
@@ -178,7 +382,7 @@ public class SemanticSearchUseCase {
         }
         List<SkillCatalogService.CatalogRow> visible =
                 catalog.admissibleAmong(List.copyOf(scoreOf.keySet()), scope, filters, caller);
-        List<SkillCardView> views = cards.assemble(visible, subject.userId());
+        List<SkillCardView> views = cards.assemble(visible, subject.userId(), false);
         return views.stream()
                 .map(view -> new Hit(view, scoreOf.getOrDefault(view.id(), 0.0)))
                 // Ties break on the id so two identical scores cannot swap between requests: the

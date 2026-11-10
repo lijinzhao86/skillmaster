@@ -284,8 +284,8 @@ public final class SkillCatalogService {
      * @param active     whether the caller's library entry is effective; false for a skill that is
      *                   merely public, which is what keeps {@code my_tags} off a discovery card
      */
-    public record CatalogRow(String id, String namespaceId, String name, String description,
-            String whenToUse, String updatedAt, int relevance, String source,
+    public record CatalogRow(String id, String namespaceId, String name, String title,
+            String description, String whenToUse, String updatedAt, int relevance, String source,
             /** The grant the caller holds on this row, if any (v35 — folded with the public rung). */
             String grantRole,
             /** The rung the skill hands to everybody; null while it is private (ADR 0048). */

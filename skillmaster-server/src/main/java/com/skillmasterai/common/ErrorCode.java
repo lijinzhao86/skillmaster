@@ -319,6 +319,15 @@ public enum ErrorCode {
      */
     CREDENTIAL_VAULT_UNAVAILABLE("credential_vault_unavailable"),
 
+    /* ---- v59: the caller's own when-to-use sentence ---- */
+    /**
+     * A write left nothing after trimming and folding whitespace. Distinct from clearing: a clear is
+     * the DELETE route, and "I sent an empty body" is a malformed request.
+     */
+    MY_WHEN_TO_USE_EMPTY("my_when_to_use_empty"),
+    /** The sentence is above 200 Unicode code points. Ships the actual count and the limit. */
+    MY_WHEN_TO_USE_TOO_LONG("my_when_to_use_too_long"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

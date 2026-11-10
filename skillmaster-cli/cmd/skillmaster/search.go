@@ -65,6 +65,9 @@ func search(ctx context.Context, args []string) error {
 				fmt.Println(hint)
 			}
 		}
+		if options.scope == api.ScopeLibrary {
+			fmt.Println("（如果已有目标 skill、只是说法对不上：先问用户，再 skmr skill my-when-to-use set <地址> --text <说法>；只对库里的 skill 有效。）")
+		}
 		return nil
 	}
 	if found.note != "" {
@@ -181,6 +184,9 @@ func printCards(cards []api.Card, withReading, verbose bool) {
 		fmt.Println(card.Address())
 		if withReading {
 			if summary := card.Summary(); summary != "" {
+				if card.MyWhenToUseMatched {
+					summary += "（命中你写的适用场景）"
+				}
 				fmt.Printf("    %s\n", summary)
 			}
 		}

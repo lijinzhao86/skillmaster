@@ -295,6 +295,18 @@ public final class SyncPipeline {
             SkillDocument.Document document;
             try {
                 document = SkillDocument.parse(skillMd.content());
+            } catch (com.skillmasterai.modules.ingest.IngestException invalid) {
+                // **Refused, not truncated and not skipped silently.** The entry fails alone (the
+                // batch continues), and the log names the field and issue so an operator can tell
+                // an over-limit description from a wrong YAML shape without opening the package.
+                LOG.warn("sync entry={} refused by the SKILL.md contract: {}",
+                        entry.kind() + ":" + entry.locator()
+                                + (entry.path() == null || entry.path().isEmpty()
+                                        ? "" : "@" + entry.path()),
+                        invalid.details().stream()
+                                .map(detail -> detail.field() + "=" + detail.issue())
+                                .toList());
+                return Outcome.failed(entry, "invalid_skill_md", revision);
             } catch (RuntimeException invalid) {
                 return Outcome.failed(entry, "invalid_skill_md", revision);
             }

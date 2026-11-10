@@ -1,8 +1,15 @@
 package com.skillmasterai.modules.skill;
 
+import com.skillmasterai.common.ApiError;
+import com.skillmasterai.common.ErrorCode;
+import com.skillmasterai.common.RequestException;
+import com.skillmasterai.common.SkillTextFields;
 import com.skillmasterai.modules.skill.internal.SkillRelationshipQueries;
 import com.skillmasterai.modules.skill.internal.SkillRepository;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * M12: a skill's address, identity, and the projections its lists read (ADR 0053).
@@ -28,6 +35,8 @@ import java.util.Optional;
  * shows a stale fact with a perfectly well-formed response. The test plan's T14/T15 pin them.
  */
 public final class SkillMetadataService {
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final SkillRepository skills;
     private final SkillRelationshipQueries relationships;
@@ -225,7 +234,39 @@ public final class SkillMetadataService {
      */
     public boolean recordPublish(String skillId, VersionProjection version, DraftProjection drafts,
             String at) {
+        requirePublishableText(version);
         return skills.recordPublish(skillId, version, drafts, at);
+    }
+
+    /**
+     * Re-applies the write-time text contract to the stored version (ADR 0181).
+     *
+     * <p><strong>Why publish checks again.</strong> A draft can be older than the rule that now
+     * governs it; without this, a value written before the ceiling existed would go live and only
+     * a later edit would fail. The receipt names the same field paths the write path does.
+     */
+    private static void requirePublishableText(VersionProjection version) {
+        Map<String, Object> frontmatter;
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = version.frontmatterJson() == null ? Map.of()
+                    : JSON.readValue(version.frontmatterJson(), Map.class);
+            frontmatter = parsed;
+        } catch (RuntimeException e) {
+            throw new RequestException(ErrorCode.INVALID_REQUEST,
+                    "这一版存储的 frontmatter 无法解析，不能发布",
+                    List.of(new ApiError.Detail("frontmatter", "unreadable")));
+        }
+        // The stored frontmatter is the author's source; the version's description column is the
+        // fallback for rows written before this field was separated.
+        Object rawDescription = frontmatter.getOrDefault("description", version.description());
+        SkillTextFields.Report report = SkillTextFields.inspect(rawDescription, frontmatter);
+        if (!report.problems().isEmpty()) {
+            throw new RequestException(ErrorCode.INVALID_REQUEST,
+                    "这一版不能发布：" + report.problems().getFirst().message()
+                            + " 回草稿改 SKILL.md 后再发布。",
+                    report.problems().stream().map(SkillTextFields.Problem::detail).toList());
+        }
     }
 
     /**

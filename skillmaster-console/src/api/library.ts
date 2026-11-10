@@ -5,6 +5,7 @@ import type {
   CategoryVocabulary,
   Changed,
   LibraryPage,
+  MyWhenToUse,
   MyTagDefinition,
   MyTagUsages,
   PublicTagUsages,
@@ -160,6 +161,41 @@ export function deleteMyTag(id: string): Promise<ApiResult<Changed>> {
 /** The three groups on a skill's information page. */
 export function getSkillTags(namespace: string, name: string): Promise<ApiResult<SkillTagGroups>> {
   return request<SkillTagGroups>({ method: 'GET', path: `${skillPath(namespace, name)}/tags` })
+}
+
+/** The caller's own sentence on the information page (v59). Null means none was written. */
+export function getMyWhenToUse(
+  namespace: string,
+  name: string,
+): Promise<ApiResult<MyWhenToUse>> {
+  return request<MyWhenToUse>({
+    method: 'GET',
+    path: `${skillPath(namespace, name)}/my-when-to-use`,
+  })
+}
+
+/** Writes or replaces it. The server normalizes whitespace and refuses over 200 code points. */
+export function setMyWhenToUse(
+  namespace: string,
+  name: string,
+  whenToUse: string,
+): Promise<ApiResult<Changed>> {
+  return request<Changed>({
+    method: 'PUT',
+    path: `${skillPath(namespace, name)}/my-when-to-use`,
+    body: { when_to_use: whenToUse },
+  })
+}
+
+/** Clears it; it does not require the skill to be in the library. */
+export function clearMyWhenToUse(
+  namespace: string,
+  name: string,
+): Promise<ApiResult<Changed>> {
+  return request<Changed>({
+    method: 'DELETE',
+    path: `${skillPath(namespace, name)}/my-when-to-use`,
+  })
 }
 
 /** Adds a public skill to the caller's library as a reference. Idempotent on the server. */

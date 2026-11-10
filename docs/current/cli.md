@@ -58,6 +58,9 @@
 | `skmr skill license` | 读许可证的要点 | `skmr skill license <命名空间>/<名字> [--no-login]` |
 | `skmr skill ls` | 看一层目录 | `skmr skill ls <命名空间>/<名字>[@版本] [<目录>] [-l] [-R]` |
 | `skmr skill mv` | 移动草稿里的文件 | `skmr skill mv <地址>@<版本码> <from> <to>` |
+| `skmr skill my-when-to-use` | 我的适用场景 | `skmr skill my-when-to-use <子命令> [参数]` |
+| `skmr skill my-when-to-use clear` | 清我的适用场景 | `skmr skill my-when-to-use clear <命名空间>/<名字>` |
+| `skmr skill my-when-to-use set` | 写我的适用场景 | `skmr skill my-when-to-use set <命名空间>/<名字> --text <文字>` |
 | `skmr skill offline` | 下线（打开网页确认） | `skmr skill offline <命名空间>/<名字> [--print] [--json]` |
 | `skmr skill online` | 恢复服务（打开网页确认） | `skmr skill online <命名空间>/<名字> [--print] [--json]` |
 | `skmr skill open` | 打开网页上的某一页 | `skmr skill open <命名空间>/<名字> [--tab info\|files\|versions\|settings] [--sub general\|collaborators\|details] [--print] [--json]` |

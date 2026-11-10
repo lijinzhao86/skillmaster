@@ -498,7 +498,7 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skmr skill show <命名空间>/<名字> [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "描述、场景、环境、版本、来源、许可证与使用，走 stdout；空字段不打印。",
+		Output: "描述、场景（作者的「适用场景」、我的「我的适用场景」两行分开）、环境、版本、来源、许可证与使用，走 stdout；空字段不打印。",
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
@@ -550,7 +550,7 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skmr skill leave <命名空间>/<名字> --yes",
 		Flags:  []help.Flag{{Name: "--yes", Summary: "确认移出"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "报告已移出；我的标签保留。",
+		Output: "报告已移出；我的标签与我的适用场景保留。",
 		Failures: []help.Failure{
 			{Code: "library_reference_missing", Summary: "库里没有这个引用", Next: "用 skmr skills list 核对"},
 		},
@@ -633,5 +633,37 @@ var skillSpecs = []*help.Spec{
 		},
 		Examples: []string{"skmr skill category clear dev/pdf-tools"},
 		Parent:   "skill category", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill my-when-to-use", Summary: "我的适用场景",
+		Usage:    "skmr skill my-when-to-use <子命令> [参数]",
+		Note:     "只写你自己的检索说法；作者那句在 SKILL.md，随版本发布，改它走 draft → edit → publish。",
+		Children: []string{"set", "clear"}, PureGroup: true, Parent: "skill",
+	},
+	{
+		Path: "skill my-when-to-use set", Summary: "写我的适用场景",
+		Usage: "skmr skill my-when-to-use set <命名空间>/<名字> --text <文字>",
+		Flags: []help.Flag{{Name: "--text", Value: "<文字>", Summary: "一句话；- 从标准输入读"}},
+		Args:  []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
+		Output: "报告已记下；内容没变时说本来就是这句。只写你自己的检索，不产生版本。" +
+			"作者那句在 SKILL.md，改它走 draft → edit → version publish。",
+		Failures: []help.Failure{
+			{Code: "skill_not_in_library", Summary: "还没入库", Next: "先 skmr skill join <地址> --yes"},
+			{Code: "my_when_to_use_too_long", Summary: "超过 200 个字符", Next: "缩短后再试"},
+			{Code: "usage", Summary: "缺地址、缺 --text 或文本为空", Next: "给地址与 --text；清除用 clear"},
+		},
+		Examples: []string{"skmr skill my-when-to-use set dev/pdf-tools --text 当我说循环审计时用它"},
+		Parent:   "skill my-when-to-use", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skill my-when-to-use clear", Summary: "清我的适用场景",
+		Usage:  "skmr skill my-when-to-use clear <命名空间>/<名字>",
+		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
+		Output: "报告已清除；本来没写也是退出 0。离开库后仍可清。",
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "缺地址或地址带了 @版本", Next: "按 skill 的地址清除"},
+		},
+		Examples: []string{"skmr skill my-when-to-use clear dev/pdf-tools"},
+		Parent:   "skill my-when-to-use", Exits: exitsWithCredential,
 	},
 }

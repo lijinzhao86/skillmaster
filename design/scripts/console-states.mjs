@@ -2019,19 +2019,22 @@ const foldOf = () => page.evaluate(() => {
     buttons: buttons.length,
     button: buttons[0]?.textContent ?? null,
     labels: buttons.map((b) => b.getAttribute('aria-label')),
+    /* 这一格的小标题：第二段是「适用场景」还是「我的适用场景」，决定了读者看到的是谁写的那段。 */
+    sections: [...panel.querySelectorAll('.preview-k')].map((el) => el.textContent),
     rowHeight: Math.round(document.querySelector('#skillList .skill').getBoundingClientRect().height),
     panelScrolls: panel.scrollHeight > panel.clientHeight + 1,
   }
 })
 
-/* 不加 `?long=1`：`pdf-tools` 在**默认数据**里就是两段都长的，这一屏不用替身参数就画得出来。 */
+/* 不加 `?long=1`：`pdf-tools` 在**默认数据**里就是两段都长的——描述 949 字，用户自己的适用
+   场景 200 字（产品上限）——这一屏不用替身参数就画得出来。 */
 await page.goto(base + '?page=skills&sel=dev/pdf-tools', { waitUntil: 'load' })
 await settle()
 const folded = await foldOf()
 check(
-  '预览：949 字的描述与 341 字的适用场景都折在封顶那个行数（8 行）',
-  folded.clamp === 8 && folded.lines === folded.clamp && folded.whenLines === folded.clamp,
-  `封顶 ${folded.clamp} 行 / 描述 ${folded.lines} 行 / 适用场景 ${folded.whenLines} 行`,
+  '预览：949 字的描述折在封顶那个行数（8 行）；200 字上限的我的适用场景也装得进 8 行',
+  folded.clamp === 8 && folded.lines === folded.clamp && folded.whenLines <= folded.clamp,
+  `封顶 ${folded.clamp} 行 / 描述 ${folded.lines} 行 / 我的适用场景 ${folded.whenLines} 行`,
 )
 /* **这一格正常显示时不该出现滚动条。** 那是 8 行的来历：面板在 900px 高的窗口里给了正文 447px，
    两段各 8 行只用 336px。滚不滚是量的结果，不是看着像。 */
@@ -2041,10 +2044,10 @@ check(
   `面板 ${folded.panelScrolls ? '在滚' : '不滚'}`,
 )
 check(
-  '预览：两段各自挂一颗「展开全文」，名字里带上是哪一段',
-  folded.buttons === 2 &&
-    folded.labels.join('|') === '展开全文：描述|展开全文：适用场景',
-  folded.labels.join(' | '),
+  '预览：只有描述挂「展开全文」；第二段的小标题是「我的适用场景」（生效的是我的那段）',
+  folded.buttons === 1 && folded.labels.join('|') === '展开全文：描述' &&
+    folded.sections[1] === '我的适用场景',
+  `按钮 ${folded.labels.join(' | ') || '（无）'} / 小标题 ${folded.sections.join(' / ')}`,
 )
 
 await page.click('.preview-more')
@@ -2071,6 +2074,20 @@ check(
   '预览：两段都装得下时，一颗按钮都不多挂',
   short.whenLines > 0 && short.whenLines <= short.clamp && short.buttons === 0,
   `描述 ${short.lines} 行 / 适用场景 ${short.whenLines} 行 / 按钮 ${short.buttons} 颗`,
+)
+/* **作者的适用场景封顶 200 码点。** 没有「我的适用场景」的行显示作者的原文；`?long=1` 把
+   贴着上限的 185 字放在 `changelog-writer` 身上（`withLongDescriptions` 的 stress 那条）。
+   185 字在 380px 里装得进 8 行，所以宽屏不再折——这一条钉的是「到了上限也不溢出」，不是
+   「长文必须折」；描述仍然折，名字仍叫「适用场景」。 */
+await page.goto(base + '?page=skills&long=1&sel=dev/changelog-writer', { waitUntil: 'load' })
+await settle()
+const authorLong = await foldOf()
+check(
+  '预览：作者的适用场景到 200 上限也装得下，小标题仍是「适用场景」',
+  authorLong.buttons === 1 &&
+    authorLong.labels.join('|') === '展开全文：描述' &&
+    authorLong.sections[1] === '适用场景',
+  `${authorLong.labels.join(' | ') || '（无按钮）'} / ${authorLong.sections.join(' / ')}`,
 )
 
 const byName = await listAt('?page=skills&sort=name')
@@ -2639,9 +2656,20 @@ const skillAt = async (query) => {
       el.textContent.trim(),
     ),
     infoDesc: document.getElementById('infoDesc').textContent,
-    infoWhen: document.getElementById('infoWhen').hidden
-      ? null
-      : document.getElementById('infoWhenText').textContent,
+    /* **适用场景是 skill 自带的一块，非库条目与库条目都在同一个位置。** 库条目在它下面
+       另加一块「我的适用场景」。 */
+    infoWhen: (() => {
+      const block = document.getElementById('infoWhen')
+      return block === null || block.hidden
+        ? null
+        : document.getElementById('infoWhenText').textContent
+    })(),
+    /* 我的适用场景：写了是正文；没写是空态（空串）；不在库是 null。 */
+    infoMyWhen: (() => {
+      const text = document.getElementById('infoMyWhenText')
+      if (text !== null) return text.textContent
+      return document.getElementById('infoMyWhenEmpty') === null ? null : ''
+    })(),
     infoEnv: document.getElementById('infoEnv').hidden
       ? null
       : document.getElementById('infoEnvText').textContent,
@@ -4085,13 +4113,16 @@ check(
 /* 「信息」回答的是「要不要用它」：做什么、什么时候用、跑不跑得动、会动用什么、哪一版。
    许可、digest、`metadata` 的原文不在这里——它们是作者要的细节，在 设置 › 详细信息。 */
 check(
-  '调用：「信息」左栏读、右栏瞥——描述 / 适用场景 / 运行环境在左，版本在右',
+  '调用：「信息」左栏读、右栏瞥——描述 / 适用场景 / 我的适用场景 / 运行环境，两块同档',
   asInvoke.infoDesc.startsWith('把 PDF 拆页、合并与压缩。') &&
+    /* 我写的那段是 200 字（贴着产品上限），不是作者的 341 字。 */
+    asInvoke.infoMyWhen?.startsWith('当我说「循环审计」「过一遍合同」') &&
+    asInvoke.infoMyWhen.length === 200 &&
     asInvoke.infoWhen === '手里有 PDF，要拆页、合并或压缩的时候' &&
     asInvoke.infoEnv === '需要 ghostscript 10 以上' &&
     asInvoke.railVersion === '@1.2.3' &&
     asInvoke.infoFacts.length === 0,
-  `${asInvoke.infoWhen} · ${asInvoke.infoEnv} · 右栏 ${asInvoke.railVersion}`,
+  `${asInvoke.infoWhen} / ${asInvoke.infoMyWhen} · ${asInvoke.infoEnv} · 右栏 ${asInvoke.railVersion}`,
 )
 /* `allowed-tools` 在这一版不显示：我们既不放行也不阻止，摆出来只会让人以为我们发了授权。
    它仍然在「设置 › 详细信息」里按字段名排。 */
@@ -4100,12 +4131,134 @@ check(
   !/Bash|Read/.test(asInvoke.infoText),
   asInvoke.infoText.slice(0, 60),
 )
-/* 两块主要属性用同一种排法：都有小标题。少一个，另一块看起来就像附注。 */
-/* 左栏三段，同一种排法：标记 + 小标题 + 正文。少一个，另一块看起来就像附注。 */
+/* 左栏共四段，同一种排法：标记 + 小标题 + 正文。两块适用场景同档，作者那块不是附注。 */
 check(
-  '左栏三段各有小标题，排法一致',
-  asInvoke.infoLabels.join(',') === '描述,适用场景,运行环境',
+  '左栏四段各有小标题，排法一致',
+  asInvoke.infoLabels.join(',') === '描述,适用场景,我的适用场景,运行环境',
   asInvoke.infoLabels.join(','),
+)
+/* **没写过与正在写**（v59）：空态要给一个「添加」，点开是卡片里的 textarea——不是弹窗；
+   空串不让保存，「清除」只在已经写过时才出现。 */
+await page.goto(base + '?page=skill&myWhen=', { waitUntil: 'load' })
+await settle()
+const emptyWhen = await page.evaluate(() => {
+  const empty = document.getElementById('infoMyWhenEmpty')
+  return {
+    empty: empty !== null && !empty.hidden,
+    text: empty?.textContent ?? '',
+    add: empty === null ? false : [...empty.querySelectorAll('button')].some((b) => b.textContent === '添加'),
+    author: document.getElementById('infoWhenText')?.textContent ?? null,
+    editor: document.querySelector('.info-when-input') !== null,
+  }
+})
+check(
+  '信息：能改这个 skill 的人，空态多一句「上面那句随 skill 发布，这句改了不用出新版本」',
+  emptyWhen.empty && emptyWhen.text.startsWith('写一句你平时会怎么找它') &&
+    emptyWhen.text.includes('上面那句随 skill 发布') &&
+    emptyWhen.text.includes('改了不用出新版本') && emptyWhen.add &&
+    emptyWhen.author === '手里有 PDF，要拆页、合并或压缩的时候' && !emptyWhen.editor,
+  JSON.stringify(emptyWhen),
+)
+/* 只能调用 / 浏览的人不需要「两套」的解释：他改不了上面那句，空态只讲写了之后搜索怎么用它。 */
+await page.goto(base + '?page=skill&in=joined&myWhen=', { waitUntil: 'load' })
+await settle()
+const joinedEmpty = await page.evaluate(() => ({
+  text: document.getElementById('infoMyWhenEmpty')?.textContent ?? '',
+}))
+check(
+  '信息：只能调用 / 浏览的人，空态不解释「两套」，只写一句找法与搜索的用法',
+  joinedEmpty.text.startsWith('写一句你平时会怎么找它') &&
+    !joinedEmpty.text.includes('上面那句随 skill 发布'),
+  joinedEmpty.text,
+)
+await page.click('#infoMyWhenEmpty button')
+await settle()
+const whenEditor = await page.evaluate(() => {
+  const area = document.querySelector('.info-when-input')
+  const buttons = [...document.querySelectorAll('#infoMyWhen button')]
+  const save = buttons.find((b) => b.textContent.trim() === '保存')
+  return {
+    open: area !== null,
+    /* **编辑就在卡片里**：textarea 在 `#infoMyWhen` 内，而不是某个对话框里。登录遮罩在每次
+       重新加载后都会出现（演示件不持久登录态），所以这里判的是它属于谁，不是有没有遮罩。 */
+    insideCard: area?.closest('#infoMyWhen') !== null && area?.closest('[role="dialog"]') === null,
+    rows: area?.getAttribute('rows') ?? null,
+    counter: document.querySelector('.info-when-count')?.textContent ?? null,
+    saveDisabled: save?.disabled ?? null,
+    actions: buttons.map((b) => b.textContent.trim()).join('/'),
+  }
+})
+check(
+  '信息：点「添加」在卡片里打开 textarea（空着不让保存）',
+  whenEditor.open && whenEditor.insideCard && whenEditor.rows === '4' &&
+    whenEditor.counter === '0/200' && whenEditor.saveDisabled === true &&
+    whenEditor.actions === '取消/保存',
+  JSON.stringify(whenEditor),
+)
+/* **上限按 Unicode 码点算**：201 个字符输进去，只留 200；计数也按码点数。
+   中文/英文/标点各 1，emoji 不会被算成 2（HTML 的 maxlength 数的是 UTF-16 单元，所以这里不用它）。 */
+await page.evaluate(() => {
+  const area = document.querySelector('.info-when-input')
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+    .set.call(area, 'a'.repeat(201))
+  area.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await settle()
+const clampedWhen = await page.evaluate(() => {
+  const area = document.querySelector('.info-when-input')
+  return {
+    length: [...area.value].length,
+    counter: document.querySelector('.info-when-count')?.textContent ?? null,
+  }
+})
+check(
+  '信息：200 个码点的上限真的截住（201 个只留 200）',
+  clampedWhen.length === 200 && clampedWhen.counter === '200/200',
+  JSON.stringify(clampedWhen),
+)
+/* 「取消」回到空态，一个字都不留。 */
+await page.evaluate(() => {
+  const cancel = [...document.querySelectorAll('#infoMyWhen .info-when-actions button')]
+    .find((b) => b.textContent.trim() === '取消')
+  cancel?.click()
+})
+await settle()
+const whenCancelled = await page.evaluate(() => ({
+  editor: document.querySelector('.info-when-input') !== null,
+  empty: document.getElementById('infoMyWhenEmpty') !== null,
+}))
+check(
+  '信息：「取消」关掉编辑，回到原来的空态',
+  !whenCancelled.editor && whenCancelled.empty,
+  JSON.stringify(whenCancelled),
+)
+await page.click('#infoMyWhenEmpty button')
+await settle()
+await page.evaluate(() => {
+  const area = document.querySelector('.info-when-input')
+  /* React 给受控输入框的 `value` 装了自己的 setter，直接赋值会连它记的旧值一起改掉，事件于是
+     看起来「没变」。走原型上的原生 setter，再发一次 input，onChange 才真的收到这个字。 */
+  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+    .set.call(area, '当我说「循环审计」的时候用它')
+  area.dispatchEvent(new Event('input', { bubbles: true }))
+})
+await settle()
+await page.evaluate(() => {
+  const save = [...document.querySelectorAll('#infoMyWhen .info-when-actions button')]
+    .find((b) => b.textContent.trim() === '保存')
+  save?.click()
+})
+await settle()
+const savedWhen = await page.evaluate(() => ({
+  text: document.getElementById('infoMyWhenText')?.textContent ?? null,
+  empty: document.getElementById('infoMyWhenEmpty') !== null,
+  author: document.getElementById('infoWhenText')?.textContent ?? null,
+}))
+check(
+  '信息：写了就能存下；两块都在，skill 自带那块在上、我的在下',
+  savedWhen.text === '当我说「循环审计」的时候用它' && !savedWhen.empty &&
+    savedWhen.author === '手里有 PDF，要拆页、合并或压缩的时候',
+  JSON.stringify(savedWhen),
 )
 /* **来源与许可跟着右栏走**（2026-11-06 用户定）：它是次要信息，落在标签下面、默认收起；
    正文下面不再另起一段。 */
@@ -4145,16 +4298,26 @@ check(
   `${licenseMissing.sourceSummary} / ${licenseMissing.licenseText}`,
 )
 /* **卡片高度跟着内容走，不撑满一屏。** 钉住的是反面：卡片的高度不该明显大于它的内容——
-   底下空出一大块，框就不再像一个装满了东西的物体。 */
+   底下空出一大块，框就不再像一个装满了东西的物体。内边距与块间距是卡片自己的排版开销，
+   从样式里量出来扣掉；剩下的差才是「框里的窟窿」。 */
 const cardBox = await page.evaluate(() => {
   const card = document.querySelector('.info-main')
-  const content = [...card.children].reduce((sum, el) => sum + el.getBoundingClientRect().height, 0)
-  return { h: Math.round(card.getBoundingClientRect().height), content: Math.round(content) }
+  const children = [...card.children]
+  const content = children.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0)
+  const box = getComputedStyle(card)
+  const padding = parseFloat(box.paddingTop) + parseFloat(box.paddingBottom)
+  const gaps = children.slice(1).reduce(
+    (sum, el) => sum + parseFloat(getComputedStyle(el).marginTop), 0)
+  return {
+    h: Math.round(card.getBoundingClientRect().height),
+    content: Math.round(content),
+    overhead: Math.round(padding + gaps),
+  }
 })
 check(
   '信息页的卡片高度贴着内容，不在框里留一大段空',
-  cardBox.h - cardBox.content < 120,
-  `卡片 ${cardBox.h}px · 内容 ${cardBox.content}px`,
+  cardBox.h - cardBox.content - cardBox.overhead < 24,
+  `卡片 ${cardBox.h}px · 内容 ${cardBox.content}px · 内边距与块距 ${cardBox.overhead}px`,
 )
 /* 分隔不靠标题、不靠底色：**左栏是一张卡，右栏在卡外**（GitHub 的文件区 + About 栏就是这个结构）。 */
 check(

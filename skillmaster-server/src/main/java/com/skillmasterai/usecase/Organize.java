@@ -58,6 +58,22 @@ final class Organize {
                         "reason", "not_in_library")));
     }
 
+    /**
+     * The same refusal for the personal when-to-use sentence. Separate wording rather than a
+     * parameter on {@link #notInLibrary}: the next step is the same join, but the sentence is not a
+     * tag, and saying "贴标签" would send the caller looking for the wrong control.
+     */
+    static com.skillmasterai.modules.skill.NotPermittedException notInLibraryForMyWhenToUse(
+            SkillStanding standing, String namespaceSlug) {
+        String address = namespaceSlug + "/" + standing.name();
+        String message = standing.discoverable()
+                ? "先把 " + address + " 加入你的库：`skmr skill join " + address + " --yes`"
+                : "这个 skill 现在加不进库；上线后可以再加入并写我的适用场景";
+        return new com.skillmasterai.modules.skill.NotPermittedException(message,
+                java.util.List.of(new com.skillmasterai.common.ApiError.Detail(
+                        "reason", "not_in_library")));
+    }
+
     static com.skillmasterai.common.ConflictException dormant(String name) {
         return new com.skillmasterai.common.ConflictException(
                 com.skillmasterai.common.ErrorCode.LIBRARY_ENTRY_DORMANT,

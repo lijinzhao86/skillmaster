@@ -113,6 +113,10 @@ public class PublishBatchUseCase {
             return failure(target, ErrorCode.VERSION_ALREADY_EXISTS, e.getMessage());
         } catch (VersionStateException e) {
             return failure(target, e.code(), e.getMessage());
+        } catch (com.skillmasterai.common.RequestException e) {
+            // v59: publish re-applies the SKILL.md text contract, and a draft written under an
+            // older rule can fail here. It is this row's answer, like every other named refusal.
+            return failure(target, e.code(), e.getMessage());
         } catch (NotPermittedException e) {
             return failure(target, ErrorCode.FORBIDDEN, e.getMessage());
         } catch (SkillDeletedException e) {

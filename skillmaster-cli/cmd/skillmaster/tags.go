@@ -768,6 +768,17 @@ func v14Error(err error) error {
 		}
 		return err
 	}
+	// The library gate is a 403 `forbidden` whose `details.reason` is the specific fact. Naming
+	// that reason as the failure code is what makes the help's `skill_not_in_library` true: a
+	// script branching on the code would otherwise see only the generic permission answer.
+	if server.Code == "forbidden" && server.Details["reason"] == "not_in_library" {
+		message := server.Message
+		if message == "" {
+			message = "这个 skill 不在你的库里。要加入：skmr skill join <地址> --yes。"
+		}
+		return &cliFailure{Code: "skill_not_in_library", ServerCode: server.Code,
+			Issue: "not_in_library", Message: message}
+	}
 	// **Compared without case** because the wire spelling is lower case like every other code in
 	// the envelope, while an older build of this client compared upper case. Accepting both keeps
 	// the sentence right against either, and costs nothing.
@@ -780,7 +791,19 @@ func v14Error(err error) error {
 			"只有「我加入的」那条引用能移；共享来源但引用仍在时也可以移，你创建的则不在其列。")
 	case api.CodeLibraryEntryDormant:
 		return errors.New("这个 skill 的库条目现在不生效（可能已下线或暂时不可见），" +
-			"暂时读写不了它的我的标签。恢复可见后再试。")
+			"暂时读写不了它的我的标签与我的适用场景。恢复可见后再试。")
+	case "MY_WHEN_TO_USE_TOO_LONG":
+		for _, detail := range server.DetailList {
+			if detail.LimitCodePoints > 0 && detail.ActualCodePoints > 0 {
+				return fmt.Errorf("我的适用场景有 %d 个码点，超过 %d 个的上限"+
+					"（汉字、英文字母、标点各算 1 个，emoji 也按 1 个算）。缩短后再试。",
+					detail.ActualCodePoints, detail.LimitCodePoints)
+			}
+		}
+		return errors.New("我的适用场景最多 200 个码点（汉字、英文字母、标点各算 1 个），" +
+			"emoji 也按 1 个算。缩短后再试。")
+	case "MY_WHEN_TO_USE_EMPTY":
+		return errors.New("要写一句你平时会怎么找它；要清除请用 skmr skill my-when-to-use clear <地址>。")
 	case api.CodeTagNotAttached:
 		return errors.New("这个 skill 上没有这个标签，没有可摘的。看它有哪些：skmr skill tags <地址>。")
 	case api.CodeTagDefinitionNotFound:

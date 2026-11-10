@@ -45,6 +45,11 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             String name,
             String description,
             String whenToUse,
+            // v59: the caller's own sentence, only for an effective library entry, and whether
+            // this result was promoted by it. Both are omitted when absent so a public card's
+            // shape does not change.
+            @JsonInclude(JsonInclude.Include.NON_NULL) String myWhenToUse,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean myWhenToUseMatched,
             String source,
             // The caller's own rung on this skill; null when they own it, and null when they have no
             // relationship to it at all (a discovery card — "your rung" is a library fact). Omitted
@@ -85,13 +90,17 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
         }
 
         /**
-         * @param score the semantic ranking's similarity, or null on the keyword path. Nullable
-         *              rather than 0: a keyword hit has no similarity, and inventing one would let
-         *              a client sort two kinds of answer on a number only one of them has
+         * @param score the ranking metric the hit was ordered by: a cosine similarity on a
+         *              semantic tier (0–1), or the exact run's length on S0/S1/S3 (an identity
+         *              score, not a similarity). Null on the keyword path. Nullable rather than 0:
+         *              a keyword hit has no score, and inventing one would let a client sort two
+         *              kinds of answer on a number only one of them has. A client that needs the
+         *              tier itself should use the CLI's marker or compare ranking, not this field.
          */
         public static Card of(SkillCardView card, Double score) {
             return new Card(card.id(), card.namespace(), card.name(), card.description(),
-                    card.whenToUse(), card.source(), card.standing(), card.state(),
+                    card.whenToUse(), card.myWhenToUse(), card.myWhenToUseMatched(),
+                    card.source(), card.standing(), card.state(),
                     card.version(),
                     card.updatedAt(), card.deletedAt(),
                     card.category() == null ? null
@@ -106,7 +115,8 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
         public Card withSignals(String originLabel, String originKind, String originLocator,
                 String originUrl, String licenseSpdx, String licenseStatus, String usageBucket,
                 String callsBucket, String lastUsed, Integer joins) {
-            return new Card(id, namespace, name, description, whenToUse, source, standing, state,
+            return new Card(id, namespace, name, description, whenToUse, myWhenToUse,
+                    myWhenToUseMatched, source, standing, state,
                     version, updatedAt, deletedAt, category, publicTags, myTags, score,
                     originLabel, originKind, originLocator, originUrl, licenseSpdx, licenseStatus,
                     usageBucket, callsBucket, lastUsed, joins);

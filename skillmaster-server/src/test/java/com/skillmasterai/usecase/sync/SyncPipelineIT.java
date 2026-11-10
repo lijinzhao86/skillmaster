@@ -164,6 +164,27 @@ class SyncPipelineIT extends SyncPipelineFixture {
     }
 
     @Test
+    void aSkillMdThatBreaksTheTextFieldContractFailsOnlyItsOwnEntry() {
+        String good = "contract-good-" + suffix;
+        String bad = "contract-bad-" + suffix;
+        String over = "字".repeat(1025);
+        fake.put("acme/contract-bad-" + suffix, "", "a1",
+                List.of(file("SKILL.md", "---\nname: " + bad + "\ndescription: " + over
+                        + "\n---\n")), null);
+        fake.put("acme/contract-good-" + suffix, "", "a1", List.of(
+                file("SKILL.md", skillMd(good, null))), null);
+
+        SyncReport report = pipeline(List.of(entry("acme/contract-bad-" + suffix, ""),
+                entry("acme/contract-good-" + suffix, "")), 2).run();
+
+        assertThat(report.entries()).extracting(SyncEntryResult::result)
+                .containsExactly("failed", "created");
+        assertThat(report.entries().getFirst().reason()).isEqualTo("invalid_skill_md");
+        assertThat(skillCount(good)).isEqualTo(1);
+        assertThat(skillCount(bad)).isZero();
+    }
+
+    @Test
     void aSyncedNameAlreadyHeldByAnotherOriginIsBlockedBeforeAnythingIsWritten() {
         String clash = "clash-" + suffix;
         metadata.findOrCreate(OFFICIAL_NAMESPACE,

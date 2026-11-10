@@ -92,6 +92,9 @@ type errorEnvelope struct {
 			// `actual_bytes` to an `actualBytes` tag.
 			ActualBytes *int64 `json:"actual_bytes"`
 			LimitBytes  *int64 `json:"limit_bytes"`
+			// ADR 0181: text fields are measured in Unicode code points, not bytes.
+			ActualCodePoints *int64 `json:"actual_code_points"`
+			LimitCodePoints  *int64 `json:"limit_code_points"`
 		} `json:"details"`
 	} `json:"error"`
 }

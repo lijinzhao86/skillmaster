@@ -378,6 +378,58 @@ func (c Client) ClearCategory(ctx context.Context, address string) (Change, erro
 	return changeOf(body), nil
 }
 
+// MyWhenToUse reads the caller's own sentence on a skill. Empty means none was written; the wire
+// carries `null` for that, which is not an error (v59).
+func (c Client) MyWhenToUse(ctx context.Context, address string) (string, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return "", err
+	}
+	body, err := c.request(ctx, http.MethodGet, path+"/my-when-to-use", nil)
+	if err != nil {
+		return "", err
+	}
+	var answer struct {
+		WhenToUse *string `json:"when_to_use"`
+	}
+	if err := json.Unmarshal(body, &answer); err != nil {
+		return "", fmt.Errorf("我的适用场景响应不是 JSON：%w", err)
+	}
+	if answer.WhenToUse == nil {
+		return "", nil
+	}
+	return *answer.WhenToUse, nil
+}
+
+// SetMyWhenToUse writes or replaces that sentence. The server normalizes whitespace and counts
+// Unicode code points; an over-limit value is refused, never truncated (v59, ADR 0181).
+func (c Client) SetMyWhenToUse(ctx context.Context, address, whenToUse string) (Change, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return Change{}, err
+	}
+	body, err := c.sendJSON(ctx, http.MethodPut, path+"/my-when-to-use",
+		map[string]any{"when_to_use": whenToUse})
+	if err != nil {
+		return Change{}, err
+	}
+	return changeOf(body), nil
+}
+
+// ClearMyWhenToUse removes it. It does not require the skill to be in the library, so a person
+// who left can still delete their own data; clearing nothing is a no-op, not a 404 (v59).
+func (c Client) ClearMyWhenToUse(ctx context.Context, address string) (Change, error) {
+	path, err := SkillPath(address)
+	if err != nil {
+		return Change{}, err
+	}
+	body, err := c.request(ctx, http.MethodDelete, path+"/my-when-to-use", nil)
+	if err != nil {
+		return Change{}, err
+	}
+	return changeOf(body), nil
+}
+
 // JoinLibrary adds a reference from the caller's library to a public skill. It is a reference: no
 // content is copied, no version is created and no access changes (ADR 0082).
 func (c Client) JoinLibrary(ctx context.Context, address string) (Change, error) {

@@ -28,7 +28,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 public final class LibraryRepository {
 
     private static final String CARD_COLUMNS = """
-            s.id, s.namespace_id, s.name, s.description, s.when_to_use, s.source,
+            s.id, s.namespace_id, s.name, s.title, s.description, s.when_to_use, s.source,
             %s,
             %s AS updated_at,
             CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
@@ -85,6 +85,7 @@ public final class LibraryRepository {
                         rs.getString("id"),
                         rs.getString("namespace_id"),
                         rs.getString("name"),
+                        rs.getString("title"),
                         rs.getString("description"),
                         rs.getString("when_to_use"),
                         rs.getString("updated_at"),
@@ -177,6 +178,7 @@ public final class LibraryRepository {
                         rs.getString("id"),
                         rs.getString("namespace_id"),
                         rs.getString("name"),
+                        rs.getString("title"),
                         rs.getString("description"),
                         rs.getString("when_to_use"),
                         rs.getString("updated_at"),

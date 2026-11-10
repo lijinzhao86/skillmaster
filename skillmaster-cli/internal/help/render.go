@@ -22,6 +22,9 @@ func Render(cat Catalog, path string) string {
 
 	fmt.Fprintf(&b, "%s\n\n", spec.Summary)
 	fmt.Fprintf(&b, "用法：%s\n", usageLine(spec))
+	if spec.Note != "" {
+		fmt.Fprintf(&b, "%s\n", spec.Note)
+	}
 
 	if len(spec.Children) > 0 {
 		b.WriteString("\n子命令：\n")

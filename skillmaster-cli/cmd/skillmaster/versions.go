@@ -91,6 +91,7 @@ func showSkill(ctx context.Context, args []string) error {
 
 	var meta api.Metadata
 	var tags api.SkillTags
+	myWhenToUse := ""
 	_, err := authenticatedWith(ctx, noLogin, func(client api.Client) (struct{}, error) {
 		var err error
 		meta, err = client.Metadata(ctx, address, "")
@@ -101,12 +102,22 @@ func showSkill(ctx context.Context, args []string) error {
 		if err != nil {
 			return struct{}{}, err
 		}
+		// Only an entry in the caller's library has a personal sentence to read; asking outside
+		// the library would be a 403 the command should not turn into an error. A dormant entry
+		// is still in the library and its sentence is readable, even though the tags are not
+		// (`reason=dormant` is how the tags answer names that state).
+		if tags.MyTags.Readable || (tags.MyTags.Reason != nil && *tags.MyTags.Reason == "dormant") {
+			myWhenToUse, err = client.MyWhenToUse(ctx, address)
+			if err != nil {
+				return struct{}{}, err
+			}
+		}
 		return struct{}{}, nil
 	})
 	if err != nil {
 		return v14Error(err)
 	}
-	printSkillShow(address, meta, tags)
+	printSkillShow(address, meta, tags, myWhenToUse)
 	return nil
 }
 
@@ -153,13 +164,17 @@ func showLicense(ctx context.Context, args []string) error {
 // printSkillShow writes the card, in the order the PRD fixes: address, description, when to use,
 // compatibility, version, category, public tags, my tags. **An empty field is not printed** — a blank
 // label says nothing and makes the ones that do carry a value harder to find.
-func printSkillShow(address string, meta api.Metadata, tags api.SkillTags) {
+func printSkillShow(address string, meta api.Metadata, tags api.SkillTags,
+	myWhenToUse string) {
 	fmt.Println(address)
 	if meta.Description != "" {
 		fmt.Printf("  %s\n", meta.Description)
 	}
 	if meta.WhenToUse != "" {
 		fmt.Printf("  适用场景：%s\n", meta.WhenToUse)
+	}
+	if myWhenToUse != "" {
+		fmt.Printf("  我的适用场景：%s\n", myWhenToUse)
 	}
 	if meta.Compatibility != "" {
 		fmt.Printf("  运行环境：%s\n", meta.Compatibility)

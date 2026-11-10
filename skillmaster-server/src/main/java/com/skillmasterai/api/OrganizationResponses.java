@@ -65,6 +65,14 @@ final class OrganizationResponses {
     record Changed(boolean changed) {
     }
 
+    /**
+     * The caller's own when-to-use sentence (v59).
+     *
+     * @param whenToUse the normalized sentence, or null when the caller has never written one
+     */
+    record MyWhenToUse(String whenToUse) {
+    }
+
     record Category(String key, String name) {
     }
 

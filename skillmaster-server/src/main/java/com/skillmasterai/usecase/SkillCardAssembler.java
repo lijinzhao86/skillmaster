@@ -2,6 +2,7 @@ package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.GrantRole;
+import com.skillmasterai.modules.skill.MyWhenToUseService;
 import com.skillmasterai.modules.skill.SkillCatalogService.CatalogRow;
 import com.skillmasterai.modules.skill.SkillTagService;
 import com.skillmasterai.usecase.model.SkillCardView;
@@ -28,13 +29,26 @@ public class SkillCardAssembler {
 
     private final NamespaceService namespaces;
     private final SkillTagService tags;
+    private final MyWhenToUseService notes;
 
-    public SkillCardAssembler(NamespaceService namespaces, SkillTagService tags) {
+    public SkillCardAssembler(NamespaceService namespaces, SkillTagService tags,
+            MyWhenToUseService notes) {
         this.namespaces = namespaces;
         this.tags = tags;
+        this.notes = notes;
     }
 
     public List<SkillCardView> assemble(List<CatalogRow> rows, String userId) {
+        return assemble(rows, userId, true);
+    }
+
+    /**
+     * @param includeMyWhenToUse false on the public plane: ADR 0180 keeps the personal layer
+     *         library-only, and a public result that gained a private sentence would not be the
+     *         same answer it was before the note was written (v59 T7)
+     */
+    public List<SkillCardView> assemble(List<CatalogRow> rows, String userId,
+            boolean includeMyWhenToUse) {
         if (rows.isEmpty()) {
             return List.of();
         }
@@ -44,6 +58,12 @@ public class SkillCardAssembler {
         Map<String, List<SkillTagService.PublicTagView>> publicTags =
                 tags.publicTagsOfSkills(ids);
         Map<String, List<SkillTagService.MyTagView>> myTags = tags.myTagsOfSkills(userId, ids);
+        // One query for the page, like the tags. Only effective entries carry a sentence: a note
+        // that outlived the library entry sleeps with it (v59, ADR 0180).
+        Map<String, String> myWhenToUse = includeMyWhenToUse
+                ? notes.forSkills(userId,
+                        rows.stream().filter(CatalogRow::active).map(CatalogRow::id).toList())
+                : Map.of();
 
         return rows.stream().map(row -> new SkillCardView(
                 row.id(),
@@ -51,6 +71,8 @@ public class SkillCardAssembler {
                 row.name(),
                 row.description(),
                 row.whenToUse(),
+                row.active() ? myWhenToUse.get(row.id()) : null,
+                null,
                 row.source(),
                 /* **What the caller may do, not just what was granted** (v35): the higher of the
                    grant and the rung the skill hands to everybody. The order of the ladder is

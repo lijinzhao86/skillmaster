@@ -3,6 +3,7 @@ package com.skillmasterai.api;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.usecase.JoinSkillLibraryUseCase;
 import com.skillmasterai.usecase.LeaveSkillLibraryUseCase;
+import com.skillmasterai.usecase.MyWhenToUseUseCase;
 import com.skillmasterai.usecase.ReadSkillTagsUseCase;
 import com.skillmasterai.usecase.RestoreSkillUseCase;
 import com.skillmasterai.usecase.WriteMyTagUseCase;
@@ -30,10 +31,10 @@ import org.springframework.web.bind.annotation.RestController;
  * than a token) and in carrying a CSRF token; the decisions, the refusals and the audit rows come
  * from the same place (TD Q8).
  *
- * <p><strong>The six writes that can be a no-op answer 200 {@code {"changed": …}}.</strong> A
- * repeat join, a repeated tag, the shelf a skill already sits on and clearing nothing are all
- * states the caller asked for; 204 would leave the client unable to tell them from a real change.
- * A removal whose subject is absent is a 404 or a 409, not a no-op.
+ * <p><strong>The writes that can be a no-op answer 200 {@code {"changed": …}}.</strong> A repeat
+ * join, a repeated tag, the shelf a skill already sits on, the same personal sentence and clearing
+ * nothing are all states the caller asked for; 204 would leave the client unable to tell them from a
+ * real change. A removal whose subject is absent is a 404 or a 409, not a no-op.
  */
 @RestController
 @RequestMapping(path = SkillRoutes.BASE)
@@ -46,11 +47,13 @@ class SkillOrganizationController {
     private final WritePublicTagUseCase writePublicTag;
     private final WriteMyTagUseCase writeMyTag;
     private final RestoreSkillUseCase restore;
+    private final MyWhenToUseUseCase notes;
 
     SkillOrganizationController(ReadSkillTagsUseCase readTags,
             JoinSkillLibraryUseCase joinLibrary, LeaveSkillLibraryUseCase leaveLibrary,
             WriteSkillCategoryUseCase writeCategory, WritePublicTagUseCase writePublicTag,
-            WriteMyTagUseCase writeMyTag, RestoreSkillUseCase restore) {
+            WriteMyTagUseCase writeMyTag, RestoreSkillUseCase restore,
+            MyWhenToUseUseCase myWhenToUse) {
         this.readTags = readTags;
         this.joinLibrary = joinLibrary;
         this.leaveLibrary = leaveLibrary;
@@ -58,6 +61,7 @@ class SkillOrganizationController {
         this.writePublicTag = writePublicTag;
         this.writeMyTag = writeMyTag;
         this.restore = restore;
+        this.notes = myWhenToUse;
     }
 
     /** The three groups: category, public tags, the caller's private tags. */
@@ -141,6 +145,35 @@ class SkillOrganizationController {
         return changed(Optional.of(true));
     }
 
+    /** The caller's own sentence; {@code when_to_use} is null when they never wrote one. */
+    @GetMapping(path = SkillRoutes.MY_WHEN_TO_USE, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrganizationResponses.MyWhenToUse> myWhenToUse(@PathVariable String namespace,
+            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        MyWhenToUseUseCase.Read read = notes.read(namespace, name, subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new OrganizationResponses.MyWhenToUse(read.whenToUse()));
+    }
+
+    /** Writes or replaces the caller's sentence. The same text is {@code changed=false}. */
+    @PutMapping(path = SkillRoutes.MY_WHEN_TO_USE, consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrganizationResponses.Changed> setMyWhenToUse(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody MyWhenToUseBody body,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return changed(notes.set(namespace, name, body.whenToUse(), subject));
+    }
+
+    /**
+     * Clears the caller's sentence. No library gate: somebody who left can still remove their own
+     * data by address, and clearing nothing answers {@code changed=false}.
+     */
+    @DeleteMapping(path = SkillRoutes.MY_WHEN_TO_USE, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<OrganizationResponses.Changed> clearMyWhenToUse(@PathVariable String namespace,
+            @PathVariable String name, @AuthenticationPrincipal AuthenticatedSubject subject) {
+        return ResponseEntity.ok(new OrganizationResponses.Changed(
+                notes.clear(namespace, name, subject)));
+    }
+
     /**
      * Clears a soft delete. The owner's alone; a live skill is a 409 {@code skill_not_deleted},
      * and an address the caller cannot touch is §4.1's 404.
@@ -162,5 +195,8 @@ class SkillOrganizationController {
     }
 
     record CategoryBody(String key) {
+    }
+
+    record MyWhenToUseBody(String whenToUse) {
     }
 }

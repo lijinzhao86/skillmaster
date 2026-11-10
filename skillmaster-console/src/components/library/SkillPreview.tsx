@@ -173,6 +173,11 @@ export default function SkillPreview({
 }) {
   const panel = useRef<HTMLElement | null>(null)
   const href = `/skills/${encodeURIComponent(skill.namespace)}/${encodeURIComponent(skill.name)}`
+  /* v59: one reading, the effective one. Mine when written, the author's otherwise; the caption
+     says which, because the two are written for different readers. */
+  const myWhen = skill.my_when_to_use ?? ''
+  const shownWhen = myWhen !== '' ? myWhen : (skill.when_to_use ?? '')
+  const whenLabel = myWhen !== '' ? '我的适用场景' : '适用场景'
 
 
   /* **Focus lands in the pane on open.** It floats over the list on a narrow window, and without
@@ -258,13 +263,12 @@ export default function SkillPreview({
       <div className="preview-k">描述</div>
       <FoldableText text={skill.description} label="描述" />
 
-      {skill.when_to_use !== null && skill.when_to_use !== '' ? (
+      {shownWhen !== '' ? (
         <>
-          {/* **适用场景** is the product's own word for this field (`voice-spec.md` §名词表) and
-              the caption the skill page's 信息 tab already uses; 「什么时候该想起它」 was the only
-              place that said it another way (2026-10-31, the user's call). */}
-          <div className="preview-k">适用场景</div>
-          <FoldableText text={skill.when_to_use} label="适用场景" />
+          {/* **The effective sentence only.** Mine when written, the author's otherwise; the
+              caption distinguishes them rather than showing two blocks in a preview. */}
+          <div className="preview-k">{whenLabel}</div>
+          <FoldableText text={shownWhen} label={whenLabel} />
         </>
       ) : null}
 

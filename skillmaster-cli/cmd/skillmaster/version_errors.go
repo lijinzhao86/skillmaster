@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // cliFailure is an error with the machine-readable half `--json` promises.
@@ -139,6 +140,12 @@ func versionRefusal(err error) error {
 		// that says what to change — so it is looked up first. Without this, a refusal that carries
 		// `bad_pattern` reads as 「提交的内容有问题」, which names nothing the caller can act on.
 		if server.Code == "invalid_request" || server.Code == "invalid_upload" {
+			// ADR 0181's text refusals carry the field's actual and allowed code points. Read
+			// them before the issue table, whose single `too_long` line is about a tag's 200-word
+			// note and would put that number under a description with a 1024 ceiling.
+			if sentence, ok := textRefusal(server); ok {
+				return errors.New(sentence)
+			}
 			for _, issue := range issueValues(server.Details) {
 				if message, known := issueMessages[issue]; known {
 					return errors.New(message)
@@ -150,6 +157,43 @@ func versionRefusal(err error) error {
 		}
 	}
 	return err
+}
+
+// textRefusal writes the sentence for a skill-text field refusal (ADR 0181). It exists because
+// `too_long` alone does not say which field or which ceiling: description is 1024 code points and
+// the author's when_to_use is 200, and the tag note has its own `too_long` in the issue table.
+func textRefusal(server *api.ServerError) (string, bool) {
+	for _, detail := range server.DetailList {
+		if detail.Issue == "field_not_text" {
+			return fmt.Sprintf("%s要填文本，不能是数字或列表。", fieldLabel(detail.Field)), true
+		}
+		if detail.Issue == "required_field_missing" && detail.Field == "description" {
+			return "描述是必填的。", true
+		}
+		if detail.LimitCodePoints > 0 {
+			if detail.ActualCodePoints > 0 {
+				return fmt.Sprintf("%s有 %d 个字，超过 %d 个的上限。",
+					fieldLabel(detail.Field), detail.ActualCodePoints, detail.LimitCodePoints), true
+			}
+			return fmt.Sprintf("%s最多 %d 个字。", fieldLabel(detail.Field), detail.LimitCodePoints), true
+		}
+	}
+	return "", false
+}
+
+// fieldLabel names a skill-text field the way the interface does. The author's field can arrive as
+// `when_to_use` or `metadata.when_to_use` depending on whether it was written at the top level.
+func fieldLabel(field string) string {
+	switch {
+	case field == "description":
+		return "描述"
+	case strings.Contains(field, "when_to_use"):
+		return "适用场景"
+	case field == "":
+		return "这个字段"
+	default:
+		return "「" + field + "」"
+	}
 }
 
 // importCeilingBytes is the interim import cap (P3 removes it). It covers two guards — the
@@ -327,10 +371,14 @@ func classifyFailure(err error) *cliFailure {
 			// inside `details`, and looking it up here would replace the copy sentence with the
 			// tag-name rule (1–24 个字) — a different field's rule answering this one.
 			if server.Code == "invalid_request" || server.Code == "invalid_upload" {
-				for _, issue := range issueValues(server.Details) {
-					if message, known := issueMessages[issue]; known {
-						failure.Message = message
-						break
+				if sentence, known := textRefusal(server); known {
+					failure.Message = sentence
+				} else {
+					for _, issue := range issueValues(server.Details) {
+						if message, known := issueMessages[issue]; known {
+							failure.Message = message
+							break
+						}
 					}
 				}
 			}

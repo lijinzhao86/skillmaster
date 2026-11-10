@@ -56,6 +56,29 @@ public final class RetrievalService {
         }
     }
 
+    /** One skill's best private-sentence score (v59 P2). */
+    public record PersonalHit(String skillId, double score) {
+    }
+
+    /**
+     * Both library reads from one embedding call: the author vectors and the caller's own sentence
+     * vectors. One provider round trip is the point — a second call would double the only network
+     * cost the library search has.
+     *
+     * @param fallbackReason null when both reads ran; the reason when the provider failed
+     */
+    public record LibraryOutcome(List<Candidate> corpus, List<PersonalHit> personal,
+            String fallbackReason) {
+        public LibraryOutcome {
+            corpus = List.copyOf(corpus);
+            personal = List.copyOf(personal);
+        }
+
+        public boolean degraded() {
+            return fallbackReason != null;
+        }
+    }
+
     /** Whether semantic search may be attempted at all — the switch, not the provider's health. */
     public boolean enabled() {
         return embedder != null;
@@ -83,6 +106,39 @@ public final class RetrievalService {
         }
         return run(query, vector ->
                 repository.nearestWithin(embedder.model(), vector, skillIds, limit));
+    }
+
+    /**
+     * The library's two semantic reads in one provider call (v59 P2).
+     *
+     * <p>The personal read is by the caller's id and never touches anybody else's rows; the corpus
+     * read is the existing author-vector scan. A provider failure returns the same fallback reason
+     * the other paths use, and the caller keeps its exact S0/S1 evidence either way.
+     */
+    public LibraryOutcome searchLibrary(String query, String userId, List<String> skillIds,
+            int limit) {
+        if (embedder == null || query == null || query.isBlank() || skillIds.isEmpty()) {
+            return new LibraryOutcome(List.of(), List.of(), null);
+        }
+        try {
+            float[] vector = embedder.embed(List.of(query)).getFirst();
+            List<Candidate> corpus = repository.nearestWithin(embedder.model(), vector, skillIds,
+                    limit).stream()
+                    .filter(hit -> hit.score() >= settings.threshold())
+                    .map(hit -> new Candidate(hit.skillId(), hit.score()))
+                    .toList();
+            // The S2 gate compares the top two among the caller's own sentences, so it must see
+            // the whole library rather than the page being requested; a `limit`-sized read made
+            // the same hit confident at limit=1 and suppressed at limit=2.
+            List<PersonalHit> personal = repository.personalNearest(embedder.model(), userId,
+                    vector, skillIds, Math.max(limit, skillIds.size())).stream()
+                    .map(hit -> new PersonalHit(hit.skillId(), hit.score()))
+                    .toList();
+            return new LibraryOutcome(corpus, personal, null);
+        } catch (RuntimeException e) {
+            LOG.warn("library semantic search fell back to keyword: {}", e.getMessage());
+            return new LibraryOutcome(List.of(), List.of(), "语义检索暂不可用。");
+        }
     }
 
     private Outcome run(String query, Function<float[], List<EmbeddingRepository.Hit>> query1) {

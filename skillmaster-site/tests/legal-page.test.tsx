@@ -21,7 +21,7 @@ describe('the legal pages', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { level: 1, name: '隐私政策' })).toBeTruthy()
-    expect(document.querySelector('.legal-meta')?.textContent).toContain('版本 1.0')
+    expect(document.querySelector('.legal-meta')?.textContent).toContain('版本 1.1')
     // The deck is not here: this is a document, not the two-screen home page.
     expect(document.querySelector('.deck')).toBeNull()
     await waitFor(() => expect(document.title).toBe('隐私政策 · SkillMaster'))

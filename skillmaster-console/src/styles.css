@@ -2,7 +2,7 @@
    CSS. Custom properties so the palette is stated once. */
 
 @import './styles-editor-media.css'; @import './styles-notifications.css';
-@import './styles-logout.css';
+@import './styles-logout.css'; @import './styles-my-when.css';
 
 :root {
   /* Text in three weights of importance: the page's own words, the label beside a value, and the

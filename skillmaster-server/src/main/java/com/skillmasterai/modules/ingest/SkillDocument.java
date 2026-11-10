@@ -1,7 +1,10 @@
 package com.skillmasterai.modules.ingest;
 
+import com.skillmasterai.common.SkillTextFields;
 import java.util.Map;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * What a root {@code SKILL.md} has to say, and the one comparison the address makes with it.
@@ -19,6 +22,8 @@ import java.util.Optional;
  */
 public final class SkillDocument {
 
+    private static final Logger log = LoggerFactory.getLogger(SkillDocument.class);
+
     private SkillDocument() {
     }
 
@@ -29,9 +34,11 @@ public final class SkillDocument {
      * @param name        the frontmatter {@code name}
      * @param title       the frontmatter {@code title}, or the name when absent or blank
      * @param description the frontmatter {@code description} — required
+     * @param whenToUse   the author's {@code metadata.when_to_use} or its top-level fallback,
+     *                    normalized only by "blank means absent"; null when absent
      * @param frontmatter every field as parsed, unknown ones included, stored verbatim
      */
-    public record Document(String name, String title, String description,
+    public record Document(String name, String title, String description, String whenToUse,
             Map<String, Object> frontmatter) {
     }
 
@@ -42,13 +49,28 @@ public final class SkillDocument {
     public static Document parse(byte[] skillMd) {
         Map<String, Object> frontmatter = FrontmatterParser.parse(skillMd);
         String name = requiredText(frontmatter, "name");
-        String description = requiredText(frontmatter, "description");
         // The blank filter is what makes `title: ""` fall back the way an absent title does: a
         // present-but-empty title would otherwise reach every search card as an empty line.
         String title = optionalText(frontmatter, "title").filter(value -> !value.isBlank())
                 .orElse(name);
         requireUsableName(name);
-        return new Document(name, title, description, frontmatter);
+
+        // One contract for both author text fields, and every problem at once (ADR 0181). The
+        // same report is what publish re-evaluates from the stored frontmatter. The description
+        // goes in raw: a non-text value is one of the problems to report, not a reason to stop
+        // before the when_to_use check.
+        SkillTextFields.Report text =
+                SkillTextFields.inspect(frontmatter.get("description"), frontmatter);
+        if (!text.problems().isEmpty()) {
+            throw new IngestException(text.problems().getFirst().message(),
+                    text.problems().stream().map(SkillTextFields.Problem::detail)
+                            .toList());
+        }
+        for (String key : SkillTextFields.nearMissKeys(frontmatter)) {
+            log.warn("SKILL.md has '{}', which is not 'when_to_use'; the value is preserved"
+                    + " but does not participate in search", key);
+        }
+        return new Document(name, title, text.description(), text.whenToUse(), frontmatter);
     }
 
     /**

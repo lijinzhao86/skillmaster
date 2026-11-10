@@ -135,6 +135,9 @@ final class WebSkillRoutes {
 
     static final String CATEGORY = SKILL + "/category";
 
+    /** The caller's own when-to-use sentence (v59); the same three verbs as the API plane. */
+    static final String MY_WHEN_TO_USE = SKILL + "/my-when-to-use";
+
     /** Asking for a rung, and the queue the {@code admin} rung answers (ADR 0052). */
     static final String ACCESS_REQUESTS = SKILL + "/access-requests";
 

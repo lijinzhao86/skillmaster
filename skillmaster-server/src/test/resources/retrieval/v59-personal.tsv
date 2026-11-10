@@ -1,0 +1,31 @@
+# v59 的个人层评测：group <TAB> query <TAB> expected skill <TAB> my when-to-use。
+#
+# 与 v19 的 labeled.tsv 同一批 33 个 skill。两组各 12 条：
+#   personal-exact   查询里含一条 ≥3 汉字的连续说法，S1 应命中；
+#   personal-rewrite 查询是同一句的改写，没有 ≥3 汉字 / ≥5 拉丁字符的连续重合，S2 应召回。
+# 每条查询的 note 是要写给对应 skill 的那一句话；同一 skill 的两条共用一个 note。
+# 查询与 note 都是这一版的评测数据，不参与产品逻辑。
+personal-exact	帮我查一下今年国庆放假安排	byted-web-search	查放假安排
+personal-rewrite	今年十一假期到底怎么调休	byted-web-search	查放假安排
+personal-exact	把这段代码逻辑重新整理一下	coding	改代码逻辑
+personal-rewrite	这个方法里的重复分支帮我合并掉	coding	改代码逻辑
+personal-exact	帮我做一个产品发布会原型	huashu-design	做产品原型
+personal-rewrite	先画三个方向的高保真稿给我挑	huashu-design	做产品原型
+personal-exact	我这边有几条处理审批的单子	lark-approval	处理审批
+personal-rewrite	帮我把待办的单子都过一遍	lark-approval	处理审批
+personal-exact	妙搭应用线上报错了	lark-apps	妙搭应用
+personal-rewrite	我那个在线小工具线上出故障了	lark-apps	妙搭应用
+personal-exact	帮我查考勤记录	lark-attendance	查考勤
+personal-rewrite	这个月打卡有没有漏	lark-attendance	查考勤
+personal-exact	在飞书多维表格里建一张表	lark-base	多维表格
+personal-rewrite	帮我把这些数据整理成可筛选的表格	lark-base	多维表格
+personal-exact	帮我约一个会议室	lark-calendar	约会议室
+personal-rewrite	下周三下午找个空档开会	lark-calendar	约会议室
+personal-exact	帮我读一下这份飞书文档	lark-doc	读飞书文档
+personal-rewrite	这个链接里的内容帮我总结一下	lark-doc	读飞书文档
+personal-exact	给群里发条飞书消息	lark-im	发飞书消息
+personal-rewrite	在团队聊天里通知大家	lark-im	发飞书消息
+personal-exact	帮我写邮件给客户	lark-mail	写邮件
+personal-rewrite	起草一封给客户的信	lark-mail	写邮件
+personal-exact	查一下会议纪要	lark-meeting	查会议纪要
+personal-rewrite	上次开会的记录在哪	lark-meeting	查会议纪要

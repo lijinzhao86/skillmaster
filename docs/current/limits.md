@@ -1,4 +1,4 @@
-<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；重新生成：python3 scripts/docs/generate.py -->
+<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；skillmaster-server/src/main/java/com/skillmasterai/common/SkillFieldLimits.java；重新生成：python3 scripts/docs/generate.py -->
 
 # 上传与对象存储的上限（生成）
 
@@ -20,3 +20,14 @@
 |---|---|
 | 进对象存储的阈值 | 1048576 字节（1 MiB） |
 | 单个 blob 上限 | 104857600 字节（100 MiB） |
+
+## 技能文本字段的上限
+
+单位是 **Unicode 码点**：一个汉字、一个英文字母、一个标点都算 1，emoji 也按 1 个码点计（ADR 0181）。作者字段由 `SkillTextFields.inspect` 校验：写入时经 `SkillDocument.parse`，发布时经 `SkillMetadataService` 各调用一次；「我的适用场景」由它自己的写接口校验。
+
+| 常量 | 原始表达式 | 码点 |
+|---|---|---|
+| `SkillFieldLimits.DESCRIPTION_MIN_CODE_POINTS` | `1` | 1 |
+| `SkillFieldLimits.DESCRIPTION_MAX_CODE_POINTS` | `1024` | 1024 |
+| `SkillFieldLimits.AUTHOR_WHEN_TO_USE_MAX_CODE_POINTS` | `200` | 200 |
+| `SkillFieldLimits.MY_WHEN_TO_USE_MAX_CODE_POINTS` | `200` | 200 |

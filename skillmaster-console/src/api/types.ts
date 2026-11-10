@@ -43,6 +43,9 @@ export interface ErrorDetail {
   /** v39 size refusals; snake_case is the server's one global wire convention. */
   actual_bytes?: number
   limit_bytes?: number
+  /** v59 text refusals count Unicode code points, not bytes or UTF-16 units. */
+  actual_code_points?: number
+  limit_code_points?: number
 }
 
 /** The envelope every 4xx and 5xx carries; `details` is always present. */
@@ -620,6 +623,13 @@ export interface SkillCard {
   name: string
   description: string
   when_to_use: string | null
+  /**
+   * v59: the caller's own sentence, when the library entry is effective. It outranks the author's
+   * in the preview and in search; absent otherwise.
+   */
+  my_when_to_use?: string | null
+  /** v59: whether this search result was promoted by that sentence. */
+  my_when_to_use_matched?: boolean
   source: SkillSource | null
   /**
    * The caller's own rung on this skill, for the row's chip (v35); null or absent when they own it
@@ -648,6 +658,11 @@ export interface SkillCard {
   calls_bucket?: string | null
   last_used?: string | null
   joins?: number | null
+}
+
+/** `GET /web/skills/{ns}/{name}/my-when-to-use` (v59). */
+export interface MyWhenToUse {
+  when_to_use: string | null
 }
 
 /** `GET /web/library`: the card plus the three counts the page's empty states are read from. */

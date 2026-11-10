@@ -171,6 +171,10 @@ export default function SkillPreview({
     panel.current?.focus({ preventScroll: true })
   }, [skill.namespace, skill.name])
 
+  const hasMyWhen = skill.myWhenToUse !== undefined && skill.myWhenToUse !== ''
+  const previewWhen = hasMyWhen ? (skill.myWhenToUse ?? '') : skill.whenToUse
+  const previewWhenLabel = hasMyWhen ? '我的适用场景' : '适用场景'
+
   return (
     <aside
       className="skill-preview"
@@ -242,8 +246,10 @@ export default function SkillPreview({
       <div className="preview-k">描述</div>
       <FoldableText text={skill.description} label="描述" />
 
-      <div className="preview-k">适用场景</div>
-      <FoldableText text={skill.whenToUse} label="适用场景" />
+      {/* **写了我的适用场景就显示我的**；没写退回作者的那段。标签跟着换，读者一眼知道
+          这一段是谁写的——信息页上是「我的在上、作者在下」，预览只有一格，所以显示生效的那段。 */}
+      <div className="preview-k">{previewWhenLabel}</div>
+      <FoldableText text={previewWhen} label={previewWhenLabel} />
 
       <div className="preview-k">{deleted ? '删除于' : '更新于'}</div>
       <p className="preview-text preview-mono">{deleted ? skill.deleted : skill.updated}</p>

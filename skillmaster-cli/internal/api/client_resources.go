@@ -395,7 +395,12 @@ type Card struct {
 	// left out: a listing exists to answer "is this the skill I want", and Claude Code's own listing
 	// joins exactly these two (`description - when_to_use`).
 	WhenToUse string `json:"when_to_use"`
-	Namespace string `json:"namespace"`
+	// v59: the caller's own sentence, and whether this result was promoted by it. Empty on a public
+	// card and on a library entry nobody wrote one for; the effective reading prefers it over the
+	// author's.
+	MyWhenToUse        string `json:"my_when_to_use"`
+	MyWhenToUseMatched bool   `json:"my_when_to_use_matched"`
+	Namespace          string `json:"namespace"`
 
 	// Everything below is v14's half of the card (PRD §展示与计数口径, TD §响应形状). They are
 	// optional on the wire: the default card prints only the address and the reading, and `--verbose`
@@ -438,13 +443,17 @@ type Card struct {
 // listing is rendered. `when_to_use` is the author's `when_to_use`, and a skill whose author declared
 // none reads exactly as its description — no dangling separator.
 func (c Card) Summary() string {
-	if c.WhenToUse == "" {
+	when := c.WhenToUse
+	if c.MyWhenToUse != "" {
+		when = c.MyWhenToUse
+	}
+	if when == "" {
 		return c.Description
 	}
 	if c.Description == "" {
-		return c.WhenToUse
+		return when
 	}
-	return c.Description + " - " + c.WhenToUse
+	return c.Description + " - " + when
 }
 
 // Address is how a card is named back to the server — the two segments joined, which is also what a

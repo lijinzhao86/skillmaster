@@ -1,6 +1,6 @@
 # 待办（跨版本）
 
-> **最后更新**：2026-11-10
+> **最后更新**：2026-11-11
 > **这一份是什么**：仓库里待办的**唯一权威**。项目记忆里的 `project_*_backlog` 是种子与背景，条目以本文件为准。
 > **怎么维护**：开版时把相关条目搬进那一版的 `prd.md`（见 [`versions/`](../versions/README.md)）§范围；交付后从本文件删掉，历史留在那个版本的 `README.md` 与 `test-plan.md`。新加一条时写清四件事：**是什么、为什么现在不做、下一步卡在哪、记于何时**。**别处引用这里的条目时写标题，不写序号**——条目会删、编号只留缺口、不重排，序号引用会静默指错。
 
@@ -43,6 +43,8 @@
 | 38 | **QA 机器人（加载 guide skill）** | 一个加载 `skillmaster-guide` 与使用说明的对话式问答入口，回答新人与日常使用问题。**要定的四件事**：①载体——站内浮窗 / 独立页 / 微信客服 1:1（**企业微信外部群不接受官方 AI 机器人**，那条路走不通）；②加载方式——整包塞进上下文还是建检索（guide 是多文件，整包可能超预算）；③兜底——答不了转文档还是转人工，幻觉的责任边界；④隐私与成本——用户问题留不留存、限流。**为什么现在不做**：载体与隐私未定，且知识源依赖「面向人的使用说明书」先稳定。**下一步**：先定载体与知识源范围 → 一页 ADR（含隐私与成本）→ 小范围灰度，用真实问题集评准确率。 | [`skillmaster-guide`](../../skills/skillmaster-guide/) · [v42 PRD](../versions/v42-skill-source-sync/prd.md) · 「面向人的使用说明书」 | 2026-11-10 |
 | 39 | **新人旅程（人侧引导）** | 把「下载 CLI → 开通沙箱权限 → 第一次搜索 → 第一次 invoke → 第一次 `secret set`」串成一条**人**能走完的旅程。今天只有 agent 侧的 `skmr startup` 与营销首页，人侧没有步骤、没有验证、没有「卡住了怎么办」。**为什么现在不做**：沙箱自动放行卡在 ADR（见「沙箱内自动放行 SkillMaster 目录的读写」），文档站位置未定（见「面向人的使用说明书」），两段定了才串得起来。**下一步**：先定完成判据（如：新用户 15 分钟内第一次成功 invoke）与每一步的载体（站内 / CLI 打印 / agent 提示），再按判据串流程。 | [v17 CLI startup](../versions/v17-cli-startup/README.md) · [ADR 0129](../decisions/0129-onboarding-delivers-a-skill-not-a-memory-line.md) · 「沙箱内自动放行 SkillMaster 目录的读写」 · 「面向人的使用说明书」 | 2026-11-10 |
 | 40 | **云端部署：先定义** | 2026-11-10 用户提出，但今天 TODO 与 `docs/current/` 都**没有这个概念**。至少要分清三种可能：①把 skill 部署到云端供 agent 远程调用（不落本机）；②把 SkillMaster 部署进客户自己的环境（私有化）；③把某个 skill 打成可独立运行的远程服务。三者产品面、鉴权、计费、运维完全不同。**为什么现在不做**：定义都没有，无法估算与排期。**下一步**：先写一页问题定义——谁用、什么场景、与 `skmr invoke` / 本机安装的关系、鉴权与计费归谁；成立再开 ADR 与大版本。 | [target/design.md](../target/design.md) · [v51 PRD](../versions/v51-skill-runtime/prd.md) · 「新人旅程（人侧引导）」 | 2026-11-10 |
+| 41 | **公域向量索引（HNSW）** | 公域语义检索今天是对 `skill_embedding` 的全表精确扫（`EmbeddingRepository.nearest`：`ORDER BY embedding <=> q`，没有 ANN 索引），单次 `O(N·d)`；库内检索按库的 id 集扫，不受影响。**为什么现在不做**：公域规模还小（实际已发布条数见「上线闸」，未核实），精确扫的延迟可接受；HNSW 是近似检索，会牺牲召回，且 pgvector 的 ANN 与可见性/分类/标签过滤同时使用时是否走索引要实测，现在加不划算。**下一步**：先用 `EXPLAIN (ANALYZE)` 加真实查询量出「公域可见条数 → P95 延迟」的拐点，用它定触发条件，不拍数字；拐点到了再开一条 ADR 记录「精确扫 → 近似扫」的取舍（召回损失 vs 延迟），然后定 `m` / `ef_construction` / `ef_search`，并比较 HNSW 与 ivfflat。 | `skillmaster-server/src/main/java/com/skillmasterai/modules/retrieval/internal/EmbeddingRepository.java` · `skillmaster-server/src/main/resources/db/migration/V30__skill_embeddings.sql` · [`M13`](modules/M13-retrieval.md) | 2026-11-10 |
+| 43 | **同步拒绝的回执汇总发运营邮箱** | 导入 / 同步按契约拒绝并跳过后，把被拒条目整理成一份回执：地址、来源仓库、字段、问题码、当前值/上限；**不带 skill 全文**。定期发到运营邮箱，便于运营联系来源或修规则。**为什么现在不做**：先让字段上限版的拒绝闸落地；运营邮箱地址、发送频率、聚合任务位置、留存与隐私口径都没定。**下一步**：定邮箱与频率 → 在同步任务里收集拒绝原因（现在只记日志）→ 生成汇总（只字段与来源，不回传内容）→ 发送与留档；若量大再考虑按来源聚合。 | [`v50 TD`](../versions/v50-open-source-sync/technical-design.md) · `skillmaster-server/src/main/java/com/skillmasterai/usecase/sync/SyncPipeline.java` · [v59 PRD](../versions/v59-personal-scenario/prd.md) · [ADR 0181](../decisions/0181-text-limits-use-unicode-code-points.md) | 2026-11-11 |
 
 ## 上线闸（不是功能，但缺了不能上）
 

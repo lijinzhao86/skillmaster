@@ -54,6 +54,83 @@ public final class EmbeddingRepository {
                 .list();
     }
 
+    /* ---- v59: the caller's own sentence vectors ---- */
+
+    /**
+     * The best cosine per skill among the caller's own sentence vectors.
+     *
+     * <p>Grouped because a sentence is stored one row per sentence: the query compares against
+     * every sentence and keeps the closest, which is what "the sentence mentions this situation"
+     * means. The user id is part of the predicate, not a join — this table is private to its
+     * author and no other reader may reach a row.
+     */
+    public List<Hit> personalNearest(String model, String userId, float[] vector,
+            List<String> skillIds, int limit) {
+        if (skillIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("""
+                SELECT skill_id, max(1 - (embedding <=> CAST(:vector AS vector))) AS score
+                  FROM my_skill_when_to_use_embedding
+                 WHERE model = :model
+                   AND user_id = :userId
+                   AND skill_id = ANY(:skillIds)
+                 GROUP BY skill_id
+                 ORDER BY score DESC
+                 LIMIT :limit
+                """)
+                .param("model", model)
+                .param("userId", userId)
+                .param("vector", literalOf(vector))
+                .param("skillIds", skillIds.toArray(String[]::new))
+                .param("limit", limit)
+                .query((rs, rowNum) -> new Hit(rs.getString("skill_id"), rs.getDouble("score")))
+                .list();
+    }
+
+    /** Replaces every sentence vector for one private sentence; the note is the root. */
+    public void replacePersonal(String userId, String skillId, String model,
+            List<float[]> vectors, String at) {
+        deletePersonal(userId, skillId, model);
+        for (int i = 0; i < vectors.size(); i++) {
+            jdbc.sql("""
+                    INSERT INTO my_skill_when_to_use_embedding
+                        (user_id, skill_id, sentence_no, model, embedding, updated_at)
+                    VALUES (:userId, :skillId, :sentenceNo, :model,
+                            CAST(:vector AS vector), :at)
+                    """)
+                    .param("userId", userId)
+                    .param("skillId", skillId)
+                    .param("sentenceNo", i)
+                    .param("model", model)
+                    .param("vector", literalOf(vectors.get(i)))
+                    .param("at", at)
+                    .update();
+        }
+    }
+
+    public void deletePersonal(String userId, String skillId, String model) {
+        jdbc.sql("""
+                DELETE FROM my_skill_when_to_use_embedding
+                 WHERE user_id = :userId AND skill_id = :skillId AND model = :model
+                """)
+                .param("userId", userId)
+                .param("skillId", skillId)
+                .param("model", model)
+                .update();
+    }
+
+    /** Removes every model's vectors for one note — used when there is no embedder to name one. */
+    public void deletePersonalAnyModel(String userId, String skillId) {
+        jdbc.sql("""
+                DELETE FROM my_skill_when_to_use_embedding
+                 WHERE user_id = :userId AND skill_id = :skillId
+                """)
+                .param("userId", userId)
+                .param("skillId", skillId)
+                .update();
+    }
+
     /**
      * The nearest vectors <em>within</em> a given set of skills.
      *
