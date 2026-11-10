@@ -566,7 +566,14 @@ def gen_schema() -> str:
             found = len(regex.findall(text))
             if found != expected:
                 fail(f"{path.name}：{label} 出现 {expected} 次，只解析到 {found} 次")
-        for name, body in CREATE_RE.findall(text):
+        # A partitioned table ends `) PARTITION BY RANGE (at);`. The non-greedy body would stop
+        # at the `)` inside `(at)` and turn the clause into part of the last column, so the
+        # partition suffix is removed before the body is read. The table itself is still the same
+        # table; partitioning is a runtime property, not a column.
+        create_text = re.sub(
+            r"\)\s*PARTITION BY\s+RANGE\s*\([^)]*\)\s*;", ");", text, flags=re.I
+        )
+        for name, body in CREATE_RE.findall(create_text):
             ensure(name)
             for definition in split_definitions(body):
                 # A CHECK constraint spans lines and contains commas of its own; splitting by line

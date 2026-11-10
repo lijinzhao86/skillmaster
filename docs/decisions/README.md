@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 178 条。
+共 179 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -186,3 +186,4 @@
 | [0176](0176-publishing-transfers-ownership-out-of-the-personal-namespace.md) | 发布到公开市场即转出个人命名空间 | 已采纳（原则；实现留给允许普通用户发布公开的那一版） | 2026-11-09 |
 | [0177](0177-read-proof-binds-to-file-content.md) | 读凭证绑文件内容，不绑整版摘要 | 已采纳 | 2026-11-10 |
 | [0178](0178-run-resolves-drafts-through-the-author-plane.md) | `run` 认同一套版本引用，草稿可在发布前执行 | 已采纳 | 2026-11-10 |
+| [0179](0179-personal-usage-is-visible-only-to-its-owner.md) | 行为明细只给本人，聚合给所有者，保留 90 天 | 已采纳 | 2026-11-10 |

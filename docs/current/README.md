@@ -65,6 +65,7 @@ docs/current/
 | [`modules/M14-notification.md`](modules/M14-notification.md) | M14 通知：一条事件 + 每人已读、业务对象指针与结果快照、为什么不读业务表 | **已就位**（v45） |
 | [`modules/M15-metrics.md`](modules/M15-metrics.md) | M15 使用度量：按 scope 的两条序列、隐私阈值与保留期、为什么不认识公开 / 私有 | **已就位**（v49） |
 | [`modules/M16-secret.md`](modules/M16-secret.md) | M16 服务凭据：值与绑定两层、唯一的解密出口、配额与共享的规则、为什么把分享入口留在控制台 | **已就位**（v52） |
+| [`modules/M17-activity.md`](modules/M17-activity.md) | M17 行为明细：两张表、关联与翻页、90 天分区与归档、注销删除、与 M15 / 审计的边界 | **已就位**（v58） |
 
 ## 模块索引
 
