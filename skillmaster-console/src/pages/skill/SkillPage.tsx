@@ -24,6 +24,7 @@ import SkillSymbols from './SkillSymbols'
 import InfoTab from './InfoTab'
 import FilesTab from './FilesTab'
 import VersionsTab from './VersionsTab'
+import UsagePane from '../../components/usage/UsagePane'
 import SettingsTab from './SettingsTab'
 import SkillPageDialogs from './SkillPageDialogs'
 import {
@@ -485,6 +486,8 @@ export default function SkillPage({
               hasBaselineFor={versions.hasBaselineFor}
               onClearFilters={versions.clearFilters}
             />
+          ) : tab === 'usage' ? (
+            <UsagePane skill={skill} namespace={namespace} name={name} />
           ) : tab === 'settings' ? (
             <SettingsTab
               skill={skill}

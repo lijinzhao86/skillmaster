@@ -46,6 +46,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   const onSkillPage = path.startsWith('/skills')
   const onDiscover = path === '/discover' || (onSkillPage && skillOwner === 'discover')
   const onSkills = path === '/' || (onSkillPage && skillOwner === 'skills')
+  const onUsage = path === '/usage'
   const onTags = path === '/my-tags'
   const onPublish = path === '/publish'
   const onAccount = path === '/account'
@@ -288,6 +289,19 @@ export default function AppShell({ children }: { children?: ReactNode }) {
             </svg>
           </span>
           <span className="nav-label">我的 skill</span>
+        </a>
+        <a
+          className={onUsage ? 'nav-item is-active' : 'nav-item'}
+          href="/usage"
+          aria-current={onUsage ? 'page' : undefined}
+        >
+          <span className="nav-icon">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12 7.6V12l3 1.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <span className="nav-label">使用记录</span>
         </a>
         <NavGroup
           id="navManage"
