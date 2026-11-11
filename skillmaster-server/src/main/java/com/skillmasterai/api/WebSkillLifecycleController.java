@@ -11,6 +11,7 @@ import com.skillmasterai.usecase.PublishSkillVersionUseCase;
 import com.skillmasterai.usecase.ReadAuthoredSkillUseCase;
 import com.skillmasterai.usecase.RestoreSkillUseCase;
 import com.skillmasterai.usecase.RevokeSkillShareUseCase;
+import com.skillmasterai.usecase.SetSkillOfflineUseCase;
 import com.skillmasterai.usecase.SoftDeleteSkillUseCase;
 import com.skillmasterai.usecase.UpdateSkillVisibilityUseCase;
 import org.springframework.http.HttpStatus;
@@ -256,18 +257,20 @@ class WebSkillLifecycleController {
     @PostMapping(WebSkillRoutes.OFFLINE)
     ResponseEntity<OfflineResponse> offline(@PathVariable String namespace,
             @PathVariable String name, Authentication caller) {
-        setOffline.set(namespace, name, true, AuthenticatedSubject.ofSession(caller.getName()))
+        SetSkillOfflineUseCase.State state = setOffline
+                .set(namespace, name, true, AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.ok(new OfflineResponse(true));
+        return ResponseEntity.ok(new OfflineResponse(state.offline(), state.pendingUntil()));
     }
 
-    /** Resumes serving. */
+    /** Resumes serving, or cancels a 下线中 ramp. */
     @PostMapping(WebSkillRoutes.ONLINE)
     ResponseEntity<OfflineResponse> online(@PathVariable String namespace,
             @PathVariable String name, Authentication caller) {
-        setOffline.set(namespace, name, false, AuthenticatedSubject.ofSession(caller.getName()))
+        SetSkillOfflineUseCase.State state = setOffline
+                .set(namespace, name, false, AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.ok(new OfflineResponse(false));
+        return ResponseEntity.ok(new OfflineResponse(state.offline(), state.pendingUntil()));
     }
 
     /**
@@ -352,11 +355,19 @@ class WebSkillLifecycleController {
      * way around ownership (ADR 0050 §决定 5).
      */
     @PostMapping(WebSkillRoutes.RESTORE)
-    ResponseEntity<Void> restore(@PathVariable String namespace, @PathVariable String name,
+    ResponseEntity<OrganizationResponses.Restored> restore(@PathVariable String namespace,
+            @PathVariable String name, @RequestBody(required = false) RestoreBody body,
             Authentication caller) {
-        restore.restore(namespace, name, AuthenticatedSubject.ofSession(caller.getName()))
+        // v61 (ADR 0183): the tombstone may come back under a freed name when a live skill has
+        // taken the original. The page has to say which address it now answers to. The optional
+        // `id` is the deleted list's row — several tombstones can share a name, and the reader
+        // clicked one of them.
+        com.skillmasterai.modules.skill.SkillMetadataService.Restored restored = restore
+                .restore(namespace, name, body == null ? null : body.id(),
+                        AuthenticatedSubject.ofSession(caller.getName()))
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(new OrganizationResponses.Restored(
+                namespace + "/" + restored.name(), restored.renamed()));
     }
 
     record NameBody(String name) {
@@ -385,7 +396,11 @@ class WebSkillLifecycleController {
     record ReleaseTypeResponse(String release_type) {
     }
 
-    record OfflineResponse(boolean offline) {
+    record OfflineResponse(boolean offline, String pendingUntil) {
+    }
+
+    /** The tombstone to restore, when the deleted list knows which row was clicked. */
+    record RestoreBody(String id) {
     }
 
 }

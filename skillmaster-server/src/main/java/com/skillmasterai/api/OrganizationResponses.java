@@ -62,6 +62,10 @@ final class OrganizationResponses {
      * The client turns it into "已经在你的库里。"/"已经贴过"/"已经是这个分类。" rather than a second
      * audit row or a misleading success message.
      */
+    /** v61: the address a restore landed on, and whether a live skill forced the suffix rename. */
+    record Restored(String address, boolean renamed) {
+    }
+
     record Changed(boolean changed) {
     }
 

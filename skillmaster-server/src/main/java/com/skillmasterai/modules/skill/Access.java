@@ -52,6 +52,8 @@ public record Access(
         String source,
         String currentVersionId,
         String offlineAt,
+        String offlinePendingAt,
+        String offlineDueAt,
         boolean owns,
         String rung,
         String callerId,
@@ -66,5 +68,30 @@ public record Access(
      */
     public boolean atLeast(String required) {
         return owns || GrantRole.atLeast(rung, required);
+    }
+
+    /**
+     * Whether the skill is offline <em>now</em> — the switch, or a ramp whose date has passed even
+     * if the daily job has not materialised it yet (v61, ADR 0184).
+     *
+     * <p><strong>One definition, because the read paths used to each write their own.</strong>
+     * Every consumer decision that is really "is it serving" asks this; {@code offlineAt} alone
+     * leaves the window between the due instant and the sweep reading as online, which is a day in
+     * which copy worked while every read answered 503.
+     */
+    public boolean offlineNow() {
+        return offlineAt != null
+                || (offlineDueAt != null
+                    && !com.skillmasterai.common.Timestamps.parse(offlineDueAt).isAfter(
+                            java.time.Instant.now()));
+    }
+
+    /**
+     * Still inside the ramp: serving with a warning, and not joinable (v61, ADR 0184). The mirror
+     * of {@link #offlineNow()} — a due date that has passed is offline, never pending — so the two
+     * answers cannot disagree between the due instant and the job that materialises it.
+     */
+    public boolean pendingNow() {
+        return offlineAt == null && offlineDueAt != null && !offlineNow();
     }
 }

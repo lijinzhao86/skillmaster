@@ -128,9 +128,9 @@ public final class SourceRepository {
      * origin (which would cascade away its snapshots).
      */
     public Optional<SkillSource> findByAddress(String namespaceId, String name) {
-        /* A soft-deleted skill is not an origin conflict: the submission path refuses it with
-           `skill_deleted`, which is the answer the operator can act on. Hiding it here is what
-           keeps the preflight from reporting the wrong reason. */
+        /* A soft-deleted skill is not an origin conflict: since v61 it no longer holds its name,
+           and a submission creates a new live skill beside it. Filtering deleted rows here keeps
+           the preflight from attaching a new skill to a tombstone's origin. */
         return jdbc.sql("SELECT src.id, src.skill_id, src.role, src.kind, src.locator, src.path,"
                         + " src.label, src.url FROM skill_source src"
                         + " JOIN skill k ON k.id = src.skill_id"

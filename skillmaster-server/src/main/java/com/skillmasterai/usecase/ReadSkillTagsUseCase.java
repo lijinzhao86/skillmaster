@@ -59,10 +59,16 @@ public class ReadSkillTagsUseCase {
                 myTags = new MyTags(true, null,
                         tags.myTagsOnSkill(subject.userId(), standing.skillId()));
             }
+            // v61: a skill inside its 下线中 ramp is still findable but not joinable, so the page
+            // draws the reason instead of a button that the server would refuse (ADR 0184).
+            boolean pending = standing.offlineDueAt() != null
+                    && com.skillmasterai.common.Timestamps.parse(standing.offlineDueAt())
+                            .isAfter(com.skillmasterai.common.Timestamps.parse(
+                                    com.skillmasterai.common.Timestamps.now()));
             var library = new SkillTagService.LibraryView(
                     standing.source(),
                     standing.active(),
-                    !standing.inLibrary() && standing.discoverable(),
+                    !standing.inLibrary() && standing.discoverable() && !pending,
                     "joined".equals(standing.source()));
             return new TagGroups(category, publicTags, myTags, library);
         });

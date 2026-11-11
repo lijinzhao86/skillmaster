@@ -3,6 +3,7 @@ package com.skillmasterai.modules.notification.internal;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.notification.Notification;
 import com.skillmasterai.modules.notification.NotificationDraft;
+import com.skillmasterai.modules.notification.NotificationKinds;
 import com.skillmasterai.modules.notification.NotificationQuery;
 import java.util.Collection;
 import java.util.List;
@@ -208,14 +209,19 @@ public final class NotificationRepository {
      * makes the bell's number and {@code list --unread} agree.
      */
     public long unread(String userId, Collection<String> administeredSkillIds) {
+        // v61: a ramp notice that was cancelled or completed stops counting — `expires_at` is its
+        // "still true" instant, and the bell must not keep asking about a countdown that is over.
         return jdbc.sql("""
                 SELECT COUNT(*)
                   FROM notification n
                   JOIN notification_recipient r ON r.notification_id = n.id
                  WHERE r.user_id = :userId AND r.read_at IS NULL AND %s
+                   AND (n.kind <> :rampKind OR n.expires_at IS NULL OR n.expires_at > :now)
                 """.formatted(VISIBLE))
                 .param("userId", userId)
                 .param("adminSkillIds", administeredSkillIds.toArray(String[]::new))
+                .param("rampKind", NotificationKinds.SKILL_OFFLINE_SCHEDULED)
+                .param("now", com.skillmasterai.common.Timestamps.now())
                 .query(Long.class)
                 .single();
     }
@@ -252,6 +258,25 @@ public final class NotificationRepository {
                 .update();
     }
 
+    /**
+     * Shortens the open 下线中 notice for a skill to {@code at} (v61), so the feed stops showing it.
+     *
+     * <p>Only rows that are still open in the future are touched: a notice already expired (or
+     * resolved) is history and is left as it is.
+     */
+    public int expireOfflineScheduled(String skillId, String at) {
+        return jdbc.sql("""
+                UPDATE notification
+                   SET expires_at = :at
+                 WHERE kind = :kind AND skill_id = :skillId
+                   AND (expires_at IS NULL OR expires_at > :at)
+                """)
+                .param("kind", NotificationKinds.SKILL_OFFLINE_SCHEDULED)
+                .param("skillId", skillId)
+                .param("at", at)
+                .update();
+    }
+
     /** @return how many rows were newly marked; already-read rows are not counted again */
     public int markAllRead(String userId, Collection<String> administeredSkillIds, String at) {
         return jdbc.sql("""
@@ -273,14 +298,22 @@ public final class NotificationRepository {
                     ((n.kind IN ('share_invitation', 'access_request')
                       AND n.resolved_at IS NULL
                       AND (n.expires_at IS NULL OR n.expires_at > :now))
-                     OR r.read_at IS NULL)
+                     OR (r.read_at IS NULL
+                         AND (n.kind <> 'skill_offline_scheduled'
+                              OR n.expires_at IS NULL OR n.expires_at > :now)))
                     """;
             case PENDING -> """
                     (n.kind IN ('share_invitation', 'access_request')
                      AND n.resolved_at IS NULL
                      AND (n.expires_at IS NULL OR n.expires_at > :now))
                     """;
-            case ALL -> "TRUE";
+            // **An expired ramp notice is history, not a row to act on.** The cancellation or
+            // completion announcement is what the history shows; the dead "will go offline on …"
+            // line would otherwise still offer a copy for a date that has passed (v61 audit).
+            case ALL -> """
+                    (n.kind <> 'skill_offline_scheduled'
+                     OR n.expires_at IS NULL OR n.expires_at > :now)
+                    """;
         };
         String visible = VISIBLE;
         String unread = query.unreadOnly() ? "AND r.read_at IS NULL" : "";

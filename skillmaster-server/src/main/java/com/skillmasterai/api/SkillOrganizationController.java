@@ -179,10 +179,17 @@ class SkillOrganizationController {
      * and an address the caller cannot touch is §4.1's 404.
      */
     @PostMapping(SkillRoutes.RESTORE)
-    ResponseEntity<Void> restore(@PathVariable String namespace, @PathVariable String name,
+    ResponseEntity<OrganizationResponses.Restored> restore(@PathVariable String namespace,
+            @PathVariable String name,
+            @RequestBody(required = false) RestoreBody body,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        restore.restoreFromApi(namespace, name, subject).orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.noContent().build();
+        // v61 (ADR 0183): several tombstones may share a name. A caller that knows which row it
+        // means passes its id; without one the newest tombstone answers, as it always did.
+        com.skillmasterai.modules.skill.SkillMetadataService.Restored restored = restore
+                .restoreFromApi(namespace, name, body == null ? null : body.id(), subject)
+                .orElseThrow(SkillNotFoundException::new);
+        return ResponseEntity.ok(new OrganizationResponses.Restored(
+                namespace + "/" + restored.name(), restored.renamed()));
     }
 
     private static ResponseEntity<OrganizationResponses.Changed> changed(
@@ -192,6 +199,10 @@ class SkillOrganizationController {
     }
 
     record TagBody(String name) {
+    }
+
+    /** The tombstone to restore; absent means the newest one under that address. */
+    record RestoreBody(String id) {
     }
 
     record CategoryBody(String key) {

@@ -31,15 +31,13 @@ public final class LibraryRepository {
             s.id, s.namespace_id, s.name, s.title, s.description, s.when_to_use, s.source,
             %s,
             %s AS updated_at,
-            CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
-                 WHEN s.current_version_id IS NULL THEN 'draft'
-                 WHEN s.offline_at IS NOT NULL THEN 'offline'
-                 ELSE 'live' END AS state,
+            %s AS state,
             s.current_version_name AS version,
             s.deleted_at, s.category_key, c.name AS category_name,
-            (s.source IS NOT NULL AND %s) AS active
+            (s.source IS NOT NULL AND %s) AS active,
+            %s AS offline_pending_until
             """.formatted(SkillPredicates.STANDING, SkillPredicates.LIST_UPDATED_AT,
-            SkillPredicates.ACTIVE);
+            SkillPredicates.STATE, SkillPredicates.ACTIVE, SkillPredicates.PENDING_UNTIL);
 
     private final JdbcClient jdbc;
 
@@ -98,7 +96,8 @@ public final class LibraryRepository {
                         rs.getString("deleted_at"),
                         rs.getString("category_key"),
                         rs.getString("category_name"),
-                        rs.getBoolean("active"))).list();
+                        rs.getBoolean("active"),
+                        rs.getString("offline_pending_until"))).list();
     }
 
     /** The current filters' size, before the page is cut. */
@@ -191,7 +190,8 @@ public final class LibraryRepository {
                         rs.getString("deleted_at"),
                         rs.getString("category_key"),
                         rs.getString("category_name"),
-                        rs.getBoolean("active"))).list();
+                        rs.getBoolean("active"),
+                        rs.getString("offline_pending_until"))).list();
     }
 
     /**
@@ -295,11 +295,17 @@ public final class LibraryRepository {
         StringBuilder sql = new StringBuilder("WHERE s.source IS NOT NULL");
         switch (query.show()) {
             case "live" -> sql.append(" AND ").append(SkillPredicates.ACTIVE)
-                    .append(" AND s.current_version_id IS NOT NULL AND s.offline_at IS NULL");
+                    .append(" AND s.current_version_id IS NOT NULL AND NOT ")
+                    .append(SkillPredicates.OFFLINE);
             case "draft" -> sql.append(" AND ").append(SkillPredicates.ACTIVE)
                     .append(" AND s.current_version_id IS NULL");
             case "offline" -> sql.append(" AND ").append(SkillPredicates.ACTIVE)
-                    .append(" AND s.offline_at IS NOT NULL");
+                    .append(" AND ").append(SkillPredicates.OFFLINE);
+            // v61: a public skill inside its ramp. Still in the live list; this view is the
+            // narrower question the CLI's `--show pending` asks.
+            case "pending" -> sql.append(" AND ").append(SkillPredicates.ACTIVE)
+                    .append(" AND s.current_version_id IS NOT NULL AND ")
+                    .append(SkillPredicates.PENDING);
             case "all" -> sql.append(" AND ").append(SkillPredicates.ACTIVE);
             case "deleted" -> sql.append(" AND s.source = 'created' AND s.deleted_at IS NOT NULL");
             default -> throw new IllegalStateException("unknown library show: " + query.show());

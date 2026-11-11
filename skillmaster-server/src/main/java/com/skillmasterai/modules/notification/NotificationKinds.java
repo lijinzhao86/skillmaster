@@ -13,6 +13,12 @@ public final class NotificationKinds {
      * skill rather than a request.
      */
     public static final String SKILL_UNAVAILABLE = "skill_unavailable";
+    /**
+     * A public skill entered its 下线中 ramp (v61, ADR 0184). Announcement-shaped, with the
+     * deadline in {@code expires_at}; the client renders it as a clock row and offers
+     * 「复制到我的库」.
+     */
+    public static final String SKILL_OFFLINE_SCHEDULED = "skill_offline_scheduled";
 
     private NotificationKinds() {
     }

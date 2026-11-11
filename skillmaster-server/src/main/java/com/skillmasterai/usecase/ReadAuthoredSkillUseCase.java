@@ -123,7 +123,29 @@ public class ReadAuthoredSkillUseCase {
                 // otherwise the round trips are the number of versions.
                 accounts.handlesOf(view.versions().stream()
                         .map(VersionSummary::submittedBy).distinct().toList()),
-                view.filesVisible(), view.offlineAt(), resolved.skillId());
+                view.filesVisible(), offlineAt(resolved), pendingUntil(resolved),
+                metadata.grantees(resolved.skillId()), resolved.skillId());
+    }
+
+    /**
+     * The derived offline fact: {@code offline_at} once the owner switched it off, and the ramp's
+     * due date once that date has passed even if the daily job has not materialised it yet — the
+     * same read-time rule the consumption plane applies (ADR 0184). A past due date is therefore
+     * never shown as 下线中.
+     */
+    private static String offlineAt(Access access) {
+        if (access.offlineAt() != null) {
+            return access.offlineAt();
+        }
+        return access.offlineNow() ? access.offlineDueAt() : null;
+    }
+
+    /** The ramp's date while it is still ahead; null once it is due or when no ramp is open. */
+    private static String pendingUntil(Access access) {
+        if (access.offlineAt() != null || access.offlineDueAt() == null) {
+            return null;
+        }
+        return access.offlineNow() ? null : access.offlineDueAt();
     }
 
     /** The original {@code SKILL.md} bytes, from a version that need not be published. */

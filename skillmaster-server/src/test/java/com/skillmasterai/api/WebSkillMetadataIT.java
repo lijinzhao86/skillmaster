@@ -2,17 +2,22 @@ package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.support.AbstractAccountIT;
 import com.skillmasterai.support.Browser;
 import com.skillmasterai.support.Multipart;
 import com.skillmasterai.support.Zips;
+import com.skillmasterai.usecase.CompleteDueOfflinesUseCase;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
@@ -43,6 +48,10 @@ class WebSkillMetadataIT extends AbstractAccountIT {
     private String stranger;
     private String strangerToken;
     private Browser strangerBrowser;
+
+    /** The daily sweep, called directly: the job itself is not a bean under the test profile. */
+    @Autowired
+    private CompleteDueOfflinesUseCase dueOfflines;
 
     /**
      * Stranger first, then friend, then the owner: the shared {@link #browser} is signed in as
@@ -146,22 +155,37 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(friendBrowser.post(uri(path("/restore")), "", friendBrowser.csrfToken())
                 .statusCode()).isEqualTo(404);
 
-        // The name stays taken while the row is deleted: a submission is refused rather than
-        // resurrecting the skill or creating a second one under the same name.
+        // v61 (ADR 0183): the name is free the moment the row is deleted. This submission creates
+        // a second skill under the same name rather than resurrecting the tombstone.
         HttpResponse<String> resubmitted = submit(skill("pdf-tools", "9.9.9"));
-        assertThat(resubmitted.statusCode()).isEqualTo(409);
-        assertThat(JSON.readTree(resubmitted.body()).get("error").get("code").asText())
-                .as("ADR 0071: the code names the reason, so the page can offer 去恢复")
-                .isEqualTo("skill_deleted");
-        assertThat(count("SELECT count(*) FROM skill WHERE name = 'pdf-tools'")).isEqualTo(1);
+        assertThat(resubmitted.statusCode()).as("resubmitted: %s", resubmitted.body())
+                .isEqualTo(201);
+        assertThat(count("SELECT count(*) FROM skill WHERE name = 'pdf-tools'")).isEqualTo(2);
 
-        assertThat(webPost(path("/restore"), "").statusCode()).isEqualTo(204);
+        // Restoring the tombstone now finds the name taken and comes back under the freed name.
+        HttpResponse<String> restored = webPost(path("/restore"), "");
+        assertThat(restored.statusCode()).as("restored: %s", restored.body()).isEqualTo(200);
+        JsonNode receipt = JSON.readTree(restored.body());
+        assertThat(receipt.get("renamed").asBoolean()).isTrue();
+        String freed = receipt.get("address").asText();
+        assertThat(freed).startsWith(owner + "/pdf-tools-restored-");
         assertThat(count("SELECT count(*) FROM audit_event WHERE action = 'restore'")).isEqualTo(1);
 
-        // Everything the deletion left alone is back: the address, the version, the grant.
-        assertThat(get(SKILLS + "/" + owner + "/pdf-tools", ownerToken).statusCode()).isEqualTo(200);
-        assertThat(get(SKILLS + "/" + owner + "/pdf-tools@" + digest + "/body", ownerToken)
-                .statusCode()).isEqualTo(200);
+        // Everything the deletion left alone is back, at the freed address: the version and the
+        // grant. The original address now names the skill created a moment ago.
+        assertThat(get(SKILLS + "/" + freed, ownerToken).statusCode()).isEqualTo(200);
+        String freedName = freed.substring(freed.indexOf('/') + 1);
+        assertThat(count("SELECT count(*) FROM skill WHERE name = :name AND deleted_at IS NULL",
+                Map.of("name", freedName)))
+                .as("the restored row is live under %s", freedName).isEqualTo(1);
+        HttpResponse<String> restoredBody = get(SKILLS + "/" + freed + "@" + digest + "/body",
+                ownerToken);
+        assertThat(restoredBody.statusCode()).as("body: %s", restoredBody.body()).isEqualTo(200);
+        // The original name now names the skill the resubmission created. It has a draft and no
+        // published version, so the author plane is where it resolves; the consumption plane would
+        // be the 404 a never-published skill gets, not a miss.
+        assertThat(webGet(path("")).statusCode()).isEqualTo(200);
+        assertThat(body(webGet(path(""))).get("versions")).isNotEmpty();
         assertThat(count("SELECT count(*) FROM skill_grant WHERE grantee_id ="
                 + " (SELECT id FROM app_user WHERE handle = :handle)", Map.of("handle", friend)))
                 .isEqualTo(1);
@@ -199,6 +223,249 @@ class WebSkillMetadataIT extends AbstractAccountIT {
                 friendBrowser.get(uri("/web/skills?state=deleted")).body()).get("skills"));
         assertThat(owners).containsExactly("pdf-tools");
         assertThat(friends).containsExactly("notes");
+    }
+
+    /**
+     * A5 (v61, ADR 0184): a public skill that had a live version answers 410 after deletion, while
+     * a private one stays the 404 that must not confirm it existed. The code is on the wire so a
+     * client can say "deleted" rather than "wrong address".
+     */
+    @Test
+    void aDeletedPublicSkillAnswers410AndAPrivateOneStays404() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+        assertThat(webPost(path("/delete"), "").statusCode()).isEqualTo(204);
+
+        HttpResponse<String> gone = get(SKILLS + "/" + owner + "/pdf-tools", ownerToken);
+        assertThat(gone.statusCode()).isEqualTo(410);
+        assertThat(JSON.readTree(gone.body()).get("error").get("code").asText())
+                .isEqualTo("skill_gone");
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools/metadata", ownerToken).statusCode())
+                .as("the metadata read is the same answer").isEqualTo(410);
+
+        // The author plane keeps the ordinary 404, and the deleted list still shows it.
+        assertThat(webGet(path("")).statusCode()).isEqualTo(404);
+        assertThat(body(webGet("/web/skills?state=deleted")).get("skills")).hasSize(1);
+    }
+
+    /**
+     * A5 (v61, ADR 0184): the 410 needs a live version in its past. A public skill that was only
+     * ever a draft never answered anyone, so deleting it stays the ordinary 404 — otherwise the
+     * answer would disclose that a name existed although it was never callable.
+     */
+    @Test
+    void aPublicSkillThatNeverPublishedStays404AfterDeletion() {
+        String draft = submitAs(ownerToken, "just-a-draft", "1.0.0").body();
+        assertThat(draft).isNotBlank();
+        assertThat(browser.patch(uri("/web/skills/" + owner + "/just-a-draft/visibility"),
+                json(Map.of("visibility", "public", "public_rung", "browse"))).statusCode())
+                .isEqualTo(204);
+        assertThat(webPost("/web/skills/" + owner + "/just-a-draft/delete", "").statusCode())
+                .isEqualTo(204);
+
+        assertThat(get(SKILLS + "/" + owner + "/just-a-draft", strangerToken).statusCode())
+                .isEqualTo(404);
+    }
+
+    /**
+     * T11 (v61, ADR 0184): nobody depends on it, so the switch is immediate — no ramp, no notice,
+     * and the delete is allowed at once.
+     */
+    @Test
+    void aPublicSkillNobodyJoinedGoesOfflineAtOnceAndMayBeDeleted() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+
+        HttpResponse<String> off = webPost(path("/offline"), "");
+        assertThat(off.statusCode()).as(off.body()).isEqualTo(200);
+        assertThat(JSON.readTree(off.body()).get("offline").asBoolean()).isTrue();
+        assertThat(JSON.readTree(off.body()).get("pending_until").isNull()).isTrue();
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools", strangerToken).statusCode())
+                .as("offline is a 503, not a ramp").isEqualTo(503);
+
+        assertThat(webPost(path("/delete"), "").statusCode()).isEqualTo(204);
+    }
+
+    /**
+     * A5's other half (v61, ADR 0184): the 410 is about the *address*, not about the tombstone. Once
+     * somebody else holds the name, a stranger's read is the ordinary 404 for what is there now —
+     * saying "deleted" would describe a skill the reader is not asking about.
+     */
+    @Test
+    void aLiveSkillUnderTheOldNameTakesBackTheOrdinary404() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+        assertThat(webPost(path("/delete"), "").statusCode()).isEqualTo(204);
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools", strangerToken).statusCode())
+                .isEqualTo(410);
+
+        // The name is free, so the same owner creates a new (private, unpublished) skill with it.
+        assertThat(submitAs(ownerToken, "pdf-tools", "2.0.0").statusCode()).isEqualTo(201);
+
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools", strangerToken).statusCode())
+                .as("the live private skill answers for the name now")
+                .isEqualTo(404);
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools/metadata", strangerToken).statusCode())
+                .isEqualTo(404);
+    }
+
+    /**
+     * T6–T9 (v61, ADR 0184): a public skill somebody joined leaves through the 30-day ramp — it
+     * keeps serving with the date on the wire, refuses new joins, and cannot be deleted until the
+     * ramp finishes. The read path derives the state from the date, so the job is not consulted.
+     */
+    @Test
+    void aPublicSkillWithJoinersLeavesThroughTheRamp() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+        joinAsNewUser();
+        signInOfficialAccount();
+        join(strangerBrowser);
+        // Two joiners and one grantee: all three depend on it, so all three hear about it.
+        grant("browse");
+
+        String before = Timestamps.now();
+        HttpResponse<String> started = webPost(path("/offline"), "");
+        assertThat(started.statusCode()).as("offline: %s", started.body()).isEqualTo(200);
+        JsonNode state = JSON.readTree(started.body());
+        assertThat(state.get("offline").asBoolean()).isFalse();
+        String due = state.get("pending_until").asText();
+        // A6: the deadline is the request's moment + 30 days (UTC), not a round number picked by
+        // the client. A minute of slack covers the clock between the two calls.
+        assertThat(Timestamps.parse(due))
+                .isBetween(Timestamps.parse(before).plus(30, ChronoUnit.DAYS).minusSeconds(60),
+                        Timestamps.parse(before).plus(30, ChronoUnit.DAYS).plusSeconds(60));
+
+        // Still serving, and both planes name the date.
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools", ownerToken).statusCode())
+                .as("a ramp serves every read").isEqualTo(200);
+        // v61: 下线中 is its own filter on the library list, and the skill is still in the live one.
+        assertThat(names(JSON.readTree(
+                get("/api/v1/skills?scope=library&show=pending", ownerToken).body())
+                .get("skills"))).containsExactly("pdf-tools");
+        assertThat(names(JSON.readTree(
+                get("/api/v1/skills?scope=library&show=offline", ownerToken).body())
+                .get("skills"))).as("a ramp is not offline yet").isEmpty();
+        assertThat(JSON.readTree(get(SKILLS + "/" + owner + "/pdf-tools/metadata", ownerToken)
+                .body()).get("offline_pending_until").asText()).isEqualTo(due);
+        assertThat(body(webGet(path(""))).get("offline_pending_until").asText()).isEqualTo(due);
+
+        // A second join is refused with the date; no new dependency is accepted. The caller has
+        // to be outside the library, or the already-in-library answer comes first.
+        String outsiderPhone = randomPhone();
+        registerAndSignIn(randomUsername(), outsiderPhone);
+        Browser outsiderBrowser = secondSignedInBrowser(outsiderPhone, PASSWORD);
+        HttpResponse<String> refusedJoin = outsiderBrowser.post(uri(path("/library")), "",
+                outsiderBrowser.csrfToken());
+        assertThat(refusedJoin.statusCode()).as("join: %s", refusedJoin.body()).isEqualTo(409);
+        assertThat(JSON.readTree(refusedJoin.body()).get("error").get("code").asText())
+                .isEqualTo("skill_offline_pending");
+        assertThat(JSON.readTree(refusedJoin.body()).get("error").get("details").get(0)
+                .get("issue").asText()).isEqualTo(due);
+
+        // Signing the outsider up logged the shared client in as them; the rest is the owner's.
+        signInOfficialAccount();
+
+        // Deleting waits for the ramp.
+        HttpResponse<String> blockedDelete = webPost(path("/delete"), "");
+        assertThat(blockedDelete.statusCode()).as("delete: %s", blockedDelete.body()).isEqualTo(409);
+        assertThat(JSON.readTree(blockedDelete.body()).get("error").get("code").asText())
+                .isEqualTo("offline_required");
+
+        // The joiner has the advance notice, with its deadline on `expires_at`.
+        assertThat(count("SELECT count(*) FROM notification WHERE kind = 'skill_offline_scheduled'"
+                + " AND expires_at = :due", Map.of("due", due))).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM notification_recipient r JOIN notification n"
+                + " ON n.id = r.notification_id WHERE n.kind = 'skill_offline_scheduled'"))
+                .as("two joiners and the grantee each get one advance notice")
+                .isEqualTo(3);
+
+        // Time passes. The read path is already offline, and the daily job materialises it.
+        String past = Timestamps.format(Instant.now().minus(1, ChronoUnit.DAYS));
+        jdbc.sql("UPDATE skill SET offline_due_at = :past WHERE name = 'pdf-tools'")
+                .param("past", past).update();
+        assertThat(get(SKILLS + "/" + owner + "/pdf-tools", ownerToken).statusCode())
+                .as("a passed deadline is offline before the job runs").isEqualTo(503);
+
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).single();
+        assertThat(dueOfflines.completeOne(skillId, Timestamps.now())).isTrue();
+        assertThat(dueOfflines.completeOne(skillId, Timestamps.now()))
+                .as("the claim is conditional, so a second pass finds nothing to do")
+                .isFalse();
+        assertThat(count("SELECT count(*) FROM skill WHERE name = 'pdf-tools' AND offline_at IS NOT NULL"))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM notification_recipient r JOIN notification n"
+                + " ON n.id = r.notification_id WHERE n.kind = 'announcement'"
+                + " AND n.body LIKE '%下线，不再提供服务%'"))
+                .as("the completion reaches both joiners and the grantee").isEqualTo(3);
+
+        // And now the delete is allowed.
+        assertThat(webPost(path("/delete"), "").statusCode()).isEqualTo(204);
+        // v61: the joiner is told the skill they depended on is gone, in the same place the ramp
+        // and the completion were announced.
+        assertThat(count("SELECT count(*) FROM notification_recipient r JOIN notification n"
+                + " ON n.id = r.notification_id WHERE n.kind = 'announcement'"
+                + " AND n.body LIKE '%被作者删除%'"))
+                .as("deletion reaches both joiners and the grantee, once each")
+                .isEqualTo(3);
+    }
+
+    /**
+     * T9 (v61, ADR 0184): the delete gate asks the clock, not the job. Once the deadline has passed
+     * the skill is already offline to every read, so the author may delete it without waiting for
+     * the daily pass — and the pass then finds nothing to claim.
+     */
+    @Test
+    void thePassedDeadlineAllowsTheDeleteBeforeTheJobRuns() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+        join(strangerBrowser);
+        assertThat(webPost(path("/offline"), "").statusCode()).isEqualTo(200);
+
+        jdbc.sql("UPDATE skill SET offline_due_at = :past WHERE name = 'pdf-tools'")
+                .param("past", Timestamps.format(Instant.now().minus(1, ChronoUnit.DAYS)))
+                .update();
+
+        assertThat(webPost(path("/delete"), "").statusCode())
+                .as("a deadline that has passed is offline whether or not the job has run")
+                .isEqualTo(204);
+        String skillId = jdbc.sql("SELECT id FROM skill WHERE name = 'pdf-tools'")
+                .query(String.class).single();
+        assertThat(dueOfflines.completeOne(skillId, Timestamps.now()))
+                .as("a deleted skill is claimed by nobody")
+                .isFalse();
+    }
+
+    @Test
+    void cancellingTheRampRestoresServiceAndWithdrawsTheAdvanceNotice() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+        join(strangerBrowser);
+
+        assertThat(webPost(path("/offline"), "").statusCode()).isEqualTo(200);
+        HttpResponse<String> cancelled = webPost(path("/online"), "");
+        assertThat(cancelled.statusCode()).isEqualTo(200);
+        JsonNode state = JSON.readTree(cancelled.body());
+        assertThat(state.get("offline").asBoolean()).isFalse();
+        assertThat(state.get("pending_until").isNull()).isTrue();
+        // The author page omits the field when there is no ramp (it is NON_NULL on the wire).
+        assertThat(body(webGet(path(""))).has("offline_pending_until")).isFalse();
+
+        // The announcement is history, so it leaves the feed: expired at the cancellation.
+        assertThat(count("SELECT count(*) FROM notification n WHERE n.kind ="
+                + " 'skill_offline_scheduled' AND (n.expires_at IS NULL OR n.expires_at > :now)",
+                Map.of("now", Timestamps.now()))).isZero();
+        assertThat(count("SELECT count(*) FROM notification WHERE kind = 'announcement'"
+                + " AND body LIKE '%取消了「下线中」%'")).isEqualTo(1);
+        // The dead advance notice leaves the history feed too: its date has been withdrawn, and a
+        // copy button for a date that no longer exists is worse than no row (v61 audit).
+        JsonNode feed = JSON.readTree(
+                strangerBrowser.get(uri("/web/notifications?status=all")).body());
+        assertThat(feed.get("items").valueStream()
+                .noneMatch(item -> "skill_offline_scheduled".equals(item.get("kind").asText())))
+                .as("the withdrawn notice is not in 全部")
+                .isTrue();
     }
 
     private static List<String> names(JsonNode rows) {
@@ -618,6 +885,35 @@ class WebSkillMetadataIT extends AbstractAccountIT {
         assertThat(who.post(uri(path("/library")), "", who.csrfToken()).statusCode())
                 .as("joining failed")
                 .isEqualTo(200);
+    }
+
+    /**
+     * A fresh account that joins. Registration signs the shared client in as them, so the caller
+     * must re-sign the owner before using {@code browser} again.
+     */
+    private void joinAsNewUser() {
+        String phone = randomPhone();
+        registerAndSignIn(randomUsername(), phone);
+        join(secondSignedInBrowser(phone, PASSWORD));
+    }
+
+    /** A3 (v61): the author detail carries both audiences the delete sheet names, in one read. */
+    @Test
+    void theAuthorDetailCarriesTheDeleteImpact() {
+        published();
+        assertThat(visibility("public", "browse").statusCode()).isEqualTo(204);
+        joinAsNewUser();
+        signInOfficialAccount();
+        join(strangerBrowser);
+        grant("browse");
+
+        JsonNode detail = body(webGet(path("")));
+        assertThat(detail.get("usage").get("joins").asInt())
+                .as("two people depend on it through the library")
+                .isEqualTo(2);
+        assertThat(detail.get("grantees").asInt())
+                .as("one more through a grant")
+                .isEqualTo(1);
     }
 
     private HttpResponse<String> requestAs(Browser who, String rung) {

@@ -41,7 +41,8 @@ class PublishBatchDeletedTest {
                         null));
 
         assertThat(outcome.ok()).isFalse();
-        assertThat(outcome.code()).isEqualTo("skill_deleted");
+        // v61 (ADR 0183): the publish race is now the same 404 every read of the address gives.
+        assertThat(outcome.code()).isEqualTo("skill_not_found");
         assertThat(outcome.namespace()).isEqualTo("dev");
         assertThat(outcome.name()).isEqualTo("x");
     }

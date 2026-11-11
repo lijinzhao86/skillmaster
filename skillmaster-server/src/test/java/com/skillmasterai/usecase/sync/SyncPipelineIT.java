@@ -208,7 +208,7 @@ class SyncPipelineIT extends SyncPipelineFixture {
     }
 
     @Test
-    void aSoftDeletedSkillIsSkippedWithItsOwnReason() {
+    void aSoftDeletedSkillIsCreatedAgainByTheNextSync() {
         String deleted = "deleted-" + suffix;
         metadata.findOrCreate(OFFICIAL_NAMESPACE,
                 new SkillMetadata(deleted, deleted, "d", "{}"), OFFICIAL_USER, Timestamps.now());
@@ -219,9 +219,14 @@ class SyncPipelineIT extends SyncPipelineFixture {
 
         SyncReport report = pipeline(List.of(entry("acme/deleted-" + suffix, "")), 1).run();
 
+        // v61 (ADR 0183): the name was released by the delete. Sync is the official namespace's
+        // source of truth, so the next run creates the skill again; the tombstone is left alone.
         assertThat(report.entries()).singleElement()
-                .satisfies(result -> assertThat(result.reason()).isEqualTo("skill_deleted"));
-        assertThat(versionCount(deleted)).isZero();
+                .satisfies(result -> {
+                    assertThat(result.reason()).isNull();
+                    assertThat(result.result()).isEqualTo("created");
+                });
+        assertThat(versionCount(deleted)).isEqualTo(1);
     }
 
     @Test

@@ -60,6 +60,8 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             String version,
             String updatedAt,
             String deletedAt,
+            /** v61: the 下线中 ramp's due date while it is ahead, omitted otherwise. */
+            @JsonInclude(JsonInclude.Include.NON_NULL) String offlinePendingUntil,
             Category category,
             List<PublicTag> publicTags,
             List<MyTag> myTags,
@@ -102,7 +104,7 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
                     card.whenToUse(), card.myWhenToUse(), card.myWhenToUseMatched(),
                     card.source(), card.standing(), card.state(),
                     card.version(),
-                    card.updatedAt(), card.deletedAt(),
+                    card.updatedAt(), card.deletedAt(), card.offlinePendingUntil(),
                     card.category() == null ? null
                             : new Category(card.category().key(), card.category().name()),
                     card.publicTags().stream()
@@ -117,7 +119,8 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
                 String callsBucket, String lastUsed, Integer joins) {
             return new Card(id, namespace, name, description, whenToUse, myWhenToUse,
                     myWhenToUseMatched, source, standing, state,
-                    version, updatedAt, deletedAt, category, publicTags, myTags, score,
+                    version, updatedAt, deletedAt, offlinePendingUntil, category, publicTags,
+                    myTags, score,
                     originLabel, originKind, originLocator, originUrl, licenseSpdx, licenseStatus,
                     usageBucket, callsBucket, lastUsed, joins);
         }

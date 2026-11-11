@@ -111,6 +111,12 @@ public class CopySkillUseCase {
         Optional<Access> resolved =
                 metadata.accessFor(sourceNamespace.get().id(), name, caller);
         if (resolved.isEmpty()) {
+            // The same address answer every other consumption read gives (ADR 0184): a public
+            // skill that was published and then deleted is gone, not a typo.
+            if (metadata.deletedPublicEverPublished(sourceNamespace.get().id(), name)) {
+                throw new com.skillmasterai.common.SkillGoneException("'" + name
+                        + "' was deleted by its owner; its address is no longer served");
+            }
             return Optional.empty();
         }
         Access access = resolved.get();
@@ -126,7 +132,7 @@ public class CopySkillUseCase {
         }
         // The consumption plane's rule, after the visibility lookup so an unreadable skill still
         // answers 404 rather than disclosing that it exists but is switched off.
-        if (access.offlineAt() != null) {
+        if (access.offlineNow()) {
             throw new SkillOfflineException("'" + access.name() + "' is offline; its owner has"
                     + " stopped serving it. Try again later.");
         }

@@ -45,7 +45,7 @@ public class LibraryListUseCase {
     public static final List<Integer> WEB_PAGE_SIZES = List.of(10, 20, 50);
 
     private static final List<String> SHOWS =
-            List.of("live", "draft", "offline", "all", "deleted");
+            List.of("live", "draft", "offline", "pending", "all", "deleted");
     private static final List<String> SOURCES = List.of("created", "shared", "joined");
 
     private final NamespaceService namespaces;

@@ -103,10 +103,21 @@ public final class SkillDistributionService {
                 access.owns() ? GrantRole.ADMIN : access.rung(),
                 GrantRole.permissionsOf(access.owns() ? GrantRole.ADMIN : access.rung()),
                 GrantRole.capabilitiesOf(access.owns() ? GrantRole.ADMIN : access.rung()),
+                // Read-time derivation, never the job: a date that has passed is offline, and the
+                // read path above has already refused this request in that case (ADR 0184).
+                pendingUntil(access),
                 snapshot.manifest().entries().stream()
                         .map(entry -> new SkillDetail.File(
                                 entry.relpath(), entry.blobSha256(), entry.size(), entry.isBinary()))
                         .toList());
+    }
+
+    private static String pendingUntil(Access access) {
+        if (access.offlineAt() != null || access.offlineDueAt() == null) {
+            return null;
+        }
+        return java.time.Instant.parse(access.offlineDueAt()).isAfter(java.time.Instant.now())
+                ? access.offlineDueAt() : null;
     }
 
     /**

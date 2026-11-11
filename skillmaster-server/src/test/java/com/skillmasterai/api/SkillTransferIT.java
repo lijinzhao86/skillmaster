@@ -232,7 +232,7 @@ class SkillTransferIT extends AbstractAccountIT {
     }
 
     @Test
-    void aDeletedNameIsANamedConflict() {
+    void aDeletedNameIsFreeAgain() {
         seedSkill();
         assertThat(webPost(BASE + "/" + username + "/pdf-tools/delete", "").statusCode())
                 .isEqualTo(204);
@@ -241,11 +241,10 @@ class SkillTransferIT extends AbstractAccountIT {
                 .file("file", "pdf-tools.zip", packageWith("references/other.md", "other"))
                 .field("name", "导入");
 
+        // v61 (ADR 0183): the delete released the name; the import creates a new skill under it.
         HttpResponse<String> response = webImport(BASE + "/import", multipart);
 
-        assertThat(response.statusCode()).isEqualTo(409);
-        assertThat(body(response).get("error").get("code").asText())
-                .isEqualTo("skill_deleted");
+        assertThat(response.statusCode()).as("import: %s", response.body()).isEqualTo(201);
     }
 
     /* ------------------------------------------------------------------ fixtures */

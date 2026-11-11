@@ -173,6 +173,22 @@ public enum ErrorCode {
     /** The whole skill is offline; every consumer read answers this until it is restored. */
     SKILL_OFFLINE("skill_offline"),
 
+    /**
+     * A public skill that had a live version was deleted by its owner (v61, ADR 0184). 410, not
+     * 404: the address was public and callable, so the answer says it is gone rather than never
+     * having existed. Private deletions stay 404.
+     */
+    SKILL_GONE("skill_gone"),
+
+    /**
+     * A public skill with people using it cannot be deleted before its 30-day ramp completes
+     * (v61, ADR 0184). 409: the request is well-formed and the action exists, just not yet.
+     */
+    OFFLINE_REQUIRED("offline_required"),
+
+    /** A skill inside its 下线中 ramp cannot be joined (v61, ADR 0184). 409. */
+    SKILL_OFFLINE_PENDING("skill_offline_pending"),
+
     /* ---- v7: draft file I/O ---- */
 
     /** A write without {@code If-Match}. 428: the baseline is what makes the write safe to retry. */
@@ -199,13 +215,6 @@ public enum ErrorCode {
     GREP_REQUIRES_DRAFT("grep_requires_draft"),
     /** A relpath that is absolute, escapes the root, or uses a backslash. */
     INVALID_PATH("invalid_path"),
-    /**
-     * The name still belongs to a soft-deleted skill (ADR 0050).
-     *
-     * <p>A named conflict rather than a generic 400 because the only way out — restoring — is not
-     * part of this request, and a client that cannot see the reason cannot offer it (ADR 0071).
-     */
-    SKILL_DELETED("skill_deleted"),
     /** Creating a skill whose name already belongs to a live one. */
     SKILL_ALREADY_EXISTS("skill_already_exists"),
     /**
@@ -227,8 +236,8 @@ public enum ErrorCode {
     /**
      * A credential tried to delete a skill that has a version which went live (v37, ADR 0127).
      *
-     * <p>Named rather than folded into {@link #SKILL_DELETED}: the skill is still there, and the way
-     * out — deleting it on the web — is a different action, not a restore.
+     * <p>Named rather than folded into {@code invalid_request}: the skill is still there, and the
+     * way out — deleting it on the web — is a different action, not a restore.
      */
     SKILL_PUBLISHED("skill_published"),
     /** A write, move or copy aimed at a path the platform reserves for itself (ADR 0069). */

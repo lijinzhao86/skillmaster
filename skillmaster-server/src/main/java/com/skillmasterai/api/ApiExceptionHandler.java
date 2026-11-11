@@ -145,15 +145,16 @@ class ApiExceptionHandler {
     }
 
     /**
-     * A submission to the name of a soft-deleted skill (ADR 0050 as amended by ADR 0071).
+     * A publish whose skill was deleted while the publish was in flight (ADR 0127).
      *
-     * <p>409 with a code of its own: the request is well-formed and conflicts with the name's
-     * current state. The page needs the reason to send the author to "restore", and the CLI needs
-     * it to say so in its own language; a generic 400 would leave both matching on prose.
+     * <p><strong>A 404, since v61.</strong> The address no longer names a live skill — the same
+     * answer every other read of it gives — and the way forward is to submit again (the name is
+     * free, ADR 0183) or restore the deleted row. It used to be a 409 {@code skill_deleted}, which
+     * described a name that could not be reused; that rule is gone.
      */
     @ExceptionHandler(SkillDeletedException.class)
     ResponseEntity<ApiError> onSkillDeletedException(SkillDeletedException e) {
-        return failure(HttpStatus.CONFLICT, ErrorCode.SKILL_DELETED, e.getMessage());
+        return failure(HttpStatus.NOT_FOUND, ErrorCode.SKILL_NOT_FOUND, e.getMessage());
     }
 
     /**
@@ -221,6 +222,15 @@ class ApiExceptionHandler {
     @ExceptionHandler(com.skillmasterai.common.SkillOfflineException.class)
     ResponseEntity<ApiError> onSkillOffline(com.skillmasterai.common.SkillOfflineException e) {
         return failure(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.SKILL_OFFLINE, e.getMessage());
+    }
+
+    /**
+     * A public skill that had a live version was deleted (v61, ADR 0184). 410: the address is not
+     * a typo and the skill is not hidden — it is gone, and the caller should stop retrying.
+     */
+    @ExceptionHandler(com.skillmasterai.common.SkillGoneException.class)
+    ResponseEntity<ApiError> onSkillGone(com.skillmasterai.common.SkillGoneException e) {
+        return failure(HttpStatus.GONE, ErrorCode.SKILL_GONE, e.getMessage());
     }
 
     /**

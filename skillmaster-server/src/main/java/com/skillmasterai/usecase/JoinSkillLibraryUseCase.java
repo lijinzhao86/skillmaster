@@ -67,6 +67,18 @@ public class JoinSkillLibraryUseCase {
                     "'" + name + "' is already in your library as " + standing.source()
                             + "; joining would not add anything");
         }
+        // v61: a skill inside its 下线中 ramp is still serving — and deliberately still findable —
+        // but it is not accepting new dependencies. Checked before `discoverable`, which stays
+        // true for it, so that this refusal is the one the caller gets (ADR 0184). The date is the
+        // refusal's useful half.
+        if (standing.offlineDueAt() != null
+                && Timestamps.parse(standing.offlineDueAt())
+                        .isAfter(Timestamps.parse(Timestamps.now()))) {
+            throw new ConflictException(ErrorCode.SKILL_OFFLINE_PENDING,
+                    "'" + name + "' is leaving service on " + standing.offlineDueAt()
+                            + "; it cannot be joined",
+                    "pending_until", standing.offlineDueAt());
+        }
         if (!standing.discoverable()) {
             throw new ConflictException(ErrorCode.SKILL_NOT_JOINABLE,
                     "'" + name + "' cannot be joined right now; it must be public, published and"

@@ -225,11 +225,14 @@ public final class SkillCatalogService {
      * @param deletedAt RFC3339 UTC of the soft delete, or null on the live list. The deleted list
      *                  shows "删除于 …" rather than "更新于 …" (ADR 0050), because a page that no
      *                  longer resolves has no "last updated"
+     * @param offlinePendingUntil the 下线中 ramp's due date while it is still ahead, or null
+     *                  (v61, ADR 0184). A past date is offline, not pending, and reads as null
      */
     public record AuthorRow(String id, String namespaceId, String name, String title,
             String description, String visibility, String currentVersion, String currentDigest,
             int drafts, String newestDraftVersion, String newestDraftDigest,
-            String updatedAt, String deletedAt, String offlineAt) {
+            String updatedAt, String deletedAt, String offlineAt,
+            String offlinePendingUntil) {
     }
 
     /**
@@ -291,7 +294,9 @@ public final class SkillCatalogService {
             /** The rung the skill hands to everybody; null while it is private (ADR 0048). */
             String publicRung,
             String state, String version, String deletedAt,
-            String categoryKey, String categoryName, boolean active) {
+            String categoryKey, String categoryName, boolean active,
+            /** The 下线中 ramp's due date while it is ahead, or null (v61, ADR 0184). */
+            String offlinePendingUntil) {
 
         /**
          * The cursor key for this row, ordered as {@link #page} compares its components.
