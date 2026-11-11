@@ -42,6 +42,24 @@ public final class ActivityRepository {
     /** A cap on the searches examined for attribution. The normal window has 0–3. */
     private static final int INVOKE_CANDIDATES = 50;
 
+    /**
+     * The skill keyword, when there is one. A search row matches through the addresses its stored
+     * results carry; a call matches through its own {@code skill_address}.
+     *
+     * <p><strong>{@code CASE} guards the cast, not just {@code IS JSON}.</strong> SQL does not
+     * promise left-to-right evaluation, so a damaged {@code detail} could still reach
+     * {@code ::jsonb}; inside {@code CASE} only the chosen branch is evaluated, and
+     * {@code jsonb_array_elements(NULL)} yields no rows. A damaged row therefore stops matching
+     * instead of failing the page.
+     */
+    private static final String SKILL_CLAUSE = " AND (CAST(:skill AS TEXT) IS NULL OR ("
+            + " (e.kind = :search AND e.detail IS JSON AND EXISTS ("
+            + "   SELECT 1 FROM jsonb_array_elements(CASE WHEN e.detail IS JSON THEN"
+            + "     CASE WHEN jsonb_typeof(e.detail::jsonb -> 'results') = 'array'"
+            + "       THEN e.detail::jsonb -> 'results' END END) AS r"
+            + "   WHERE r ->> 'address' ILIKE :like ESCAPE '\\'))"
+            + " OR (e.kind = :invoke AND e.skill_address ILIKE :like ESCAPE '\\')))";
+
     private final JdbcClient jdbc;
     private final ObjectMapper json;
     private final Runnable partitionEnsurer;
@@ -244,8 +262,28 @@ public final class ActivityRepository {
         return false;
     }
 
-    public UsageHistory.Page interactions(String actorUserId, int page, int limit, String at) {
-        String since = windowStart(at);
+    /**
+     * Whether this account has any row the page would ever show — a search or a call, the filters
+     * aside. Sign-ins and file reads are recorded too, but they are not list rows: counting them
+     * would make "暂无使用记录" unreachable for anyone who has logged in.
+     */
+    public boolean hasAny(String actorUserId) {
+        String since = Timestamps.format(
+                Instant.now().minus(UsageHistory.WINDOW_DAYS, ChronoUnit.DAYS));
+        Boolean found = jdbc.sql("SELECT EXISTS (SELECT 1 FROM activity_event"
+                        + " WHERE actor_user_id = :actor AND at >= :since"
+                        + " AND (kind = :search OR kind = :invoke))")
+                .param("actor", actorUserId)
+                .param("since", since)
+                .param("search", ActivityKinds.SEARCH)
+                .param("invoke", ActivityKinds.INVOKE)
+                .query(Boolean.class)
+                .single();
+        return Boolean.TRUE.equals(found);
+    }
+
+    public UsageHistory.Page interactions(String actorUserId, int page, int limit,
+            UsageHistory.Window window) {
         // A call whose search has just fallen out of the window is shown as a direct call: it
         // happened inside the window, so hiding it would make the page disagree with the stats
         // that do count it.
@@ -255,7 +293,7 @@ public final class ActivityRepository {
         // index on `id` (deliberately — it has no primary key), so that subquery scanned the whole
         // 90-day window for every call. Only searches in the last 30 minutes before the window can
         // have produced a call inside it, so that small index range is all this needs.
-        List<Long> staleIds = staleSearchIds(actorUserId, since);
+        List<Long> staleIds = staleSearchIds(actorUserId, window.since());
 
         String visible = " e.kind = :search OR (e.kind = :invoke AND (e.search_event_id IS NULL";
         if (!staleIds.isEmpty()) {
@@ -263,34 +301,24 @@ public final class ActivityRepository {
         }
         visible += "))";
 
-        var countQuery = jdbc.sql("SELECT count(*) FROM activity_event e"
-                        + " WHERE e.actor_user_id = :actor AND e.at >= :since AND (" + visible + ")")
-                .param("actor", actorUserId)
-                .param("since", since)
-                .param("search", ActivityKinds.SEARCH)
-                .param("invoke", ActivityKinds.INVOKE);
-        if (!staleIds.isEmpty()) {
-            countQuery = countQuery.param("staleIds", staleIds);
-        }
+        var countQuery = bindWindow(jdbc.sql("SELECT count(*) FROM activity_event e"
+                        + " WHERE e.actor_user_id = :actor AND e.at >= :since AND e.at < :until"
+                        + " AND (" + visible + ")" + SKILL_CLAUSE),
+                actorUserId, window, staleIds);
         long total = countQuery.query(Long.class).single();
 
-        var pageQuery = jdbc.sql("SELECT e.id, e.at, e.kind, e.skill_address,"
+        var pageQuery = bindWindow(jdbc.sql("SELECT e.id, e.at, e.kind, e.skill_address,"
                         + " e.version_label, e.target, e.detail, e.search_event_id"
                         + " FROM activity_event e"
-                        + " WHERE e.actor_user_id = :actor AND e.at >= :since AND (" + visible + ")"
-                        + " ORDER BY e.at DESC, e.id DESC LIMIT :limit OFFSET :offset")
-                .param("actor", actorUserId)
-                .param("since", since)
-                .param("search", ActivityKinds.SEARCH)
-                .param("invoke", ActivityKinds.INVOKE)
+                        + " WHERE e.actor_user_id = :actor AND e.at >= :since AND e.at < :until"
+                        + " AND (" + visible + ")" + SKILL_CLAUSE
+                        + " ORDER BY e.at DESC, e.id DESC LIMIT :limit OFFSET :offset"),
+                actorUserId, window, staleIds)
                 .param("limit", limit)
                 // Long arithmetic: `page` is an int the caller controls, and (int) MAX_VALUE × 100
                 // overflows negative, which PostgreSQL answers with an error (a 500 for a page
                 // number that should just be empty).
                 .param("offset", (long) (page - 1) * limit);
-        if (!staleIds.isEmpty()) {
-            pageQuery = pageQuery.param("staleIds", staleIds);
-        }
         List<ListRow> rows = pageQuery
                 .query((rs, rowNum) -> new ListRow(rs.getLong("id"), rs.getString("at"),
                         rs.getString("kind"), rs.getString("skill_address"),
@@ -302,7 +330,8 @@ public final class ActivityRepository {
                 .filter(row -> ActivityKinds.SEARCH.equals(row.kind()))
                 .map(ListRow::id)
                 .toList();
-        Map<Long, List<UsageHistory.Invocation>> invocations = invocations(searchIds);
+        Map<Long, List<UsageHistory.Invocation>> invocations =
+                invocations(searchIds, actorUserId, window);
 
         List<UsageHistory.Interaction> items = new ArrayList<>();
         for (ListRow row : rows) {
@@ -325,15 +354,23 @@ public final class ActivityRepository {
         return new UsageHistory.Page(items, total, page, limit);
     }
 
-    private Map<Long, List<UsageHistory.Invocation>> invocations(List<Long> searchIds) {
+    private Map<Long, List<UsageHistory.Invocation>> invocations(List<Long> searchIds,
+            String actorUserId, UsageHistory.Window window) {
         if (searchIds.isEmpty()) {
             return Map.of();
         }
+        // **The calls are windowed too.** A search inside the window can lead to a call after
+        // `until` (attribution looks 30 minutes ahead); showing that call under the row while the
+        // stats exclude it is the one way the page and its numbers can disagree.
         List<Map.Entry<Long, UsageHistory.Invocation>> rows = jdbc.sql(
                         "SELECT search_event_id, skill_address, version_label, at, search_rank"
-                                + " FROM activity_event WHERE kind = :kind"
+                                + " FROM activity_event WHERE kind = :kind AND actor_user_id = :actor"
+                                + " AND at >= :since AND at < :until"
                                 + " AND search_event_id IN (:ids) ORDER BY at, id")
                 .param("kind", ActivityKinds.INVOKE)
+                .param("actor", actorUserId)
+                .param("since", window.since())
+                .param("until", window.until())
                 .param("ids", searchIds)
                 .query((rs, rowNum) -> Map.entry(rs.getLong("search_event_id"),
                         new UsageHistory.Invocation(rs.getString("skill_address"),
@@ -347,12 +384,11 @@ public final class ActivityRepository {
         return grouped;
     }
 
-    public UsageHistory.Stats stats(String actorUserId, String at) {
-        String since = windowStart(at);
+    public UsageHistory.Stats stats(String actorUserId, UsageHistory.Window window) {
         // `converted` must use the same visible-search rule as the detail list: a call whose
         // search has left the window is shown as a direct call there, so it cannot also count as
         // "this search led to a call".
-        List<Long> staleIds = staleSearchIds(actorUserId, since);
+        List<Long> staleIds = staleSearchIds(actorUserId, window.since());
         String convertedExpr = "count(DISTINCT search_event_id) FILTER (WHERE kind = :invoke"
                 + " AND search_event_id IS NOT NULL";
         if (!staleIds.isEmpty()) {
@@ -360,21 +396,16 @@ public final class ActivityRepository {
         }
         convertedExpr += ") AS converted,";
 
-        var query = jdbc.sql("SELECT"
+        var query = bindWindow(jdbc.sql("SELECT"
                         + " count(*) FILTER (WHERE kind = :invoke) AS calls,"
                         + " count(*) FILTER (WHERE kind = :search) AS searches,"
                         + " " + convertedExpr
                         + " count(DISTINCT skill_id) FILTER (WHERE kind = :invoke) AS skills,"
                         + " max(at) FILTER (WHERE kind = :invoke) AS latest"
-                        + " FROM activity_event WHERE actor_user_id = :actor AND at >= :since"
-                        + " AND kind IN (:search, :invoke)")
-                .param("actor", actorUserId)
-                .param("since", since)
-                .param("search", ActivityKinds.SEARCH)
-                .param("invoke", ActivityKinds.INVOKE);
-        if (!staleIds.isEmpty()) {
-            query = query.param("staleIds", staleIds);
-        }
+                        + " FROM activity_event e WHERE e.actor_user_id = :actor"
+                        + " AND e.at >= :since AND e.at < :until"
+                        + " AND e.kind IN (:search, :invoke)" + SKILL_CLAUSE),
+                actorUserId, window, staleIds);
         Map<String, Object> row = query.query().singleRow();
 
         long calls = number(row.get("calls"));
@@ -382,14 +413,21 @@ public final class ActivityRepository {
         long converted = Math.min(number(row.get("converted")), searches);
         long skills = number(row.get("skills"));
 
-        List<UsageHistory.TopSkill> top = jdbc.sql("SELECT max(skill_address) AS skill,"
-                        + " count(*) AS calls, max(at) AS last FROM activity_event"
-                        + " WHERE actor_user_id = :actor AND kind = :kind AND at >= :since"
-                        + " AND skill_id IS NOT NULL GROUP BY skill_id"
+        var topQuery = jdbc.sql("SELECT max(e.skill_address) AS skill,"
+                        + " count(*) AS calls, max(e.at) AS last FROM activity_event e"
+                        + " WHERE e.actor_user_id = :actor AND e.kind = :invoke"
+                        + " AND e.at >= :since AND e.at < :until"
+                        + " AND e.skill_id IS NOT NULL"
+                        + " AND (CAST(:skill AS TEXT) IS NULL OR e.skill_address ILIKE :like ESCAPE '\\')"
+                        + " GROUP BY e.skill_id"
                         + " ORDER BY calls DESC, last DESC LIMIT 20")
                 .param("actor", actorUserId)
-                .param("kind", ActivityKinds.INVOKE)
-                .param("since", since)
+                .param("invoke", ActivityKinds.INVOKE)
+                .param("since", window.since())
+                .param("until", window.until())
+                .param("skill", window.skill())
+                .param("like", likePattern(window.skill()));
+        List<UsageHistory.TopSkill> top = topQuery
                 .query((rs, rowNum) -> new UsageHistory.TopSkill(rs.getString("skill"),
                         rs.getLong("calls"), rs.getString("last")))
                 .list();
@@ -398,30 +436,46 @@ public final class ActivityRepository {
                 (String) row.get("latest"), top);
     }
 
-    public List<UsageHistory.UserDay> userDays(String skillId, String at) {
-        String since = windowStart(at);
-        return jdbc.sql("SELECT actor_user_id, sum(invokes) AS invokes,"
-                        + " sum(versions) AS versions, max(last_at) AS last"
-                        + " FROM skill_collaborator_day WHERE skill_id = :skill AND day >= :since"
-                        + " GROUP BY actor_user_id")
+    public List<UsageHistory.ActorInvokes> collaboratorDays(String skillId,
+            UsageHistory.Window window) {
+        return jdbc.sql("SELECT actor_user_id, count(*) AS invokes, max(at) AS last"
+                        + " FROM activity_event WHERE skill_id = :skill AND kind = :kind"
+                        + " AND at >= :since AND at < :until GROUP BY actor_user_id")
                 .param("skill", skillId)
-                .param("since", since.substring(0, 10))
-                .query((rs, rowNum) -> new UsageHistory.UserDay(rs.getString("actor_user_id"),
-                        rs.getLong("invokes"), rs.getLong("versions"), rs.getString("last")))
+                .param("kind", ActivityKinds.INVOKE)
+                .param("since", window.since())
+                .param("until", window.until())
+                .query((rs, rowNum) -> new UsageHistory.ActorInvokes(rs.getString("actor_user_id"),
+                        rs.getLong("invokes"), rs.getString("last")))
                 .list();
     }
 
-    public UsageHistory.Mine mine(String skillId, String actorUserId, String at) {
-        String since = windowStart(at);
+    public UsageHistory.PublicRange skillRange(String skillId, UsageHistory.Window window) {
+        Map<String, Object> row = jdbc.sql("SELECT count(*) AS calls,"
+                        + " count(DISTINCT actor_user_id) AS accounts, max(at) AS last"
+                        + " FROM activity_event WHERE skill_id = :skill AND kind = :kind"
+                        + " AND at >= :since AND at < :until")
+                .param("skill", skillId)
+                .param("kind", ActivityKinds.INVOKE)
+                .param("since", window.since())
+                .param("until", window.until())
+                .query().singleRow();
+        return new UsageHistory.PublicRange(number(row.get("calls")), number(row.get("accounts")),
+                (String) row.get("last"));
+    }
+
+    public UsageHistory.Mine mine(String skillId, String actorUserId, UsageHistory.Window window) {
         List<UsageHistory.MineVersion> byVersion = jdbc.sql(
                         "SELECT version_label, count(*) AS calls, max(at) AS last"
                                 + " FROM activity_event WHERE actor_user_id = :actor"
-                                + " AND skill_id = :skill AND kind = :kind AND at >= :since"
+                                + " AND skill_id = :skill AND kind = :kind"
+                                + " AND at >= :since AND at < :until"
                                 + " GROUP BY version_label ORDER BY last DESC, calls DESC")
                 .param("actor", actorUserId)
                 .param("skill", skillId)
                 .param("kind", ActivityKinds.INVOKE)
-                .param("since", since)
+                .param("since", window.since())
+                .param("until", window.until())
                 .query((rs, rowNum) -> new UsageHistory.MineVersion(rs.getString("version_label"),
                         null, rs.getLong("calls"), rs.getString("last")))
                 .list();
@@ -528,9 +582,30 @@ public final class ActivityRepository {
                 .list();
     }
 
-    private static String windowStart(String at) {
-        return Timestamps.format(Instant.parse(at).minus(
-                UsageHistory.WINDOW_DAYS, ChronoUnit.DAYS));
+    /**
+     * Every parameter the window and skill fragments name. Binding an unused nullable parameter is
+     * harmless; leaving one out is a driver error, so they are all bound in one place.
+     */
+    private static JdbcClient.StatementSpec bindWindow(JdbcClient.StatementSpec query,
+            String actorUserId, UsageHistory.Window window, List<Long> staleIds) {
+        JdbcClient.StatementSpec bound = query
+                .param("actor", actorUserId)
+                .param("since", window.since())
+                .param("until", window.until())
+                .param("search", ActivityKinds.SEARCH)
+                .param("invoke", ActivityKinds.INVOKE)
+                .param("skill", window.skill())
+                .param("like", likePattern(window.skill()));
+        return staleIds.isEmpty() ? bound : bound.param("staleIds", staleIds);
+    }
+
+    /** A LIKE pattern for a contains match; the keyword's own wildcards are literal. */
+    private static String likePattern(String skill) {
+        if (skill == null) {
+            return null;
+        }
+        String escaped = skill.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return "%" + escaped + "%";
     }
 
     private record ListRow(long id, String at, String kind, String skillAddress,

@@ -81,6 +81,29 @@ class ActivityRepositoryIT extends AbstractIT {
     }
 
     @Test
+    void aSearchStoresOnlyTheFirstFiftyResults() {
+        String at = now();
+        List<SearchHit> hits = java.util.stream.IntStream.rangeClosed(1, 60)
+                .mapToObj(index -> hit("skill-" + index, "demo/s" + index))
+                .toList();
+        search(at, "many", hits, false);
+
+        String detail = (String) onlyRow(ACTOR, ActivityKinds.SEARCH).get("detail");
+        var results = json.readTree(detail).get("results");
+        assertThat(results).hasSize(ActivityRepository.MAX_RESULTS);
+        assertThat(results.get(49).get("address").asText()).isEqualTo("demo/s50");
+
+        UsageHistory.Window base = window(later(at, 60));
+        UsageHistory.Window fifthFirst = new UsageHistory.Window(base.since(), base.until(),
+                "demo/s51");
+        UsageHistory.Window fiftieth = new UsageHistory.Window(base.since(), base.until(),
+                "demo/s50");
+        assertThat(repository.interactions(ACTOR, 1, 10, fifthFirst).total())
+                .as("the 51st result was never stored, so the keyword cannot find it").isZero();
+        assertThat(repository.interactions(ACTOR, 1, 10, fiftieth).total()).isEqualTo(1);
+    }
+
+    @Test
     void anotherAccountsSearchIsNeverUsed() {
         String at = now();
         repository.recordSearch(new SearchActivity(OTHER, "pdf", Map.of(), 1L,
@@ -156,14 +179,14 @@ class ActivityRepositoryIT extends AbstractIT {
         search(searchAt, "pdf", List.of(hit("skill-boundary", "demo/boundary")), false);
         invoke("skill-boundary", callAt);
 
-        UsageHistory.Page page = repository.interactions(ACTOR, 1, 50, viewedAt);
+        UsageHistory.Page page = repository.interactions(ACTOR, 1, 50, window(viewedAt));
 
         // The search is outside the 90-day window; the call it produced is inside it. Hiding the
         // call would make the page disagree with the stats that count it.
         assertThat(page.items()).hasSize(1);
         UsageHistory.Direct item = (UsageHistory.Direct) page.items().get(0);
         assertThat(item.skill()).isEqualTo("demo/skill-boundary");
-        UsageHistory.Stats stats = repository.stats(ACTOR, viewedAt);
+        UsageHistory.Stats stats = repository.stats(ACTOR, window(viewedAt));
         assertThat(stats.calls()).isEqualTo(1);
         // The call cannot count as "this search led to a call": that search is not in the window,
         // and the detail list shows the call as direct. Stats and detail must agree.
@@ -181,12 +204,12 @@ class ActivityRepositoryIT extends AbstractIT {
         invoke("skill-b", later(at, 180));
         invoke("skill-c", later(at, 240));
 
-        UsageHistory.Page page = repository.interactions(ACTOR, 1, 50, later(at, 300));
+        UsageHistory.Page page = repository.interactions(ACTOR, 1, 50, window(later(at, 300)));
         assertThat(page.items()).hasSize(1);
         UsageHistory.Search item = (UsageHistory.Search) page.items().get(0);
         assertThat(item.invocations()).extracting(UsageHistory.Invocation::skill)
                 .containsExactly("demo/skill-a", "demo/skill-b", "demo/skill-c");
-        UsageHistory.Stats stats = repository.stats(ACTOR, later(at, 300));
+        UsageHistory.Stats stats = repository.stats(ACTOR, window(later(at, 300)));
         assertThat(stats.calls()).isEqualTo(3);
         assertThat(stats.converted()).isEqualTo(1);
     }
@@ -210,11 +233,13 @@ class ActivityRepositoryIT extends AbstractIT {
                 3, day + "T11:00:00Z"));
         repository.upsertVersions(skill, ACTOR, day, 2, day + "T09:00:00Z");
 
-        List<UsageHistory.UserDay> rows = repository.userDays(skill, now());
-        assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).invoke()).as("absolute, not added twice").isEqualTo(3);
-        assertThat(rows.get(0).submitted()).isEqualTo(2);
-        assertThat(rows.get(0).last()).isEqualTo(day + "T11:00:00Z");
+        Map<String, Object> row = jdbc.sql("SELECT invokes, versions, last_at"
+                        + " FROM skill_collaborator_day WHERE skill_id = :skill")
+                .param("skill", skill).query().singleRow();
+        assertThat(((Number) row.get("invokes")).longValue()).as("absolute, not added twice")
+                .isEqualTo(3);
+        assertThat(((Number) row.get("versions")).intValue()).isEqualTo(2);
+        assertThat(row.get("last_at")).isEqualTo(day + "T11:00:00Z");
     }
 
     @Test
@@ -224,11 +249,39 @@ class ActivityRepositoryIT extends AbstractIT {
         repository.recordInvoke(new InvokeActivity(ACTOR, ACTOR, "skill-a", "demo/skill-a",
                 "version-2", "2.0.0", later(at, 60)));
 
-        UsageHistory.Mine mine = repository.mine("skill-a", ACTOR, later(at, 120));
+        UsageHistory.Mine mine = repository.mine("skill-a", ACTOR, window(later(at, 120)));
         assertThat(mine.calls()).isEqualTo(2);
         assertThat(mine.versions()).isEqualTo(2);
         assertThat(mine.byVersion()).extracting(UsageHistory.MineVersion::version)
                 .containsExactlyInAnyOrder("1.0.0", "2.0.0");
+    }
+
+    @Test
+    void collaboratorDaysCountsTheWindowExactly() {
+        String skill = insertSkill("range-calls");
+        repository.recordInvoke(new InvokeActivity(ACTOR, ACTOR, skill, "demo/range-calls", "v1",
+                "1.0.0", now()));
+        repository.recordInvoke(new InvokeActivity(ACTOR, ACTOR, skill, "demo/range-calls", "v1",
+                "1.0.0", Timestamps.format(Instant.now().minusSeconds(3600))));
+
+        UsageHistory.Window window = new UsageHistory.Window(
+                Timestamps.format(Instant.now().minusSeconds(1800)),
+                Timestamps.format(Instant.now().plusSeconds(60)), null);
+        List<UsageHistory.ActorInvokes> rows = repository.collaboratorDays(skill, window);
+        UsageHistory.PublicRange range = repository.skillRange(skill, window);
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).invoke()).as("only the call inside the window").isEqualTo(1);
+        assertThat(range.calls()).isEqualTo(1);
+        assertThat(range.accounts()).isEqualTo(1);
+        assertThat(range.last()).isNotBlank();
+    }
+
+    /** The v58 default window around an instant: the 90 days up to it. */
+    private static UsageHistory.Window window(String at) {
+        return new UsageHistory.Window(
+                Timestamps.format(Instant.parse(at).minus(90, java.time.temporal.ChronoUnit.DAYS)),
+                at, null);
     }
 
     private String insertSkill(String name) {

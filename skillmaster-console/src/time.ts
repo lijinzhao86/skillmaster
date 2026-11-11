@@ -65,6 +65,12 @@ export function formatTime(value: string | null): string {
   return Number.isNaN(at.getTime()) ? value : at.toLocaleString('zh-CN', FORMAT)
 }
 
+/** The full moment as `YYYY-MM-DD HH:MM` — {@link formatTime} with the date separator the
+ *  design writes (`design/README.md` §使用记录), for a `title` that carries the exact time. */
+export function fullStamp(value: string | null): string {
+  return formatTime(value).replaceAll('/', '-')
+}
+
 /** The clock alone, in the same formatter and the same timezone as {@link formatTime}. */
 const CLOCK: Intl.DateTimeFormatOptions = {
   ...FORMAT,

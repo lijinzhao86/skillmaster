@@ -13,8 +13,13 @@ function shortStamp(at: string): string {
   return parts.length === 3 ? `${parts[1]}-${parts[2]} ${time ?? ''}` : formatTime(at)
 }
 
-/** 统计：用了多少，搜索有没有把人带到 skill（v58）。数由明细现算，页面不再存一份。 */
-export default function UsageStatsCards({ stats }: { stats: UsageStats }) {
+/**
+ * 统计：用了多少，搜索有没有把人带到 skill（v58；v60 按同一组筛选）。
+ *
+ * 数与明细同源：服务端用同一个窗口与同一个 skill 谓词算出来，页面不再存一份。
+ * 按 skill 过滤后，搜索次数是「结果里出现过它的搜索」，转化是「其中调用了它的搜索」。
+ */
+export default function UsageStatsCards({ stats, skill }: { stats: UsageStats; skill: string }) {
   return (
     <>
       <div className="stats" id="usageStats">
@@ -50,8 +55,10 @@ export default function UsageStatsCards({ stats }: { stats: UsageStats }) {
       </div>
 
       {stats.searches > 0 && (
-        <p className="usage-note">
-          {stats.searches} 次搜索中，{stats.converted} 次最终调用了结果，{stats.missed} 次未调用。
+        <p className="usage-note" id="usageSearchOutcome">
+          {skill === ''
+            ? `${stats.searches} 次搜索中，${stats.converted} 次最终调用了结果，${stats.missed} 次未调用。`
+            : `${stats.searches} 次搜索结果里出现了这条 skill，${stats.converted} 次最终调用了它，${stats.missed} 次未调用。`}
         </p>
       )}
 
@@ -59,7 +66,7 @@ export default function UsageStatsCards({ stats }: { stats: UsageStats }) {
         <div className="block" style={{ marginTop: 8 }}>
           <h2>按调用次数</h2>
           <p className="usage-note">仅统计调用；搜索后未调用的不计入。</p>
-          <table className="usage-table usage-top">
+          <table className="usage-table usage-top" id="usageTop">
             <thead>
               <tr>
                 <th>名字</th>

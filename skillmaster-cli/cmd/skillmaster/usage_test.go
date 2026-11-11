@@ -129,7 +129,7 @@ func TestUsageOfAnAddressShowsTheOwnerTable(t *testing.T) {
 			t.Fatalf("usage <address>: %v", err)
 		}
 	})
-	for _, want := range []string{"dev/pdf-tools", "调用次数 3", "入库人数 45", "所有者",
+	for _, want := range []string{"dev/pdf-tools", "调用次数 3", "累计入库 45", "所有者",
 		"yuhan", "维护"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output does not carry %q:\n%s", want, out)
@@ -142,7 +142,7 @@ func TestUsageUsersPrintsTheTableAlone(t *testing.T) {
 		if r.URL.Path != "/api/v1/usage/skills/dev/pdf-tools/users" {
 			t.Errorf("unexpected %s", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"window_days":90,"users":[
+		_, _ = w.Write([]byte(`{"window_days":90,"since":"2026-10-13T00:00:00Z","until":"2026-11-11T00:00:00Z","public":false,"users":[
 			{"who":"dev","owner":true,"role":"所有者","invoke":3,"submitted":12,"last":"2026-11-10T01:41:00Z"},
 			{"who":"yuhan","owner":false,"role":"maintain","invoke":42,"submitted":5,"last":"2026-11-09T00:00:00Z"}]}`))
 	})
@@ -152,7 +152,7 @@ func TestUsageUsersPrintsTheTableAlone(t *testing.T) {
 			t.Fatalf("usage <address> --users: %v", err)
 		}
 	})
-	for _, want := range []string{"使用者", "档位", "dev", "所有者", "yuhan", "维护"} {
+	for _, want := range []string{"dev/pdf-tools 近 30 天", "使用者", "档位", "dev", "所有者", "yuhan", "维护"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output does not carry %q:\n%s", want, out)
 		}
@@ -194,6 +194,42 @@ func TestUsageMineShowsVersionsAndTheirState(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output does not carry %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestUsageUsersOnAPublicSkillSaysThereIsNoTable(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"window_days":30,"since":"2026-10-13T00:00:00Z","until":"2026-11-11T00:00:00Z","public":true,"users":[]}`))
+	})
+
+	out := captureStdout(t, func() {
+		if err := usageVerb(context.Background(), []string{"dev/pdf-tools", "--users"}); err != nil {
+			t.Fatalf("usage <address> --users: %v", err)
+		}
+	})
+	if !strings.Contains(out, "公开 skill 仅提供聚合") {
+		t.Errorf("public note missing:\n%s", out)
+	}
+	if !strings.Contains(out, "skmr skill show") {
+		t.Errorf("the public note must say where the platform signals live:\n%s", out)
+	}
+	if strings.Contains(out, "还没有人用过这个 skill") {
+		t.Errorf("a public skill must not be reported as unused:\n%s", out)
+	}
+}
+
+func TestUsageWithOnlyATimeFilterSaysNothingMatched(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"items":[],"total":0,"page":1,"page_size":50,"window_days":7,"has_any":true}`))
+	})
+
+	out := captureStdout(t, func() {
+		if err := usageVerb(context.Background(), []string{"--days", "7"}); err != nil {
+			t.Fatalf("usage --days 7: %v", err)
+		}
+	})
+	if !strings.Contains(out, "没有匹配的使用记录") {
+		t.Errorf("time-only filtering should use the filtered empty state:\n%s", out)
 	}
 }
 
@@ -243,5 +279,36 @@ func TestUsageJSONReportsANotFoundByItsCode(t *testing.T) {
 	}
 	if failure.Code != "not_found" {
 		t.Errorf("code = %q, want not_found (the 404 must not classify as network)", failure.Code)
+	}
+}
+
+func TestUsageHelpListsTheWindowFlags(t *testing.T) {
+	out := captureStdout(t, func() {
+		if err := run(context.Background(), []string{"usage", "--help"}); err != nil {
+			t.Fatalf("usage --help: %v", err)
+		}
+	})
+	for _, want := range []string{"--days", "--since", "--until", "--skill"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help is missing %s:\n%s", want, out)
+		}
+	}
+}
+
+func TestUsageWithNothingAtAllSaysSoEvenWhenFiltered(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"items":[],"total":0,"page":1,"page_size":50,"window_days":7,"has_any":false}`))
+	})
+
+	out := captureStdout(t, func() {
+		if err := usageVerb(context.Background(), []string{"--days", "7", "--skill", "pdf"}); err != nil {
+			t.Fatalf("usage --days 7 --skill pdf: %v", err)
+		}
+	})
+	if !strings.Contains(out, "暂无使用记录") {
+		t.Errorf("an account with no records at all gets the other sentence:\n%s", out)
+	}
+	if strings.Contains(out, "没有匹配的使用记录") {
+		t.Errorf("nothing was filtered out; the filter is not the reason:\n%s", out)
 	}
 }

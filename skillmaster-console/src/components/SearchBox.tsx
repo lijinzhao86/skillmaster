@@ -20,6 +20,7 @@ export default function SearchBox({
   placeholder,
   label,
   onChange,
+  maxLength,
 }: {
   id: string
   value: string
@@ -27,6 +28,8 @@ export default function SearchBox({
   /** The name a screen reader reads; visually there is only the magnifier. */
   label: string
   onChange: (value: string) => void
+  /** A server-side bound the box should not let a paste exceed. */
+  maxLength?: number
 }) {
   const input = useRef<HTMLInputElement>(null)
   const labelId = `${id}-label`
@@ -69,6 +72,7 @@ export default function SearchBox({
         /* What the shell's `/` looks for: the page's own box, not a global one. */
         data-page-search=""
         placeholder={placeholder}
+        maxLength={maxLength}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {

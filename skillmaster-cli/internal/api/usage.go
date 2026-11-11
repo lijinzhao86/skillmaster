@@ -43,6 +43,10 @@ type UsagePage struct {
 	Page       int                `json:"page"`
 	PageSize   int                `json:"page_size"`
 	WindowDays int                `json:"window_days"`
+	Since      string             `json:"since"`
+	Until      string             `json:"until"`
+	Skill      *string            `json:"skill"`
+	HasAny     bool               `json:"has_any"`
 }
 
 type UsageTop struct {
@@ -53,6 +57,9 @@ type UsageTop struct {
 
 type UsageStats struct {
 	WindowDays int        `json:"window_days"`
+	Since      string     `json:"since"`
+	Until      string     `json:"until"`
+	Skill      *string    `json:"skill"`
 	Calls      int64      `json:"calls"`
 	Searches   int64      `json:"searches"`
 	Converted  int64      `json:"converted"`
@@ -81,6 +88,8 @@ type UsageTotals struct {
 type SkillUsage struct {
 	Skill      string      `json:"skill"`
 	WindowDays int         `json:"window_days"`
+	Since      string      `json:"since"`
+	Until      string      `json:"until"`
 	Public     bool        `json:"public"`
 	Totals     UsageTotals `json:"totals"`
 	Users      []UsageUser `json:"users"`
@@ -88,6 +97,7 @@ type SkillUsage struct {
 
 type UsageUsers struct {
 	WindowDays int         `json:"window_days"`
+	Public     bool        `json:"public"`
 	Users      []UsageUser `json:"users"`
 }
 
@@ -101,14 +111,34 @@ type MineVersion struct {
 type UsageMine struct {
 	Skill      string        `json:"skill"`
 	WindowDays int           `json:"window_days"`
+	Since      string        `json:"since"`
+	Until      string        `json:"until"`
 	Calls      int64         `json:"calls"`
 	Versions   int           `json:"versions"`
 	Latest     *string       `json:"latest"`
 	ByVersion  []MineVersion `json:"by_version"`
 }
 
-func (c Client) ListUsage(ctx context.Context, page, limit int) (UsagePage, error) {
+// UsageFilter is the window every usage read accepts (v60). The client sends the two instants —
+// local calendar days are converted where the timezone is known, which is here, not the server.
+type UsageFilter struct {
+	Since string
+	Until string
+	Skill string
+}
+
+func (f UsageFilter) values() url.Values {
 	params := url.Values{}
+	params.Set("since", f.Since)
+	params.Set("until", f.Until)
+	if f.Skill != "" {
+		params.Set("skill", f.Skill)
+	}
+	return params
+}
+
+func (c Client) ListUsage(ctx context.Context, page, limit int, filter UsageFilter) (UsagePage, error) {
+	params := filter.values()
 	if page > 1 {
 		params.Set("page", strconv.Itoa(page))
 	}
@@ -130,8 +160,8 @@ func (c Client) ListUsage(ctx context.Context, page, limit int) (UsagePage, erro
 // `UsageInteraction` and re-encoding drops every field the struct marks `omitempty` — a 0-result
 // search loses `returned`, `results` and `invocations` — so the JSON mode uses this and prints the
 // bytes unchanged.
-func (c Client) UsageRaw(ctx context.Context, page, limit int) ([]byte, error) {
-	params := url.Values{}
+func (c Client) UsageRaw(ctx context.Context, page, limit int, filter UsageFilter) ([]byte, error) {
+	params := filter.values()
 	if page > 1 {
 		params.Set("page", strconv.Itoa(page))
 	}
@@ -139,16 +169,18 @@ func (c Client) UsageRaw(ctx context.Context, page, limit int) ([]byte, error) {
 	return c.request(ctx, http.MethodGet, APIPrefix+"/usage/interactions?"+params.Encode(), nil)
 }
 
-func (c Client) UsageStatsRaw(ctx context.Context) ([]byte, error) {
-	return c.request(ctx, http.MethodGet, APIPrefix+"/usage/stats", nil)
+func (c Client) UsageStatsRaw(ctx context.Context, filter UsageFilter) ([]byte, error) {
+	return c.request(ctx, http.MethodGet, APIPrefix+"/usage/stats?"+filter.values().Encode(), nil)
 }
 
-func (c Client) SkillUsageRaw(ctx context.Context, namespace, name, suffix string) ([]byte, error) {
-	return c.request(ctx, http.MethodGet, usageSkillPath(namespace, name)+suffix, nil)
+func (c Client) SkillUsageRaw(ctx context.Context, namespace, name, suffix string,
+	filter UsageFilter) ([]byte, error) {
+	return c.request(ctx, http.MethodGet,
+		usageSkillPath(namespace, name)+suffix+"?"+filter.values().Encode(), nil)
 }
 
-func (c Client) UsageStats(ctx context.Context) (UsageStats, error) {
-	raw, err := c.request(ctx, http.MethodGet, APIPrefix+"/usage/stats", nil)
+func (c Client) UsageStats(ctx context.Context, filter UsageFilter) (UsageStats, error) {
+	raw, err := c.request(ctx, http.MethodGet, APIPrefix+"/usage/stats?"+filter.values().Encode(), nil)
 	if err != nil {
 		return UsageStats{}, err
 	}
@@ -163,8 +195,10 @@ func usageSkillPath(namespace, name string) string {
 	return APIPrefix + "/usage/skills/" + url.PathEscape(namespace) + "/" + url.PathEscape(name)
 }
 
-func (c Client) SkillUsage(ctx context.Context, namespace, name string) (SkillUsage, error) {
-	raw, err := c.request(ctx, http.MethodGet, usageSkillPath(namespace, name), nil)
+func (c Client) SkillUsage(ctx context.Context, namespace, name string,
+	filter UsageFilter) (SkillUsage, error) {
+	raw, err := c.request(ctx, http.MethodGet,
+		usageSkillPath(namespace, name)+"?"+filter.values().Encode(), nil)
 	if err != nil {
 		return SkillUsage{}, err
 	}
@@ -175,8 +209,10 @@ func (c Client) SkillUsage(ctx context.Context, namespace, name string) (SkillUs
 	return result, nil
 }
 
-func (c Client) SkillUsageUsers(ctx context.Context, namespace, name string) (UsageUsers, error) {
-	raw, err := c.request(ctx, http.MethodGet, usageSkillPath(namespace, name)+"/users", nil)
+func (c Client) SkillUsageUsers(ctx context.Context, namespace, name string,
+	filter UsageFilter) (UsageUsers, error) {
+	raw, err := c.request(ctx, http.MethodGet,
+		usageSkillPath(namespace, name)+"/users?"+filter.values().Encode(), nil)
 	if err != nil {
 		return UsageUsers{}, err
 	}
@@ -187,8 +223,10 @@ func (c Client) SkillUsageUsers(ctx context.Context, namespace, name string) (Us
 	return result, nil
 }
 
-func (c Client) SkillUsageMine(ctx context.Context, namespace, name string) (UsageMine, error) {
-	raw, err := c.request(ctx, http.MethodGet, usageSkillPath(namespace, name)+"/mine", nil)
+func (c Client) SkillUsageMine(ctx context.Context, namespace, name string,
+	filter UsageFilter) (UsageMine, error) {
+	raw, err := c.request(ctx, http.MethodGet,
+		usageSkillPath(namespace, name)+"/mine?"+filter.values().Encode(), nil)
 	if err != nil {
 		return UsageMine{}, err
 	}

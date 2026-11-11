@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import type { AuthoredSkill } from '../../api/types'
 import { getSkillUsage, getSkillUsageMine } from '../../api/usage'
 import type { SkillUsage, UsageMine } from '../../api/usage'
-import { go, param, query } from '../../address'
+import { go, param, query, replaceAddress } from '../../address'
+import UsageRange from './UsageRange'
+import { rangeFromParams, rangeInstants, withRange } from '../../usageRange'
+import type { UsageRange as UsageRangeValue } from '../../usageRange'
 import { rungLabel } from '../../rungs'
-import { formatDay, formatMonthDay, formatTime } from '../../time'
+import { formatDay, formatMonthDay, formatTime, fullStamp } from '../../time'
 import { statusClass, statusText } from '../../version'
 import type { VersionStatus } from '../../version'
 
@@ -18,6 +21,12 @@ function chipOf(state: string): { text: string; className: string } | null {
 /** The wire carries the rung key; the column is the interface's word (维护, 所有者, …). */
 function roleLabel(role: string): string {
   return rungLabel(role as Parameters<typeof rungLabel>[0])
+}
+
+/** `YYYY-MM-DD` for a day or an instant; a date-only value is already one, never re-zoned. */
+function dayField(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  return formatDay(value).replaceAll('/', '-')
 }
 
 function clockOf(at: string): string {
@@ -51,38 +60,52 @@ export default function UsagePane({
   const [scope, setScope] = useState<'all' | 'mine'>(
     owner && param('use') !== 'mine' ? 'all' : 'mine',
   )
-  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  /* **A refetch keeps the last answer on screen.** Only the first read of a view draws
+     「加载中…」; changing the range swaps the numbers in place, the same rule 使用记录 follows. */
+  const [failed, setFailed] = useState(false)
   const [usage, setUsage] = useState<SkillUsage | null>(null)
   const [mine, setMine] = useState<UsageMine | null>(null)
 
+  const [range, setRangeState] = useState<UsageRangeValue>(() => rangeFromParams(query()))
+  const { since, until } = rangeInstants(range)
+
   useEffect(() => {
     let live = true
-    setState('loading')
+    setFailed(false)
+    const window = { since, until }
     const request =
       owner && scope === 'all'
-        ? getSkillUsage(namespace, name).then((result) => {
+        ? getSkillUsage(namespace, name, window).then((result) => {
             if (!live) return
             if (result.ok) {
               setUsage(result.data)
-              setState('ready')
             } else {
-              setState('failed')
+              setFailed(true)
             }
           })
-        : getSkillUsageMine(namespace, name).then((result) => {
+        : getSkillUsageMine(namespace, name, window).then((result) => {
             if (!live) return
             if (result.ok) {
               setMine(result.data)
-              setState('ready')
             } else {
-              setState('failed')
+              setFailed(true)
             }
           })
     void request
     return () => {
       live = false
     }
-  }, [owner, scope, namespace, name])
+  }, [owner, scope, namespace, name, since, until])
+
+  const allScope = owner && scope === 'all'
+  const loading = (allScope ? usage === null : mine === null) && !failed
+
+  function setRange(next: UsageRangeValue): void {
+    setRangeState(next)
+    const params = query()
+    withRange(params, next)
+    replaceAddress(params.toString() === '' ? window.location.pathname : `?${params}`)
+  }
 
   function choose(next: 'all' | 'mine'): void {
     setScope(next)
@@ -95,40 +118,48 @@ export default function UsagePane({
 
   return (
     <div className="tab-panel" data-tab="usage" id="skillUsage">
-      {owner && (
-        <div className="usage-scope" role="group" aria-label="使用范围">
-          <button
-            type="button"
-            className={scope === 'all' ? 'is-current' : undefined}
-            aria-pressed={scope === 'all'}
-            onClick={() => choose('all')}
-          >
-            全部使用
-          </button>
-          <button
-            type="button"
-            className={scope === 'mine' ? 'is-current' : undefined}
-            aria-pressed={scope === 'mine'}
-            onClick={() => choose('mine')}
-          >
-            我的使用
-          </button>
-        </div>
-      )}
-
-      <p className="loading" hidden={state !== 'loading'}>
-        加载中…
-      </p>
-      <div className="banner" hidden={state !== 'failed'}>
-        使用记录暂时无法加载，请稍后重试。
+      {/* 视图开关与时间范围同一行：都决定「这一屏看哪一段、哪一份」。非所有者没有开关，
+          时间按钮靠右，位置与有开关时一致。 */}
+      <div className="usage-tools">
+        {owner && (
+          <div className="usage-scope" role="group" aria-label="使用范围">
+            <button
+              type="button"
+              className={scope === 'all' ? 'is-current' : undefined}
+              aria-pressed={scope === 'all'}
+              onClick={() => choose('all')}
+            >
+              全部使用
+            </button>
+            <button
+              type="button"
+              className={scope === 'mine' ? 'is-current' : undefined}
+              aria-pressed={scope === 'mine'}
+              onClick={() => choose('mine')}
+            >
+              我的使用
+            </button>
+          </div>
+        )}
+        <span className="usage-range">
+          <UsageRange
+            id="skillUsageRange"
+            label="时间范围"
+            range={range}
+            onChange={setRange}
+          />
+        </span>
       </div>
 
-      {state === 'ready' && owner && scope === 'all' && usage !== null && (
-        <OwnerAll usage={usage} />
-      )}
-      {state === 'ready' && !(owner && scope === 'all') && mine !== null && (
-        <Mine mine={mine} />
-      )}
+      <p className="loading" hidden={!loading}>
+        加载中…
+      </p>
+      <div className="banner" hidden={!failed}>
+        使用情况暂时无法加载，请稍后重试。
+      </div>
+
+      {allScope && usage !== null && <OwnerAll usage={usage} />}
+      {!allScope && mine !== null && <Mine mine={mine} />}
     </div>
   )
 }
@@ -152,7 +183,7 @@ function OwnerAll({ usage }: { usage: SkillUsage }) {
           </span>
         </div>
         <div className="stat">
-          <span className="stat-head">入库人数</span>
+          <span className="stat-head">累计入库</span>
           <span className="stat-body">
             <span className="stat-number">{usage.totals.joins}</span>
           </span>
@@ -161,21 +192,25 @@ function OwnerAll({ usage }: { usage: SkillUsage }) {
           <span className="stat-head">最近使用</span>
           <span className="stat-body">
             <span className="stat-number" style={{ fontSize: 18 }}>
-              {usage.totals.last_used === null ? '—' : formatDay(usage.totals.last_used)}
+              {usage.totals.last_used === null ? '—' : formatMonthDay(usage.totals.last_used)}
             </span>
+            {usage.totals.last_used !== null && (
+              <span className="stat-unit">{clockOf(usage.totals.last_used)}</span>
+            )}
           </span>
         </div>
       </div>
 
       {usage.public ? (
         <p className="empty" id="skillUsagePublic">
-          公开 skill 仅提供聚合，不按协作者统计。
+          公开 skill 仅提供聚合，不按协作者统计。页头的累计调用是平台信号，
+          和这里的区间数不是同一套口径；近 30 天账号分桶在 <code>skmr skill show</code>。
         </p>
       ) : (
         <div className="block">
           <h2>使用者</h2>
           <p className="usage-note" style={{ marginTop: 8, marginBottom: 12 }}>
-            调用次数看采用，提交版本看贡献；不展示个人操作明细。
+            调用次数看采用，提交版本看贡献；不展示个人操作明细。三列都按上方区间算。
           </p>
           <table className="usage-table" id="skillUsageUsers">
             <thead>
@@ -195,7 +230,7 @@ function OwnerAll({ usage }: { usage: SkillUsage }) {
                   <td>{user.invoke}</td>
                   <td>{user.submitted}</td>
                   <td className="usage-last">
-                    {user.last === null ? '—' : formatDay(user.last)}
+                    {user.last === null ? '—' : dayField(user.last)}
                   </td>
                 </tr>
               ))}
@@ -262,7 +297,7 @@ function Mine({ mine }: { mine: UsageMine }) {
                       )}
                     </td>
                     <td>{row.calls}</td>
-                    <td className="usage-last" title={formatTime(row.last)}>
+                    <td className="usage-last" title={fullStamp(row.last)}>
                       {row.last === null ? '—' : stamp(row.last)}
                     </td>
                   </tr>

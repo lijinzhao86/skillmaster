@@ -3,7 +3,6 @@ package com.skillmasterai.api;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.skillmasterai.common.ErrorCode;
 import com.skillmasterai.common.RequestException;
-import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.activity.UsageHistory;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.usecase.ReadSkillUsageUseCase;
@@ -43,6 +42,9 @@ class UsageController {
     ResponseEntity<Interactions> interactions(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String since,
+            @RequestParam(required = false) String until,
+            @RequestParam(required = false) String skill,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
         int wantedPage = page == null ? 1 : page;
         int wantedLimit = limit == null ? DEFAULT_LIMIT : limit;
@@ -50,19 +52,25 @@ class UsageController {
             throw new RequestException(ErrorCode.INVALID_REQUEST,
                     "page must be at least 1 and limit between 1 and " + MAX_LIMIT);
         }
+        UsageHistory.Window window = UsageWindows.parse(since, until, skill);
         UsageHistory.Page result = history.interactions(subject.userId(), wantedPage,
-                wantedLimit, Timestamps.now());
+                wantedLimit, window);
         return ResponseEntity.ok(new Interactions(
                 result.items().stream().map(Interactions::of).toList(), result.total(),
-                result.page(), result.pageSize(), UsageHistory.WINDOW_DAYS));
+                result.page(), result.pageSize(), window.days(), window.since(), window.until(),
+                window.skill(), history.hasAny(subject.userId())));
     }
 
     @GetMapping(path = "/stats", produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<Stats> stats(@AuthenticationPrincipal AuthenticatedSubject subject) {
-        UsageHistory.Stats result = history.stats(subject.userId(), Timestamps.now());
-        return ResponseEntity.ok(new Stats(UsageHistory.WINDOW_DAYS, result.calls(),
-                result.searches(), result.converted(), result.missed(), result.skills(),
-                result.latest(), result.top().stream()
+    ResponseEntity<Stats> stats(@RequestParam(required = false) String since,
+            @RequestParam(required = false) String until,
+            @RequestParam(required = false) String skill,
+            @AuthenticationPrincipal AuthenticatedSubject subject) {
+        UsageHistory.Window window = UsageWindows.parse(since, until, skill);
+        UsageHistory.Stats result = history.stats(subject.userId(), window);
+        return ResponseEntity.ok(new Stats(window.days(), window.since(), window.until(),
+                window.skill(), result.calls(), result.searches(), result.converted(),
+                result.missed(), result.skills(), result.latest(), result.top().stream()
                         .map(top -> new Stats.Top(top.skill(), top.calls(), top.last()))
                         .toList()));
     }
@@ -70,33 +78,41 @@ class UsageController {
     /** The owner's view. Anyone else gets the same 404 an unknown skill gets. */
     @GetMapping(path = "/skills/{namespace}/{name}", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<SkillUsage> skill(@PathVariable String namespace, @PathVariable String name,
+            @RequestParam(required = false) String since,
+            @RequestParam(required = false) String until,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        UsageHistory.OwnerUsage result = skillUsage.ownerUsage(namespace, name, subject,
-                        Timestamps.now())
+        UsageHistory.Window window = UsageWindows.parse(since, until, null);
+        UsageHistory.OwnerUsage result = skillUsage.ownerUsage(namespace, name, subject, window)
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.ok(SkillUsage.of(namespace + "/" + name, result));
+        return ResponseEntity.ok(SkillUsage.of(namespace + "/" + name, result, window));
     }
 
     /** The users table alone — the same rows the owner view carries. */
     @GetMapping(path = "/skills/{namespace}/{name}/users",
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Users> users(@PathVariable String namespace, @PathVariable String name,
+            @RequestParam(required = false) String since,
+            @RequestParam(required = false) String until,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        UsageHistory.OwnerUsage result = skillUsage.ownerUsage(namespace, name, subject,
-                        Timestamps.now())
+        UsageHistory.Window window = UsageWindows.parse(since, until, null);
+        UsageHistory.OwnerUsage result = skillUsage.ownerUsage(namespace, name, subject, window)
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.ok(new Users(UsageHistory.WINDOW_DAYS, SkillUsage.usersOf(result)));
+        return ResponseEntity.ok(new Users(window.days(), window.since(), window.until(),
+                result.publicSkill(), SkillUsage.usersOf(result)));
     }
 
     /** What this person did with this skill, split by version. */
     @GetMapping(path = "/skills/{namespace}/{name}/mine",
             produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<Mine> mine(@PathVariable String namespace, @PathVariable String name,
+            @RequestParam(required = false) String since,
+            @RequestParam(required = false) String until,
             @AuthenticationPrincipal AuthenticatedSubject subject) {
-        UsageHistory.Mine result = skillUsage.mine(namespace, name, subject, Timestamps.now())
+        UsageHistory.Window window = UsageWindows.parse(since, until, null);
+        UsageHistory.Mine result = skillUsage.mine(namespace, name, subject, window)
                 .orElseThrow(SkillNotFoundException::new);
-        return ResponseEntity.ok(new Mine(namespace + "/" + name, UsageHistory.WINDOW_DAYS,
-                result.calls(), result.versions(), result.latest(),
+        return ResponseEntity.ok(new Mine(namespace + "/" + name, window.days(), window.since(),
+                window.until(), result.calls(), result.versions(), result.latest(),
                 result.byVersion().stream()
                         .map(row -> new Mine.Version(row.version(), row.state(), row.calls(),
                                 row.last()))
@@ -108,7 +124,8 @@ class UsageController {
      * skill and version. The absent half is omitted rather than sent as null, so a client can
      * branch on the field's presence.
      */
-    record Interactions(List<Item> items, long total, int page, int page_size, int window_days) {
+    record Interactions(List<Item> items, long total, int page, int page_size, int window_days,
+            String since, String until, String skill, boolean has_any) {
 
         static Item of(UsageHistory.Interaction interaction) {
             if (interaction instanceof UsageHistory.Search search) {
@@ -149,26 +166,29 @@ class UsageController {
         }
     }
 
-    record Stats(int window_days, long calls, long searches, long converted, long missed,
-            long skills, String latest, List<Top> top) {
+    record Stats(int window_days, String since, String until, String skill, long calls,
+            long searches, long converted, long missed, long skills, String latest,
+            List<Top> top) {
 
         record Top(String skill, long calls, String last) {
         }
     }
 
     /** The owner's aggregate and users table. Totals are strings: a bucket or an exact count. */
-    record SkillUsage(String skill, int window_days,
+    record SkillUsage(String skill, int window_days, String since, String until,
             @com.fasterxml.jackson.annotation.JsonProperty("public") boolean publicSkill,
             Totals totals, List<User> users) {
 
-        static SkillUsage of(String address, UsageHistory.OwnerUsage usage) {
+        static SkillUsage of(String address, UsageHistory.OwnerUsage usage,
+                UsageHistory.Window window) {
             String calls = usage.publicSkill()
                     ? SkillMetaResponse.callsLabel(usage.callsFloor())
                     : String.valueOf(usage.calls());
             String accounts = usage.publicSkill()
                     ? SkillMetaResponse.accountsLabel(usage.accountsFloor())
                     : String.valueOf(usage.accounts());
-            return new SkillUsage(address, UsageHistory.WINDOW_DAYS, usage.publicSkill(),
+            return new SkillUsage(address, window.days(), window.since(), window.until(),
+                    usage.publicSkill(),
                     new Totals(calls, accounts, usage.joins(), usage.last()), usersOf(usage));
         }
 
@@ -187,11 +207,13 @@ class UsageController {
         }
     }
 
-    record Users(int window_days, List<SkillUsage.User> users) {
+    record Users(int window_days, String since, String until,
+            @com.fasterxml.jackson.annotation.JsonProperty("public") boolean publicSkill,
+            List<SkillUsage.User> users) {
     }
 
-    record Mine(String skill, int window_days, long calls, int versions, String latest,
-            List<Version> by_version) {
+    record Mine(String skill, int window_days, String since, String until, long calls,
+            int versions, String latest, List<Version> by_version) {
 
         record Version(String version, String state, long calls, String last) {
         }
