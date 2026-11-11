@@ -37,7 +37,7 @@ main 的分支保护在仓库设置里，不在这个文件里。要配的检查
 `Deploy` **不构建**。`release: new` 时，它先用 Actions API 找到同一 commit 的 push run，确认其中的 `Build` 结论是
 `success`；没有就失败，**在碰服务器之前**。然后下载 `Build` 上传的 jar（`actions/download-artifact`，
 跨 run 下载并校验 digest）→ 渲染 `/etc/skillmaster/server.env`（仓库的 vars/secrets，唯一来源）→
-scp 到 `/opt/skillmaster/releases/<sha>/app.jar` → 切 `/opt/skillmaster/current` → `systemctl restart
+`rsync`（`--partial`，一次 attempt 超时后从断点续传）到 `/opt/skillmaster/releases/<sha>/app.jar` → 切 `/opt/skillmaster/current` → `systemctl restart
 skillmaster` → **等 `/actuator/health` 回答**；不回答就切回上一个 release → 修剪旧 release。
 
 探针通过前还会确认两件事：进程必须是重启后的新 PID；`/opt/skillmaster/current` 必须指向**这一次**的
