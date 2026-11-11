@@ -1,7 +1,7 @@
 # v58-usage-history
 
 > **最后更新**：2026-11-11
-> **状态**：已完成（2026-11-11 合并 PR #167，release `27a1e76`；服务端、控制台、官网与 CLI beta `1.1.0-beta (27a1e76)` 均已发布；循环审计 6 轮，0 blocker / 0 high。**U3 与视觉验收、需要真数据或 90 天分区的用例未执行**，见 [`test-plan.md`](test-plan.md) §结果）
+> **状态**：已完成（2026-11-11 合并 PR #167，release `27a1e76`；服务端、控制台、官网与 CLI beta `1.1.0-beta (27a1e76)` 均已发布；循环审计 6 轮，0 blocker / 0 high。**U3 与视觉验收、需要真数据或 90 天分区的用例未执行**，见 [`test-plan.md`](test-plan.md) §结果。小版本迭代 1 条，见 [`iterations/0001-remove-usage-rank.md`](iterations/0001-remove-usage-rank.md)）
 > **所属版本**：本文件夹
 
 ## 目标
@@ -39,4 +39,5 @@
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题（第 3 关填写） |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果（第 4 关填写） |
 | [`known-issues.md`](known-issues.md) | 本版无范围外未修缺陷；记录本机 CLI 三条用例失败的环境原因 |
+| [`iterations/0001-remove-usage-rank.md`](iterations/0001-remove-usage-rank.md) | 小版本迭代：调用行不再显示「第 K 个结果」，窄屏恢复显示调用时刻 |
 | [`docs/research/activity-log-storage.md`](../../research/activity-log-storage.md) | 存储选型调研：PG / SLS / 独立实例 / TimescaleDB |
