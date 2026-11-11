@@ -108,6 +108,9 @@ export default function ResultCard({
         </svg>
         <span className="visually-hidden">{'已在库 · ' + SOURCE_LABEL[source]}</span>
       </span>
+    ) : skill.state === 'pending' ? (
+      /* v61（ADR 0184）：下线中不接受新入库，卡片不画一个点了必被拒绝的动作。 */
+      null
     ) : joined === 'busy' ? (
       /* 加入中：同一个位置换成一段转动的弧。 */
       <button type="button" className="result-join" data-state="busy" disabled title="入库中">
@@ -223,6 +226,13 @@ export default function ResultCard({
             >
               {categoryName(skill.category)}
             </a>
+          )}
+          {skill.state === 'pending' && (
+            /* v61（ADR 0184）：下线中的 skill 还在公域结果里——它仍然在服务——所以行上要说
+               它要走、什么时候走，而不是让它看起来是常驻的。 */
+            <span className="chip is-soon" title="下线中：仍可调用，已不接受新入库">
+              下线中{skill.pendingUntil === undefined ? '' : ` · ${skill.pendingUntil}`}
+            </span>
           )}
         </div>
         {/* 描述封顶一行，完整的那一段在 `title` 里；主路是点名字进 skill 页。 */}

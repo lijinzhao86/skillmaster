@@ -258,6 +258,10 @@ type Metadata struct {
 	// published versions only, so a copy that is still a draft answers 404 here — this field
 	// becomes readable once its first version is published.
 	CopiedFrom *CopiedFrom `json:"copied_from"`
+	// OfflinePendingUntil is the 下线中 ramp's due date while the skill still serves (v61, ADR
+	// 0184). A skill in the ramp answers every read; the CLI warns on `invoke` and `run` and points
+	// at `skill copy`. Absent on an older server and on every skill that is not in a ramp.
+	OfflinePendingUntil string `json:"offline_pending_until"`
 }
 
 // CopiedFrom is the source snapshot a copy recorded: the address as it read at copy time and the
@@ -416,6 +420,8 @@ type Card struct {
 	Version    string    `json:"version"`
 	UpdatedAt  string    `json:"updated_at"`
 	DeletedAt  *string   `json:"deleted_at"`
+	// OfflinePendingUntil is the 下线中 ramp's date on a row whose state is `pending` (v61).
+	OfflinePendingUntil string `json:"offline_pending_until"`
 	Category   *Category `json:"category"`
 	PublicTags []Tag     `json:"public_tags"`
 	MyTags     []Tag     `json:"my_tags"`

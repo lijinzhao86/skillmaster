@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { formatDay } from '../../time'
 import type { AuthoredSkill, Standing } from '../../api/types'
 import SkillCollaborators from '../../components/SkillCollaborators'
 import SecretsPane from '../../components/skill/SecretsPane'
@@ -24,6 +25,10 @@ export interface SettingsTabProps {
   visibilityChoice: string
   onChangeVisibility: (choice: string) => void
   offline: boolean
+  /* v61: the service's three states, and the two counts the deletion sentence asks for. */
+  phase: 'online' | 'pending' | 'offline'
+  joins: number
+  grantees: number
   offlineButton: RefObject<HTMLButtonElement | null>
   onAskOffline: () => void
   deleteButton: RefObject<HTMLButtonElement | null>
@@ -42,6 +47,9 @@ export default function SettingsTab({
   visibilityChoice,
   onChangeVisibility,
   offline,
+  phase,
+  joins,
+  grantees,
   offlineButton,
   onAskOffline,
   deleteButton,
@@ -50,6 +58,18 @@ export default function SettingsTab({
 }: SettingsTabProps) {
   /* Absent on an older server: show the three-way choice it still honours (ADR 0146). */
   const canPublishPublic = skill.can_publish_public !== false
+  /* v61: 公开且有人入库时，下线先走 30 天，删除要等它走完 (ADR 0184). */
+  const pending = phase === 'pending'
+  const ramped = skill.visibility !== 'private' && joins > 0
+  const deleteBlocked = ramped && phase !== 'offline'
+  const impactParts: string[] = []
+  if (grantees > 0) impactParts.push(`${grantees} 人获得授权`)
+  if (joins > 0) impactParts.push(`${joins} 人入库`)
+  /* A3: the confirmation names all three facts — 公开/私有, grantees, joiners. */
+  const visibilityWord = skill.visibility === 'private' ? '私有' : '公开'
+  const impact = impactParts.length > 0
+    ? `它是${visibilityWord}的；有 ${impactParts.join('、')}；删除后他们会收到通知。`
+    : `它是${visibilityWord}的；没有其他人获得授权或入库。`
   return (
     <div className="tab-panel" data-tab="settings">
       <div className="settings">
@@ -175,14 +195,25 @@ export default function SettingsTab({
                         comes before deletion. */}
                     <div className="danger-row">
                       <div className="danger-what">
-                        <p className="danger-title">{offline ? '恢复服务' : '下线这个 skill'}</p>
-                        {!offline ? (
+                        <p className="danger-title">
+                          {pending ? '取消下线' : offline ? '恢复服务' : '下线这个 skill'}
+                        </p>
+                        {/* Three states, three sentences; a ramp says the date it was given. */}
+                        {pending ? (
                           <p className="hint">
-                            下线后，所有读者按这个 skill 的地址调用都会得到「服务已下线」；它也不再出现在搜索与公开列表里。版本状态与当前版本都不变，恢复后不需要重新上线。
+                            这个 skill 正在下线中：将于 {formatDay(skill.offline_pending_until ?? null)} 正式下线。期间仍可调用，每次调用都会提醒；现在不接受新入库。
+                          </p>
+                        ) : offline ? (
+                          <p className="hint">
+                            这个 skill 已下线：调用者得到「服务已下线」。恢复后，当前线上版本直接重新对外。版本状态与当前版本都不变。
+                          </p>
+                        ) : ramped ? (
+                          <p className="hint">
+                            它已公开，有 {joins} 人入库。下线会先进入 30 天的「下线中」：期间仍可调用，每次调用都会提醒；满 30 天后正式下线。入库与授权的人会收到通知。
                           </p>
                         ) : (
                           <p className="hint">
-                            这个 skill 已下线：调用者得到「服务已下线」。恢复后，当前线上版本直接重新对外。版本状态与当前版本都不变。
+                            下线后，所有读者按这个 skill 的地址调用都会得到「服务已下线」；它也不再出现在搜索与公开列表里。版本状态与当前版本都不变，恢复后不需要重新上线。
                           </p>
                         )}
                       </div>
@@ -190,10 +221,10 @@ export default function SettingsTab({
                         <button
                           ref={offlineButton}
                           type="button"
-                          className={offline ? 'button' : 'button is-danger'}
+                          className={pending || offline ? 'button' : 'button is-danger'}
                           onClick={onAskOffline}
                         >
-                          {offline ? '恢复服务' : '下线'}
+                          {pending ? '取消下线' : offline ? '恢复服务' : '下线'}
                         </button>
                       </div>
                     </div>
@@ -202,17 +233,25 @@ export default function SettingsTab({
                       {/* 后果写在按钮旁边，不是确认框里才第一次出现：确认框只重复最要紧的那一条。 */}
                       <div className="danger-what">
                         <p className="danger-title">删除这个 skill</p>
-                        <p className="hint">
-                          删除后，这个 skill 对所有访问者不可见，当前地址立即失效。{' '}
-                          <strong>名称不会被释放</strong>——要用同一个名称创建新 skill，必须先恢复这个 skill。
-                        </p>
-                        <p className="hint">已删除的 skill 会保留在「我的 skill」的「已删除」中，可以恢复。</p>
+                        {deleteBlocked ? (
+                          <p className="hint">它已公开，有 {joins} 人入库。先走完下线，才能删除。</p>
+                        ) : (
+                          <>
+                            <p className="hint">
+                              删除后，这个 skill 对所有访问者不可见，当前地址立即失效。
+                              名字会立即释放，可以用同一个名字创建新 skill。
+                              已删除的 skill 会保留在「我的 skill」的「已删除」中，可以恢复。
+                            </p>
+                            <p className="hint">{impact}</p>
+                          </>
+                        )}
                       </div>
                       <div className="danger-acts">
                         <button
                           ref={deleteButton}
                           type="button"
                           className="button is-danger"
+                          disabled={deleteBlocked}
                           onClick={onAskDelete}
                         >
                           删除

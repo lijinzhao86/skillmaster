@@ -26,12 +26,15 @@ export interface SettingsPaneProps {
   versions: Version[]
   visibility: Visibility
   publicRung: string | null
-  offline: boolean
+  phase: 'online' | 'pending' | 'offline'
+  pendingUntil: string
+  joins: number
+  grantees: number
   grants: Grant[]
   requests: Grant[]
   invitations: Grant[]
   onVisibility: (value: Visibility) => void
-  onOffline: (next: boolean) => void
+  onOffline: (next: 'online' | 'pending' | 'offline') => void
   onAdd: (who: string, role: string) => void
   onRole: (who: string, role: string) => void
   onWithdraw: (who: string) => void
@@ -56,7 +59,10 @@ export default function SettingsPane({
   versions,
   visibility,
   publicRung,
-  offline,
+  phase,
+  pendingUntil,
+  joins,
+  grantees,
   grants,
   requests,
   invitations,
@@ -126,7 +132,10 @@ export default function SettingsPane({
             atLeast={atLeast}
             canPublishPublic={canPublishPublic}
             visibility={visibility}
-            offline={offline}
+            phase={phase}
+            pendingUntil={pendingUntil}
+            joins={joins}
+            grantees={grantees}
             onVisibility={onVisibility}
             onOffline={onOffline}
           />

@@ -93,12 +93,12 @@ var versionMessages = map[string]string{
 	"invalid_version_state":  "这一版目前的状态不能做这个操作。",
 	"version_revoked":        "这一版已下架，调用会失败；要恢复读取，先重新上架。",
 	"skill_offline":          "这个 skill 已下线，暂时不提供服务。",
+	// v61: a public skill that had a live version and was deleted answers 410 rather than 404, so
+	// the address is not mistaken for a typo (ADR 0184).
+	"skill_gone": "这个 skill 已被作者删除，不再提供服务。",
 	"invalid_request":        "提交的内容有问题，请检查后重试。",
 	"too_many_requests":      "请求太频繁了，等一会儿再试。",
 	"internal_error":         "服务端出错了，请稍后重试。",
-	// The name still belongs to a deleted skill; the only way out is restoring it in the browser
-	// (ADR 0071). Said in the interface's voice rather than quoting the server's English.
-	"skill_deleted": "这个名字属于一个已删除的 skill；要到网页上恢复它，才能继续用这个名字。",
 	// v10's authoring verbs. Their refusals arrive as top-level codes or as `details[].issue`; both
 	// are translated here so a person does not get the server's English in a Chinese CLI.
 	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
@@ -108,7 +108,8 @@ var versionMessages = map[string]string{
 	"invalid_name":        "复制后的名字要是 1–64 个小写字母、数字和连字符，不能以连字符开头或结尾，也不能用官方保留的前缀。",
 	"name_not_rewritable": "这个 skill 的 SKILL.md 不能安全地改名；用它的原名复制一次，再在编辑器里改。",
 	// v37: the narrow delete's one refusal that is about the skill rather than the credential.
-	"skill_published":            "这个 skill 上线过，不能由凭据删除；要到网页上由人确认。",
+	"skill_published": "这个 skill 上线过，不能由凭据删除；要到网页上由人确认。" +
+		"如果它已公开且有入库者，先走完 30 天下线中，再删除。",
 	"notification_not_found":     "这条通知不在你的列表里——它可能已经被收口，或你已失去处理它的权限。",
 	"invalid_notification_state": "这条通知现在已经不能处理了。",
 	"digest_mismatch":            "这一版刚变过，重读再来。",

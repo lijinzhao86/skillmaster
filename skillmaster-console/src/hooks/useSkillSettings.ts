@@ -4,6 +4,9 @@ import { failureMessage } from '../api/errors'
 import { deleteSkill, setSkillOffline, setVisibility } from '../api/skills'
 import type { AuthoredSkill } from '../api/types'
 
+/** The service's three states (v61): serving, inside the 30-day ramp, or switched off. */
+export type OfflinePhase = 'online' | 'pending' | 'offline'
+
 /**
  * The settings sub-page's three writes and the questions asked before them: visibility, 下线 /
  * 恢复服务, and deletion.
@@ -88,7 +91,23 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
 
   /* 设置 › 危险操作. */
 
-  const offline = skill != null && skill.offline_at != null
+  /* **The state is derived, never stored** (v61, ADR 0184): a passed deadline reads as offline
+     even before the daily job writes `offline_at`, so the page cannot say 下线中 about a skill that
+     has already stopped serving. */
+  const phase: OfflinePhase =
+    skill == null
+      ? 'online'
+      : skill.offline_at != null
+        ? 'offline'
+        : skill.offline_pending_until != null
+          ? 'pending'
+          : 'online'
+  const offline = phase === 'offline'
+  /* The ramp is the public-and-joined case. Both counts are the server's, on the same response:
+     `usage.joins` and `grantees` (v61) — a page that asked for them separately would add a request
+     to every skill it opens. */
+  const joins = skill?.usage?.joins ?? 0
+  const grantees = skill?.grantees ?? 0
 
   const [offlineOpen, setOfflineOpen] = useState(false)
   const [offlinePending, setOfflinePending] = useState(false)
@@ -103,7 +122,9 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
   async function confirmOffline(): Promise<void> {
     setOfflinePending(true)
     setOfflineError(null)
-    const result = await setSkillOffline(namespace, name, !offline)
+    // One button, three states: from serving it starts the switch (a ramp or an immediate stop,
+    // the server decides); from the ramp it cancels; from offline it resumes.
+    const result = await setSkillOffline(namespace, name, phase === 'online')
     setOfflinePending(false)
     if (!result.ok) {
       setOfflineError(failureMessage(result))
@@ -159,6 +180,9 @@ export function useSkillSettings({ namespace, name, skill, setBanner }: SkillSet
     acceptPublicBrowse,
     cancelPublicBrowse,
     offline,
+    phase,
+    joins,
+    grantees,
     offlineOpen,
     offlinePending,
     offlineError,

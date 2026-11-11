@@ -61,7 +61,8 @@ func skillDelete(ctx context.Context, args []string) error {
 				"删除要所有者才能做；你不是这个 skill 的所有者。")
 		}
 		if facts.fromAuthor && facts.everPublished {
-			sentence := "这个 skill 上线过，不能由凭据删除；到网页上由人确认：" + settings
+			sentence := "这个 skill 上线过，不能由凭据删除；到网页上由人确认：" + settings +
+				"。如果它已公开且有入库者，先走完 30 天下线中，再删除。"
 			if parsed.jsonMode {
 				return &cliFailure{Code: "skill_published", Message: sentence, JSON: true}
 			}
@@ -82,8 +83,8 @@ func skillDelete(ctx context.Context, args []string) error {
 			return &cliFailure{Code: "confirmation_required",
 				Message: "删除要确认。确认后执行：" + command, JSON: true}
 		}
-		fmt.Println("它从未上线，可以直接删。删除后名字不会释放；要恢复用 skmr skill restore " +
-			parsed.address + "。")
+		fmt.Println("它从未上线，可以直接删。删除后名字立即释放，可以用同一个名字新建；" +
+			"要找回这一条用 skmr skill restore " + parsed.address + "。")
 		fmt.Printf("确认后执行：\n%s\n", command)
 		return &refusalError{message: "没有执行：删除要加 --yes。"}
 	}
@@ -111,7 +112,9 @@ func skillDelete(ctx context.Context, args []string) error {
 			Deleted   bool   `json:"deleted"`
 		}{"delete", true, parsed.address, true})
 	}
-	fmt.Printf("已删除 %s。名字不会释放：同名再建会得到 `skill_deleted`，要恢复用 skmr skill restore %s\n",
+	// v61 (ADR 0183): the name is free the moment this returns; restoring is still possible, and
+	// if somebody has taken the name by then the restore answers under a suffixed address.
+	fmt.Printf("已删除 %s。名字已释放，可以用同一个名字新建；要找回这一条用 skmr skill restore %s。\n",
 		parsed.address, parsed.address)
 	return nil
 }

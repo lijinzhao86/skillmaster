@@ -22,6 +22,21 @@ func TestSearchSendsTheScopeTheFlagNames(t *testing.T) {
 	}
 }
 
+// v61 (ADR 0184): `--show pending` is the narrow view of a ramp; the server answers it as its own
+// filter, so the CLI has to send the value unchanged.
+func TestListSendsThePendingShowValue(t *testing.T) {
+	fake := newFakeServer(t, func(recordedRequest) (int, string) {
+		return http.StatusOK, `{"skills":[],"next_cursor":null,"note":null}`
+	})
+
+	mustRun(t, "skills", "list", "--show", "pending")
+
+	pages := wantsRequests(t, fake, http.MethodGet, "/api/v1/skills")
+	if got := pages[0].Query.Get("show"); got != "pending" {
+		t.Errorf("show = %q, want pending", got)
+	}
+}
+
 func TestSearchAsksForSemanticUnlessToldOtherwise(t *testing.T) {
 	reply := `{"skills":[],"next_cursor":null,"note":null}`
 

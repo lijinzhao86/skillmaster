@@ -319,25 +319,6 @@ describe('the copy sheet', () => {
     expect(accept(container).disabled).toBe(false)
   })
 
-  it('keeps a deleted name refused as well', async () => {
-    stubFetch(() =>
-      json(409, errorBody('skill_deleted', 'the name belongs to a deleted skill')),
-    )
-    const { container } = showDialog()
-
-    fireEvent.click(accept(container))
-    await flush()
-
-    expect(accept(container).disabled).toBe(true)
-    // The design has one conflict state; a deleted name is still a taken name, and the restore
-    // entry lives under 「我的 skill › 已删除」 rather than in this sheet.
-    expect((container.querySelector('#copyError') as HTMLElement).textContent).toContain(
-      '这个名字已经有了',
-    )
-    // One sentence, not two: the server's refusal and the inline rule would otherwise both draw.
-    expect(container.querySelectorAll('.confirm-error')).toHaveLength(1)
-  })
-
   it('refuses the reserved skillmaster prefix before sending', async () => {
     const stub = stubFetch(() => json(201, {}))
     const { container } = showDialog()

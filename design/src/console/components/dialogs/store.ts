@@ -11,12 +11,12 @@
 
 import { useSyncExternalStore } from 'react'
 
-export type NewSkillMode = 'open' | 'error' | 'deleted'
+export type NewSkillMode = 'open' | 'error'
 export type ImportMode = 'list' | 'skill'
 /** 复制的四种打开态：普通、名字已被占用、名字本身不合法、已经成功。 */
 export type CopyMode = 'open' | 'taken' | 'invalid' | 'done'
 export type ImportAsked =
-  | 'open' | 'error' | 'exists' | 'exists-draft' | 'exists-hidden' | 'deleted' | 'mismatch'
+  | 'open' | 'error' | 'exists' | 'exists-draft' | 'exists-hidden' | 'mismatch'
   | 'bad-names' | 'bad-name-single'
 
 export interface NewSkillOpen {

@@ -6,7 +6,7 @@
  * typed — so the focus lands on 选择文件 rather than on the destructive-looking answer.
  *
  * The refusals and the idempotent hit are addresses, because with no server nothing can produce
- * them: `error`, `mismatch`, `bad-names`, `deleted`, `exists`, `exists-draft`, `exists-hidden`.
+ * them: `error`, `mismatch`, `bad-names`, `exists`, `exists-draft`, `exists-hidden`.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -97,8 +97,6 @@ export default function ImportDialog() {
           {'改好压缩包再选一次。'}
         </>,
       )
-    } else if (asked === 'deleted') {
-      setError(<>这个名字属于一个已删除的 skill。 <a href="?page=skills&show=deleted">去恢复</a></>)
     } else if (asked === 'exists-hidden') {
       setResult('这个 skill 已经有一版同样的内容；那一版现在读不到。')
     } else if (asked === 'exists' || asked === 'exists-draft') {

@@ -161,6 +161,8 @@ func emptyLibraryLine(options queryArgs) string {
 		return "没有草稿。"
 	case "offline":
 		return "没有已下线的 skill。"
+	case "pending":
+		return "没有下线中的 skill。"
 	default:
 		return "你的库里还没有能显示的 skill。"
 	}
@@ -249,7 +251,16 @@ func verboseLine(card api.Card) string {
 		parts = append(parts, "公域来源："+strings.Join(public, " · "))
 	}
 	if card.State != "" {
-		parts = append(parts, "状态："+cardStateLabel(card.State))
+		// v61: a ramp carries the date that makes the state actionable; without it 「下线中」 says
+		// what but not when.
+		state := cardStateLabel(card.State)
+		if until := card.OfflinePendingUntil; until != "" {
+			if len(until) >= 10 {
+				until = until[:10]
+			}
+			state += " · " + until
+		}
+		parts = append(parts, "状态："+state)
 	}
 	if card.Version != "" {
 		parts = append(parts, "版本："+card.Version)
@@ -311,6 +322,8 @@ func cardStateLabel(state string) string {
 		return "草稿"
 	case "offline":
 		return "已下线"
+	case "pending":
+		return "下线中"
 	case "deleted":
 		return "已删除"
 	default:

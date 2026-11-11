@@ -86,7 +86,7 @@
 | `skmr skill write` | 整份写一个文件 | `skmr skill write <地址>@<版本码> <相对路径\|目录/> [--from <本地文件>...] [--overwrite] [--allow-empty]` |
 | `skmr skills` | 整个库的动词 | — |
 | `skmr skills categories` | 公开分类词表 | `skmr skills categories [--no-login]` |
-| `skmr skills list` | 列出我的库 | `skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created\|shared\|joined]... [--sort recent\|name] [--show live\|draft\|offline\|deleted\|all] [--verbose] [--no-login]` |
+| `skmr skills list` | 列出我的库 | `skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created\|shared\|joined]... [--sort recent\|name] [--show live\|draft\|offline\|pending\|deleted\|all] [--verbose] [--no-login]` |
 | `skmr skills my-tags` | 我的标签 | `skmr skills my-tags [关键词] [--no-login]` |
 | `skmr skills my-tags add` | 新建一个标签 | `skmr skills my-tags add <名字> [--describe <说明>]` |
 | `skmr skills my-tags delete` | 删除定义（只在控制台） | `skmr skills my-tags delete <名字>` |

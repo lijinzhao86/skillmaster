@@ -480,6 +480,11 @@ describe('one skill: the three word groups (v14)', () => {
     )
     fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
     await settle()
+    // v61: 入库 is confirmed once — it is a dependency, not a bookmark.
+    fireEvent.click(
+      [...container.querySelectorAll('.confirm:not([hidden]) .confirm-acts:not([hidden]) .button')].at(-1) as HTMLButtonElement,
+    )
+    await settle()
 
     expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/library')
     expect(post.requests[0]?.method).toBe('POST')
@@ -1104,7 +1109,8 @@ describe('one skill: 设置 › 常规', () => {
       (button) => text(button) === '删除',
     )
     fireEvent.click(remove as HTMLButtonElement)
-    expect(text(container.querySelector('.confirm-body'))).toContain('该名称将无法用于创建新 skill')
+    // v61 (ADR 0183): deleting releases the name, so the sheet says so rather than the opposite.
+    expect(text(container.querySelector('.confirm-body'))).toContain('名字会立即释放')
 
     fireEvent.click(container.querySelector('.confirm-acts .button.is-danger') as HTMLButtonElement)
     await settle()
@@ -1146,6 +1152,56 @@ describe('one skill: 设置 › 常规', () => {
     ])
 
     expect(container.querySelector('.settings-block.is-danger')).toBeNull()
+  })
+
+  it('keeps the delete blocked during the ramp and says why', async () => {
+    const { container } = await showSettings(
+      {
+        ...SKILL,
+        visibility: 'public',
+        public_rung: 'browse',
+        can_publish_public: true,
+        offline_pending_until: '2026-12-11T00:00:00Z',
+        usage: { joins: 2 },
+        grantees: 1,
+      },
+      'general',
+      [() => json(200, { requests: [], total: 0 })],
+    )
+
+    // The one switch now means 取消下线 (ADR 0184), and deletion waits for 已下线.
+    expect(text(container.querySelector('.danger-title'))).toBe('取消下线')
+    const remove = [...container.querySelectorAll('.danger-acts .button')].find(
+      (button) => text(button) === '删除',
+    ) as HTMLButtonElement
+    expect(remove.disabled).toBe(true)
+    expect(container.textContent).toContain('它已公开，有 2 人入库。先走完下线，才能删除。')
+    // One screen, one date format: the header badge and this hint both read 2026/12/11.
+    expect(container.textContent).toContain('将于 2026/12/11 正式下线')
+  })
+
+  it('names the three impact facts in the delete sheet (A3)', async () => {
+    const { container } = await showSettings(
+      {
+        ...SKILL,
+        visibility: 'public',
+        public_rung: 'browse',
+        can_publish_public: true,
+        offline_at: '2026-10-20T00:00:00Z',
+        usage: { joins: 2 },
+        grantees: 1,
+      },
+      'general',
+      [() => json(200, { requests: [], total: 0 })],
+    )
+
+    const remove = [...container.querySelectorAll('.danger-acts .button')].find(
+      (button) => text(button) === '删除',
+    ) as HTMLButtonElement
+    fireEvent.click(remove)
+    expect(text(container.querySelector('.confirm-body'))).toContain(
+      '它是公开的；有 1 人获得授权、2 人入库；删除后他们会收到通知。',
+    )
   })
 })
 

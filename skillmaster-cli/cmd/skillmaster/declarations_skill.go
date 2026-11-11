@@ -21,6 +21,7 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "地址在服务端找不到", Next: "核对命名空间与名字"},
 			{Code: "skill_offline", Summary: "这个 skill 已下线", Next: "问作者什么时候再上线"},
+			{Code: "skill_gone", Summary: "这个 skill 已被作者删除", Next: "地址不再服务；换一个用 skills search"},
 			{Code: "insufficient_permission", Summary: "行 id 按状态要不同档位", Next: "线上 browse、草稿 write、下架 maintain"},
 			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
@@ -359,7 +360,6 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "content_already_exists", Summary: "内容与线上一样", Next: "改点东西再提交"},
 			{Code: "insufficient_permission", Summary: "没有写入档", Next: "请对方给你写入档"},
-			{Code: "skill_deleted", Summary: "名字属于一个已删除的 skill", Next: "换一个名字，或请所有者恢复"},
 			{Code: "draft_name_required", Summary: "这一版还没有名称", Next: "加 --name"},
 			{Code: "draft_name_too_long", Summary: "名称太长", Next: "缩短 --name"},
 			{Code: "note_too_long", Summary: "说明太长", Next: "缩短 --note"},
@@ -418,7 +418,6 @@ var skillSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "not_found", Summary: "源或那一版找不到", Next: "核对地址；草稿版本码不能复制"},
 			{Code: "skill_already_exists", Summary: "新名字已被占用", Next: "换一个 --name"},
-			{Code: "skill_deleted", Summary: "新名字属于一个已删除的 skill", Next: "换一个名字，或到网页上恢复那个 skill"},
 			{Code: "insufficient_permission", Summary: "不到「浏览」档，或这是你自己的 skill", Next: "改自己的直接新建版本"},
 			{Code: "skill_offline", Summary: "源已下线", Next: "等作者恢复服务"},
 			{Code: "invalid_name", Summary: "新名字不能用作地址", Next: "1–64 个小写字母、数字和连字符"},
@@ -501,6 +500,7 @@ var skillSpecs = []*help.Spec{
 		Output: "描述、场景（作者的「适用场景」、我的「我的适用场景」两行分开）、环境、版本、来源、许可证与使用，走 stdout；空字段不打印。",
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
+			{Code: "skill_gone", Summary: "这个 skill 已被作者删除", Next: "地址不再服务；换一个用 skmr skills search"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
@@ -515,6 +515,7 @@ var skillSpecs = []*help.Spec{
 		Output: "许可证、状态、版权、可做、要履行、全文，走 stdout；不打印全文本身。",
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
+			{Code: "skill_gone", Summary: "这个 skill 已被作者删除", Next: "地址不再服务；换一个用 skmr skills search"},
 			{Code: "not_found", Summary: "地址找不到", Next: "核对命名空间与名字"},
 			{Code: "unauthenticated", Summary: help.UnauthenticatedSummary, Next: help.UnauthenticatedNext},
 		},
@@ -541,6 +542,7 @@ var skillSpecs = []*help.Spec{
 		Output: "报告已收进库。",
 		Failures: []help.Failure{
 			{Code: "skill_not_joinable", Summary: "这个 skill 现在加入不了", Next: "用 skmr skills list 看它现在是什么"},
+			{Code: "skill_offline_pending", Summary: "这个 skill 正在下线中，不能再入库", Next: "要保留它用 skmr skill copy <地址>"},
 		},
 		Examples: []string{"skmr skill join dev/pdf-tools --yes"},
 		Parent:   "skill", Exits: exitsWithCredential,

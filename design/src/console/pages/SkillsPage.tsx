@@ -207,8 +207,11 @@ export default function SkillsPage({ active, state, params }: DemoPageProps) {
 
   const clearFilters = () => writeAddress({ tags: [], myTags: [], publicTags: [], page: 1 })
 
-  /** 一行左边的身份：名字 + 来源。右边的状态：已上线 / 草稿 / 已下线。 */
+  /** 一行左边的身份：名字 + 来源。右边的状态：已上线 / 草稿 / 下线中 / 已下线。 */
   const rowStatus = (skill: LibrarySkill) => {
+    if (skill.state === 'pending') {
+      return <span className="chip is-soon"><i className="dot"></i><span className="chip-text">下线中</span></span>
+    }
     if (skill.state === 'offline') {
       return <span className="chip is-offline"><i className="dot"></i><span className="chip-text">已下线</span></span>
     }

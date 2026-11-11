@@ -261,12 +261,10 @@ export const SHOTS = [
   { name: 'skills-import-exists', query: '?page=skills&import=exists', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-import-exists-draft', query: '?page=skills&import=exists-draft', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-import-exists-hidden', query: '?page=skills&import=exists-hidden', page: 'skills', nav: '我的 skill', scrolls: true },
-  { name: 'skills-import-deleted', query: '?page=skills&import=deleted', page: 'skills', nav: '我的 skill', scrolls: true },
   /* **新建 skill（v9）**：菜单、在线编辑的对话框、以及名字已被占用那一态。 */
   { name: 'skills-new-menu', query: '?page=skills&new=open', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-new-skill', query: '?page=skills&newskill=open', page: 'skills', nav: '我的 skill', scrolls: true },
   { name: 'skills-new-skill-error', query: '?page=skills&newskill=error', page: 'skills', nav: '我的 skill', scrolls: true },
-  { name: 'skills-new-skill-deleted', query: '?page=skills&newskill=deleted', page: 'skills', nav: '我的 skill', scrolls: true },
   /* 弹窗在手机上也要放得下：一条 400px 的窄帧，与编辑页那条同一个宽度。 */
   { name: 'versions-import-narrow', query: '?page=skill&tab=versions&import=open', page: 'skill', nav: '我的 skill', width: 400, height: 900, scrolls: true },
   /* **版本 tab 的单版页。** 版本 tab 是唯一清单，而且只导航；地址钉住一版时，它从清单换成
@@ -334,6 +332,9 @@ export const SHOTS = [
   /* **整个 skill 下线。** 版本与指针都不动；页头多一枚「已下线」，设置页危险区第一行
      变成「恢复服务」。v49 收紧信息页与事实带的间距之后，这一屏在 900 高的窗口里不再滚动。 */
   { name: 'skill-offline', query: '?page=skill&tab=settings&sub=general&offline=1', page: 'skill', nav: '我的 skill', scrolls: false },
+  /* v61: 公开且有入库者的 skill 进入下线中；删除要等下线完成。 */
+  { name: 'skill-settings-pending', query: '?page=skill&tab=settings&sub=general&official=1&vis=public-invoke&pending=1', page: 'skill', nav: '我的 skill', scrolls: true },
+  { name: 'skills-pending', query: '?page=skills&q=dead-code', page: 'skills', nav: '我的 skill', scrolls: false },
   { name: 'skill-missing', query: '?page=skill&state=missing', page: 'skill', nav: '我的 skill', scrolls: false },
   { name: 'skill-settings-collaborators', query: '?page=skill&tab=settings&sub=collaborators', page: 'skill', nav: '我的 skill', scrolls: true },
   /* 非官方：可见性只有「私有」+ 一句说明（ADR 0146）。选项少了两档，这一页在 900 高的窗口里不滚。 */
@@ -369,6 +370,8 @@ export const SHOTS = [
   { name: 'notifications-bell-long', query: '?page=notifications&bell=open&state=bell&long=1', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-bell-narrow', query: '?page=notifications&bell=open&state=bell', page: 'notifications', bell: true, width: 400, height: 900, scrolls: false },
   { name: 'notifications-all', query: '?page=notifications&status=all', page: 'notifications', bell: true, scrolls: false },
+  /* v61: 下线预告的样张把公告那一行换掉，列表行数不变。 */
+  { name: 'notifications-offline', query: '?page=notifications&status=all&notice=offline', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-empty-pending', query: '?page=notifications&state=empty-pending', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-empty-all', query: '?page=notifications&state=empty-all', page: 'notifications', bell: true, scrolls: false },
   { name: 'notifications-loading', query: '?page=notifications&state=loading', page: 'notifications', bell: true, scrolls: false },

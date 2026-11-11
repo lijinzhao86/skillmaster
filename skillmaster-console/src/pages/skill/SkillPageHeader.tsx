@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import type { AuthoredSkill, SkillTagGroups as SkillTagGroupsData } from '../../api/types'
 import CommandMenu, { type CommandMenuHandle } from '../../components/CommandMenu'
 import SkillAvatar from '../../components/SkillAvatar'
+import { formatDay } from '../../time'
 import { TAB_ICONS, type Subpage, type Tab } from './skillRoute'
 
 /**
@@ -28,7 +29,10 @@ export interface SkillPageHeaderProps {
   onCopy: () => void
   /** The 「⋯」 handle: closing the copy sheet puts focus back on the trigger it came from. */
   moreRef: RefObject<CommandMenuHandle | null>
-  onJoin: () => Promise<void>
+  /** v61: opens the 入库 confirmation; the join itself runs when that is accepted. */
+  onJoin: () => void
+  /** The join trigger, so cancelling the sheet puts focus back on it. */
+  joinButton: RefObject<HTMLButtonElement | null>
   removeButton: RefObject<HTMLButtonElement | null>
   onAskRemove: () => void
   homeHref: string
@@ -51,6 +55,7 @@ export default function SkillPageHeader({
   onCopy,
   moreRef,
   onJoin,
+  joinButton,
   removeButton,
   onAskRemove,
   homeHref,
@@ -86,7 +91,13 @@ export default function SkillPageHeader({
               </a>
             ) : null}
             {/* **下线是整个 skill 的状态，不是某一版的。** It sits beside the visibility mark
-                because both answer 「这个地址现在是什么」; it is not a version mark. */}
+                because both answer 「这个地址现在是什么」; it is not a version mark.
+                v61: a ramp is still serving, so its badge names the date rather than 已下线. */}
+            {skill.offline_at == null && skill.offline_pending_until != null ? (
+              <span className="chip is-soon">
+                下线中 · {formatDay(skill.offline_pending_until)} 下线
+              </span>
+            ) : null}
             {skill.offline_at != null ? <span className="chip is-offline">已下线</span> : null}
           </div>
           {/* `title` is an optional field: the server fills it with `name` when the author wrote
@@ -126,8 +137,9 @@ export default function SkillPageHeader({
               type="button"
               className="button skill-join"
               id="joinSkill"
+              ref={joinButton}
               disabled={joining}
-              onClick={() => void onJoin()}
+              onClick={onJoin}
               aria-label={joining ? '入库中' : '入库'}
             >
               {joining ? (

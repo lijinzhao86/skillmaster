@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { go } from '../address'
 import type { SkillCard } from '../api/types'
 import { SOURCE_LABEL } from '../libraryLabels'
+import { formatDay } from '../time'
 import SkillAvatar from './SkillAvatar'
 import SourceMark from './SourceMark'
 /**
@@ -99,6 +100,10 @@ export default function ResultCard({
         </svg>
         <span className="visually-hidden">{'已在库 · ' + SOURCE_LABEL[skill.source]}</span>
       </span>
+    ) : skill.state === 'pending' ? (
+      /* v61 (ADR 0184): the ramp refuses new dependencies, so the card does not offer the action
+         it would have to refuse. The chip says why; the action column keeps its width. */
+      null
     ) : joinState === 'busy' ? (
       /* Joining: the same spot becomes a turning arc. */
       <button type="button" className="result-join" data-state="busy" disabled title="入库中">
@@ -255,6 +260,15 @@ export default function ResultCard({
             >
               {skill.category.name}
             </a>
+          ) : null}
+          {/* v61 (ADR 0184): a ramp is still in the public list — it still serves — so the card
+              says it is leaving and when, rather than letting it look permanent. */}
+          {skill.state === 'pending' ? (
+            <span className="chip is-soon" title="下线中：仍可调用，已不接受新入库">
+              下线中{skill.offline_pending_until == null
+                ? ''
+                : ` · ${formatDay(skill.offline_pending_until)}`}
+            </span>
           ) : null}
         </div>
         {/* One line of description; the whole paragraph rides in `title`, and the main path is the

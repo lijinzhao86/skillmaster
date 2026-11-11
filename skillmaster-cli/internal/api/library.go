@@ -453,17 +453,36 @@ func (c Client) library(ctx context.Context, method, address string) (Change, er
 	return changeOf(body), nil
 }
 
+// Restored is what a restore answers with (v61): the address the skill now has, and whether that
+// differs from the one the command was given because a live skill had taken the original name.
+type Restored struct {
+	Address string
+	Renamed bool
+}
+
+func restoredOf(body []byte) Restored {
+	var answer struct {
+		Address string `json:"address"`
+		Renamed bool   `json:"renamed"`
+	}
+	if len(body) > 0 && json.Unmarshal(body, &answer) == nil {
+		return Restored{Address: answer.Address, Renamed: answer.Renamed}
+	}
+	// An older server answered `{changed}`; the caller falls back to the address it asked about.
+	return Restored{}
+}
+
 // RestoreSkill brings a soft-deleted skill back. The owner's action; no body.
-func (c Client) RestoreSkill(ctx context.Context, address string) (Change, error) {
+func (c Client) RestoreSkill(ctx context.Context, address string) (Restored, error) {
 	path, err := SkillPath(address)
 	if err != nil {
-		return Change{}, err
+		return Restored{}, err
 	}
 	body, err := c.request(ctx, http.MethodPost, path+"/restore", nil)
 	if err != nil {
-		return Change{}, err
+		return Restored{}, err
 	}
-	return changeOf(body), nil
+	return restoredOf(body), nil
 }
 
 // sendJSON marshals one small object and sends it.

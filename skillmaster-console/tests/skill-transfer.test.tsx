@@ -903,34 +903,6 @@ describe('the import sheet', () => {
     expect(said).not.toContain('文件没有导入')
   })
 
-  it('offers 去恢复 when the name belongs to a deleted skill', async () => {
-    stubFetch(() => json(409, errorBody('skill_deleted', 'that name belongs to a deleted skill')))
-    const { container } = render(
-      <ImportDialog
-        open
-        mode="skill"
-        namespace=""
-        name=""
-        rung="owner"
-        onClose={() => undefined}
-        onNavigate={() => undefined}
-      />,
-    )
-
-    await chooseFile(container, 'pdf-tools.zip')
-    fireEvent.change(container.querySelector('.confirm-input') as HTMLInputElement, {
-      target: { value: '第二版' },
-    })
-    const accept = [...container.querySelectorAll('.confirm-acts .button')].at(-1)
-    if (accept !== undefined) {
-      fireEvent.click(accept)
-    }
-    await flush()
-
-    expect(text(container.querySelector('.confirm-error'))).toContain('这个名字属于一个已删除的 skill。')
-    expect(text(container.querySelector('.confirm-error a'))).toBe('去恢复')
-    expect(attr(container.querySelector('.confirm-error a'), 'href')).toBe('/skills?show=deleted')
-  })
 })
 
 /* ------------------------------------------------------------------- the create sheet */

@@ -14,7 +14,7 @@ var skillPageSpecs = []*help.Spec{
 		// one-step delete the first thing somebody copies.
 		Usage:      "skmr skill delete <命名空间>/<名字> [--json]",
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output:     "先说明后果与下一步，不删除。确认后按输出重跑：能删时给出带确认的完整命令，由服务端判定是否允许；上线过的 skill 到设置页「常规」由人在网页上确认删除（退出 1）。删除后名字不会释放。",
+		Output:     "先说明后果与下一步，不删除。确认后按输出重跑：能删时给出带确认的完整命令，由服务端判定是否允许；上线过的 skill 到设置页「常规」由人在网页上确认删除（退出 1）。删除后名字立即释放。",
 		JSONFields: []string{"action", "performed", "address", "deleted"},
 		Failures: []help.Failure{
 			{Code: "confirmation_required", Summary: "删除还没有执行", Next: "按输出里给出的完整命令重跑"},
@@ -34,10 +34,10 @@ var skillPageSpecs = []*help.Spec{
 		},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		JSONFields: []string{"action", "performed", "url", "opened"},
-		Output:     "确认你是所有者、且它现在没有下线，然后打开设置页的「常规」；命令不执行下线，确认在网页上由人完成，首句说明它还没发生。",
+		Output:     "确认你是所有者、且它在线（不在下线中），然后打开设置页的「常规」；命令不执行下线，确认在网页上由人完成，首句说明它还没发生。下线中时命令拒绝，取消下线用 skmr skill online。",
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "只有所有者能下线", Next: "把地址给所有者"},
-			{Code: "wrong_version_state", Summary: "它已经下线了", Next: "要恢复用 skmr skill online"},
+			{Code: "wrong_version_state", Summary: "它已下线或在离线前的过渡期", Next: "取消下线中或恢复服务用 skmr skill online"},
 		},
 		Examples: []string{"skmr skill offline dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsLocal,
@@ -50,10 +50,10 @@ var skillPageSpecs = []*help.Spec{
 		},
 		Args:       []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
 		JSONFields: []string{"action", "performed", "url", "opened"},
-		Output:     "确认你是所有者、且它当前已下线，然后打开设置页的「常规」；命令不执行恢复服务，确认在网页上由人完成，首句说明它还没发生。",
+		Output:     "确认你是所有者、且它已下线或在下线中，然后打开设置页的「常规」；命令不执行恢复服务，确认在网页上由人完成，首句说明它还没发生。下线中时这一页就是取消下线。",
 		Failures: []help.Failure{
 			{Code: "insufficient_permission", Summary: "只有所有者能恢复服务", Next: "把地址给所有者"},
-			{Code: "wrong_version_state", Summary: "它并没有下线", Next: "要下线用 skmr skill offline"},
+			{Code: "wrong_version_state", Summary: "它既没下线，也不在下线中", Next: "要下线用 skmr skill offline"},
 		},
 		Examples: []string{"skmr skill online dev/pdf-tools"},
 		Parent:   "skill", Exits: exitsLocal,

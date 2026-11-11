@@ -68,6 +68,15 @@ function KindIcon({ kind }: { kind: Notice['kind'] }) {
       </svg>
     )
   }
+  /* v61: a clock — it is a scheduled departure, not a person leaving and not a broadcast. */
+  if (kind === 'skill_offline_scheduled') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 10v4a1 1 0 0 0 1 1h2l5 3V6L7 9H5a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -98,6 +107,14 @@ function sentence(row: Notice): ReactNode {
   }
   if (row.kind === 'skill_unavailable') {
     return <><b>{row.actor}</b> 注销了账号，<SkillName skill={row.skill!} /> 已不可用</>
+  }
+  if (row.kind === 'skill_offline_scheduled') {
+    return (
+      <>
+        <b>{row.actor}</b> 将于 {row.expiresAt?.split(' ')[0]} 下线 <SkillName skill={row.skill!} />。
+        要保留它，复制到你的库。
+      </>
+    )
   }
   if (row.kind === 'result') {
     return row.state === 'approved'
@@ -131,6 +148,7 @@ export default function NoticeRow({
   onDecline,
   onView,
   onHandle,
+  onCopy,
 }: {
   row: Notice
   /** 铃铛下拉里的那一份：两行网格，正文最多两行，动作落在元信息行右侧。 */
@@ -142,6 +160,8 @@ export default function NoticeRow({
   onView: () => void
   /** 待处理申请的去处：那个 skill 的「设置 › 协作者」。 */
   onHandle: () => void
+  /** v61：下线预告里的迁移出路——把这个 skill 复制到自己的库。 */
+  onCopy?: (row: Notice) => void
 }) {
   const pendingInvitation = row.kind === 'invitation' && row.state === 'pending'
   const pendingRequest = row.kind === 'request' && row.state === 'pending'
@@ -149,11 +169,14 @@ export default function NoticeRow({
      未通过的人原本就看得见那个 skill（申请的前提），所以也留「查看」。
      已拒绝 / 已过期 / 已撤销则不一定——私有 skill 根本打不开，放一个会 404 的「查看」
      比没有这个动作更糟。公告本版没有发布面，也就没有链接。 */
+  /* `viewable === false` 与服务端一致：已被删除的那个地址打开是 404，不给「查看」。 */
   const canView = !pendingInvitation && !pendingRequest &&
     row.kind !== 'announcement' && row.kind !== 'skill_unavailable' &&
+    row.kind !== 'skill_offline_scheduled' && row.viewable !== false &&
     (row.state === 'accepted' || row.state === 'approved' || row.state === 'rejected')
+  const canCopy = row.kind === 'skill_offline_scheduled' && onCopy !== undefined
   const destination = pendingRequest ? onHandle : canView ? onView : null
-  const hasAction = pendingInvitation || pendingRequest || canView
+  const hasAction = pendingInvitation || pendingRequest || canView || canCopy
 
   const actions = (
     <>
@@ -165,6 +188,9 @@ export default function NoticeRow({
       )}
       {pendingRequest && (
         <button type="button" className="button is-quiet" onClick={onHandle}>去处理</button>
+      )}
+      {canCopy && (
+        <button type="button" className="button is-quiet" onClick={() => onCopy(row)}>复制到我的库</button>
       )}
       {canView && (
         <button type="button" className="link-button" onClick={onView}>查看</button>

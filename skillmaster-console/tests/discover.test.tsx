@@ -216,6 +216,21 @@ describe('the opening screen', () => {
     expect(container.querySelector('.result-join')).toBeNull()
     expect(container.querySelector('.result-inlibrary')).not.toBeNull()
   })
+
+  it('does not offer 入库 on a 下线中 card, but says why (A14)', async () => {
+    const { container } = await showDiscover(
+      '',
+      () =>
+        json(200, {
+          skills: [card({ state: 'pending', offline_pending_until: '2026-12-11T00:00:00Z' })],
+          next_cursor: null,
+        }),
+    )
+
+    expect(container.querySelector('.result-join')).toBeNull()
+    expect(container.querySelector('.result-inlibrary')).toBeNull()
+    expect(container.textContent).toContain('下线中 · 2026/12/11')
+  })
 })
 
 describe('joining', () => {
