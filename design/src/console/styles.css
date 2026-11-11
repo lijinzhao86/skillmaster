@@ -1260,8 +1260,6 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 .usage-log-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .usage-log-toggle svg{width:16px;height:16px}
 .usage-log-toggle-placeholder{width:28px;height:28px}
-.usage-rank{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
-.usage-rank-short{display:none}
 /* **一次搜索调了几条就列几行**（2026-11-10 用户定）：藏进悬停的「+2」没人会注意。
    多行时整行改成顶部对齐；折角仍居中，因为它管的是整行的下拉。 */
 .usage-invocations{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -1359,8 +1357,6 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
 @media (max-width:720px){
   .usage-top th.is-bar,
   .usage-top td.is-bar{display:none}
-  /* 窄屏下每次调用的时刻让位给名字与名次——时间戳在 title 里。 */
-  .usage-invocation-at{display:none}
 }
 .usage-result-rank{
   flex:none;padding:1px 7px;border-radius:999px;background:var(--wash);
@@ -1397,8 +1393,6 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   .usage-log-toggle-placeholder{grid-area:toggle}
   .usage-log-event{grid-area:event}
   .usage-log-result{grid-area:result}
-  .usage-rank-full{display:none}
-  .usage-rank-short{display:inline}
   /* 窄屏：展开面板一列，与日志行同宽。 */
   .usage-detail{padding:10px 14px 12px}
   .usage-detail-list{grid-template-columns:1fr;max-height:320px}
