@@ -609,15 +609,18 @@ jobs:
           if [ "$RELEASE" = "new" ]; then
             release="$SHA"
             ssh "${opts[@]}" "$target" "mkdir -p /opt/skillmaster/releases/$release"
-            # **Three bounded attempts at the one file that is big enough to matter.** A retry
-            # cannot corrupt anything: each attempt writes the whole jar to the same path, and
-            # the switch below happens only after one of them returns.
+            # **Uploads resume; they do not restart.** On 2026-11-11 a 56 MB jar timed out on
+            # three 300 s `scp` attempts from GitHub's runner — each one started the whole file
+            # again. `rsync` keeps the bytes it already sent in `.partial` and the next attempt
+            # continues from there; 900 s bounds one attempt. The switch below still happens only
+            # after an upload returns, so a slow link can delay a release but never half-write one.
             for attempt in 1 2 3; do
-              if timeout 300 scp "${opts[@]}" skillmaster-server/target/skillmaster-server-*.jar \
+              if timeout 900 rsync -a --partial-dir=.partial --info=progress2 \
+                   -e "ssh ${opts[*]}" skillmaster-server/target/skillmaster-server-*.jar \
                    "$target:/opt/skillmaster/releases/$release/app.jar"; then
                 break
               fi
-              echo "upload attempt $attempt of 3 did not finish; retrying" >&2
+              echo "upload attempt $attempt of 3 did not finish; retrying (resumes)" >&2
               if [ "$attempt" = 3 ]; then
                 exit 1
               fi
