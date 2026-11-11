@@ -468,7 +468,8 @@ class SkillRungsIT extends AbstractAccountIT {
         assertThat(webPost(web("/versions/" + first + "/revoke"), "{}").statusCode())
                 .isEqualTo(200);
         assertThat(webPost(web("/delete"), "").statusCode()).isEqualTo(204);
-        assertThat(webPost(web("/restore"), "").statusCode()).isEqualTo(204);
+        // v61 (ADR 0183): restore answers with the address it came back under.
+        assertThat(webPost(web("/restore"), "").statusCode()).isEqualTo(200);
         assertThat(get(SKILLS + "/" + owner + "/pdf-tools@1.0.0/body", friendToken).statusCode())
                 .as("restoring the skill does not resurrect the revoked version")
                 .isEqualTo(410);

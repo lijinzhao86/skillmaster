@@ -4,6 +4,10 @@
  * Visibility is part of "what this skill is", so it sits with the other general properties. The
  * danger zone stays out of the second-level nav: an action that takes the skill from every reader
  * is not one more section next to 协作者 and 详细信息.
+ *
+ * **下线有三态（v61）**：在线 →（公开且有入库者）下线中 30 天 → 已下线。下线中仍可调用，
+ * 但每次调用带提醒、也不接受新入库；删除要等下线完成。没有入库者的公开 skill 与私有 skill
+ * 仍是一步下线。
  */
 
 import { useRef, useState } from 'react'
@@ -11,15 +15,23 @@ import type { AtLeast, Visibility } from '../../fixtures/skill'
 import { dialogs } from '../dialogs/store'
 import { go } from '../../address'
 
+export type OfflinePhase = 'online' | 'pending' | 'offline'
+
 export interface GeneralPaneProps {
   hidden: boolean
   atLeast: AtLeast
   /** 这个命名空间能不能公开（ADR 0146）；非官方只画「私有」。 */
   canPublishPublic: boolean
   visibility: Visibility
-  offline: boolean
+  phase: OfflinePhase
+  /** 下线中的到期日；只在 `phase === 'pending'` 时有意义。 */
+  pendingUntil: string
+  /** 入库人数；私有时为 0。 */
+  joins: number
+  /** 被授权的人数（不含所有者）。 */
+  grantees: number
   onVisibility: (value: Visibility) => void
-  onOffline: (next: boolean) => void
+  onOffline: (next: OfflinePhase) => void
 }
 
 export default function GeneralPane({
@@ -27,7 +39,10 @@ export default function GeneralPane({
   atLeast,
   canPublishPublic,
   visibility,
-  offline,
+  phase,
+  pendingUntil,
+  joins,
+  grantees,
   onVisibility,
   onOffline,
 }: GeneralPaneProps) {
@@ -39,6 +54,22 @@ export default function GeneralPane({
   const offlineButton = useRef<HTMLButtonElement>(null)
   const browse = atLeast('browse')
   const owner = atLeast('owner')
+
+  const pending = phase === 'pending'
+  const offline = phase === 'offline'
+  const publicSkill = visibility !== 'private'
+  /* 公开且有人入库：下线先走 30 天，删除要等它走完。 */
+  const ramped = publicSkill && joins > 0
+  const deleteBlocked = ramped && phase !== 'offline'
+
+  const impactParts: string[] = []
+  if (grantees > 0) impactParts.push(`${grantees} 人获得授权`)
+  if (joins > 0) impactParts.push(`${joins} 人入库`)
+  /* A3：确认里要说清三件事——公开/私有、授权人数、入库人数。 */
+  const visibilityWord = publicSkill ? '公开' : '私有'
+  const impact = impactParts.length > 0
+    ? `它是${visibilityWord}的；有 ${impactParts.join('、')}；删除后他们会收到通知。`
+    : `它是${visibilityWord}的；没有其他人获得授权或入库。`
 
   const change = (value: Visibility) => {
     if (!browse) return
@@ -127,32 +158,63 @@ export default function GeneralPane({
             {browse ? (
               <>
                 <div className="danger-what" id="offlineWhat">
-                  <p className="danger-title" id="offlineTitle">{offline ? '恢复服务' : '下线这个 skill'}</p>
+                  <p className="danger-title" id="offlineTitle">
+                    {pending ? '取消下线' : offline ? '恢复服务' : '下线这个 skill'}
+                  </p>
                   <div id="offlineWhy">
-                    <p className="hint" hidden={offline}>下线后，所有读者按这个 skill 的地址调用都会得到「服务已下线」；它也不再出现在搜索与公开列表里。版本状态与当前版本都不变，恢复后不需要重新上线。</p>
-                    <p className="hint" hidden={!offline}>这个 skill 已下线：调用者得到「服务已下线」。恢复后，当前线上版本直接重新对外。版本状态与当前版本都不变。</p>
+                    <p className="hint" hidden={offline || pending}>
+                      {ramped
+                        ? `它已公开，有 ${joins} 人入库。下线会先进入 30 天的「下线中」：期间仍可调用，每次调用都会提醒；满 30 天后正式下线。入库与授权的人会收到通知。`
+                        : '下线后，所有读者按这个 skill 的地址调用都会得到「服务已下线」；它也不再出现在搜索与公开列表里。版本状态与当前版本都不变，恢复后不需要重新上线。'}
+                    </p>
+                    <p className="hint" hidden={!pending}>
+                      这个 skill 正在下线中：将于 {pendingUntil} 正式下线。期间仍可调用，每次调用都会提醒；现在不接受新入库。
+                    </p>
+                    <p className="hint" hidden={!offline}>
+                      这个 skill 已下线：调用者得到「服务已下线」。恢复后，当前线上版本直接重新对外。版本状态与当前版本都不变。
+                    </p>
                   </div>
                 </div>
                 <div className="danger-acts" id="offlineActs">
                   <button
                     type="button"
                     id="offlineSkill"
-                    className={offline ? 'button' : 'button is-danger'}
+                    className={offline || pending ? 'button' : 'button is-danger'}
                     ref={offlineButton}
                     onClick={() => {
+                      if (pending) {
+                        dialogs.openDanger({
+                          title: '取消下线？',
+                          body: '取消后恢复正常服务，调用提醒消失；入库与授权的人会收到通知。',
+                          confirmLabel: '确认取消下线',
+                          pendingLabel: '正在取消下线…',
+                          danger: false,
+                          onConfirm: () => onOffline('online'),
+                          returnFocus: offlineButton.current,
+                        })
+                        return
+                      }
                       dialogs.openDanger({
                         title: offline ? '恢复服务' : '下线这个 skill',
                         body: offline
                           ? '恢复后，当前线上版本直接重新对外，不需要重新上线。'
-                          : '下线后，所有调用都会失败；版本状态与当前版本都不变。',
-                        confirmLabel: offline ? '确认恢复服务' : '确认下线',
-                        pendingLabel: offline ? '正在恢复服务…' : '正在下线…',
-                        onConfirm: () => onOffline(!offline),
+                          : ramped
+                            ? `它已公开，有 ${joins} 人入库、${grantees} 人获得授权。确认后进入 30 天下线中：期间仍可调用，每次调用都会提醒；满 30 天后正式下线。入库与授权的人会收到通知。`
+                            : '下线后，所有调用都会失败；版本状态与当前版本都不变。',
+                        confirmLabel: offline ? '确认恢复服务' : ramped ? '开始下线' : '确认下线',
+                        /* 红=会拿走东西：恢复服务与取消下线都不是。 */
+                        danger: !pending && !offline,
+                        pendingLabel: offline
+                          ? '正在恢复服务…'
+                          : ramped ? '正在开始下线…' : '正在下线…',
+                        onConfirm: () => onOffline(
+                          offline ? 'online' : ramped ? 'pending' : 'offline',
+                        ),
                         returnFocus: offlineButton.current,
                       })
                     }}
                   >
-                    {offline ? '恢复服务' : '下线'}
+                    {pending ? '取消下线' : offline ? '恢复服务' : '下线'}
                   </button>
                 </div>
               </>
@@ -170,10 +232,15 @@ export default function GeneralPane({
               <p className="danger-title">删除这个 skill</p>
               <div id="deleteWhy">
                 <p className="hint">
-                  删除后，这个 skill 对所有访问者不可见，当前地址立即失效。
-                  <strong>名称不会被释放</strong>{' '}——要用同一个名称创建新 skill，必须先恢复这个 skill。
+                  {deleteBlocked
+                    ? `它已公开，有 ${joins} 人入库。先走完下线，才能删除。`
+                    : <>
+                      删除后，这个 skill 对所有访问者不可见，当前地址立即失效。
+                      名字会立即释放，可以用同一个名字创建新 skill。
+                      已删除的 skill 会保留在「我的 skill」的「已删除」中，可以恢复。
+                    </>}
                 </p>
-                <p className="hint">已删除的 skill 会保留在「我的 skill」的「已删除」中，可以恢复。</p>
+                {!deleteBlocked && <p className="hint">{impact}</p>}
               </div>
             </div>
             <div className="danger-acts" id="deleteActs">
@@ -182,11 +249,12 @@ export default function GeneralPane({
                 className="button is-danger"
                 id="deleteSkill"
                 ref={deleteButton}
+                disabled={deleteBlocked}
                 onClick={() => {
-                  if (!browse) return
+                  if (!browse || deleteBlocked) return
                   dialogs.openDanger({
                     title: '删除这个 skill？',
-                    body: '删除后，该名称将无法用于创建新 skill，当前地址立即失效。',
+                    body: `删除后，当前地址立即失效；名字会立即释放，可以用同一个名字创建新 skill。${impact}`,
                     confirmLabel: '确认删除',
                     pendingLabel: '正在删除…',
                     onConfirm: () => go('?page=skills&show=deleted'),

@@ -64,6 +64,9 @@ public record SkillDetail(
         // Both travel: the action list is what older clients parse, the capabilities are what the
         // header renders now.
         List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities,
+        // v61 (ADR 0184): the 下线中 ramp's due date while it is still ahead, or null. A skill in
+        // the ramp still serves; every read succeeds and the CLI warns with this date.
+        String offlinePendingUntil,
         List<File> files) {
 
     public SkillDetail {

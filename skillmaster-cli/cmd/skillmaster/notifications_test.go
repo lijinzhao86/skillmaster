@@ -154,3 +154,35 @@ func TestAcceptInvitationPrintsTheRung(t *testing.T) {
 		t.Errorf("output = %q", out)
 	}
 }
+
+// v61 (ADR 0184): the ramp notice's whole point is the date, and its only action is a copy that
+// needs the skill to be readable — a revoked grant gets neither.
+func TestNotificationsPrintTheRampDeadlineAndGatedCopy(t *testing.T) {
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/notifications") {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"items":[
+		 {"id":"n-1","kind":"skill_offline_scheduled","state":"info","actor":"yuhan",
+		  "skill":{"namespace":"yuhan","name":"api-client"},
+		  "created_at":"2026-11-11T09:00:00Z","expires_at":"2026-12-11T00:00:00Z",
+		  "read":false,"viewable":true},
+		 {"id":"n-2","kind":"skill_offline_scheduled","state":"info","actor":"zhao",
+		  "skill":{"namespace":"zhao","name":"doc-translate"},
+		  "created_at":"2026-11-11T09:00:00Z","expires_at":"2026-12-11T00:00:00Z",
+		  "read":true,"viewable":false}
+		],"total":2,"unread":1}`))
+	})
+
+	out := captureStdout(t, func() {
+		if err := notificationsList(context.Background(), nil); err != nil {
+			t.Fatalf("notifications list: %v", err)
+		}
+	})
+	if !strings.Contains(out, "下线日期：2026-12-11") {
+		t.Errorf("the deadline is missing:\n%s", out)
+	}
+	if got := strings.Count(out, "skmr skill copy"); got != 1 {
+		t.Errorf("copy command offered %d times, want 1 (only the readable row):\n%s", got, out)
+	}
+}

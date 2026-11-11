@@ -268,6 +268,11 @@ func invoke(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// v61: a ramp still serves. Said on stderr so the body on stdout stays exactly the document a
+	// caller asked for, and said before it so a reader that stops early has seen it.
+	if note := offlinePendingNote(fetched.meta, address); note != "" {
+		fmt.Fprintln(os.Stderr, note)
+	}
 	// The header goes first, before the body: it is what the agent reads to decide what it may do
 	// next, and a reader that stops after N lines should not lose it (v23).
 	printLoadedHeader(fetched.meta, key, authorPin, now)
@@ -369,6 +374,26 @@ func commandsForDisplay(commands []string) string {
 // words.
 func oneLine(value string) string {
 	return strings.Join(strings.Fields(value), " ")
+}
+
+// offlinePendingNote is what a 下线中 ramp says on every load (v61, ADR 0184).
+//
+// **The load still succeeds.** That is the whole point of the ramp: a service that stopped working
+// one day would break whatever was calling it, so the date is announced while there is still time
+// to act. The next step is named as a whole command — the reader is as likely to be an agent with
+// nobody to prompt as a person.
+func offlinePendingNote(meta api.Metadata, address string) string {
+	if meta.OfflinePendingUntil == "" {
+		return ""
+	}
+	until := meta.OfflinePendingUntil
+	if len(until) >= 10 {
+		until = until[:10]
+	}
+	base := bareAddress(address)
+	return fmt.Sprintf(
+		"%s 正在下线中，将于 %s 正式下线。要保留它，复制到自己的库：skmr skill copy %s --name <新名字>",
+		base, until, base)
 }
 
 // fetchBody loads a skill's body without ever reading its manifest.

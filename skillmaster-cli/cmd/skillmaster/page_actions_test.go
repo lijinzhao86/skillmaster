@@ -173,7 +173,7 @@ func TestDeleteWithoutYesExplainsAndSendsNoWrite(t *testing.T) {
 	if wrote {
 		t.Fatal("delete without --yes sent a write")
 	}
-	for _, want := range []string{"skmr skill delete dev/x --yes", "名字不会释放"} {
+	for _, want := range []string{"skmr skill delete dev/x --yes", "名字立即释放"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output is missing %q:\n%s", want, out)
 		}
@@ -218,7 +218,9 @@ func TestDeleteWithYesDeletesANeverPublishedSkill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete --yes: %v", err)
 	}
-	if !strings.Contains(out, "已删除 dev/x") {
+	if !strings.Contains(out, "已删除 dev/x") ||
+		!strings.Contains(out, "名字已释放") ||
+		!strings.Contains(out, "skmr skill restore dev/x") {
 		t.Errorf("output = %q", out)
 	}
 }
@@ -684,6 +686,27 @@ func TestAPageActionOpensWhenTheAuthorPlaneAllowsIt(t *testing.T) {
 	}
 	if strings.Contains(stderr, "没能预检") {
 		t.Errorf("the precheck did not complete: %q", stderr)
+	}
+}
+
+// **A ramp is its own state** (v61, ADR 0184): `online` is the command that cancels it, and
+// `offline` must not open a page whose only button does the opposite of what was typed.
+func TestARampIsOpenedByOnlineAndRefusedByOffline(t *testing.T) {
+	opened := 0
+	previous := openBrowser
+	openBrowser = func(string) error { opened++; return nil }
+	t.Cleanup(func() { openBrowser = previous })
+	body := `{"skill":{"namespace":"dev","name":"x","address":"dev/x","access":"admin",` +
+		`"owned":true,"offline":false,"ever_published":true,` +
+		`"offline_pending_until":"2026-12-11T00:00:00Z"},"versions":[],"counts":{},"next":null}`
+	stubPlanes(t, 0, body, 0, "")
+
+	if _, stderr, status := runCaptured(t, "skill", "online", "dev/x"); status != 0 || opened != 1 {
+		t.Fatalf("online on a ramp = %d, opened %d: %s", status, opened, stderr)
+	}
+	_, stderr, status := runCaptured(t, "skill", "offline", "dev/x")
+	if status == 0 || opened != 1 || !strings.Contains(stderr, "skmr skill online dev/x") {
+		t.Fatalf("offline on a ramp = %d, opened %d: %s", status, opened, stderr)
 	}
 }
 

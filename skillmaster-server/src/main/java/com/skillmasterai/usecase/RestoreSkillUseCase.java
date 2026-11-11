@@ -39,42 +39,49 @@ public class RestoreSkillUseCase {
         this.audit = audit;
     }
 
-    /** @return the restored skill's id, or empty when there was nothing the caller may restore */
+    /** @return the restored row, or empty when there was nothing the caller may restore */
     @Transactional
-    public Optional<String> restore(String namespaceSlug, String name,
-            AuthenticatedSubject subject) {
-        Optional<String> restored = namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.restore(namespace.id(), name,
+    public Optional<SkillMetadataService.Restored> restore(String namespaceSlug, String name,
+            String id, AuthenticatedSubject subject) {
+        Optional<SkillMetadataService.Restored> restored = namespaces.bySlug(namespaceSlug)
+                .flatMap(namespace -> metadata.restore(namespace.id(), name, id,
                         Callers.of(namespaces, subject), Timestamps.now()));
 
         // Inside the transaction, for the reason the delete's audit row is: a trace that outlives
         // a rollback describes something that never happened.
-        restored.ifPresent(id -> audit.record(AuditEvent.of(subject.userId(), "restore", "skill", id)));
+        restored.ifPresent(row -> audit.record(
+                AuditEvent.of(subject.userId(), "restore", "skill", row.id())));
         return restored;
     }
 
     /**
      * The API plane's restore: the same action, with the three answers a client can act on.
      *
-     * <p><strong>A live skill is a 409, not a 404.</strong> The caller can see it and owns it, so
-     * "no skill at that address" would be false; what is true is that there is nothing to restore.
-     * A live skill the caller can see but does not own is a 403 — restoring is the owner's alone,
-     * and a 404 would send them to check an address that is right.
+     * <p><strong>The tombstone is tried first, because a live skill and a tombstone can share a
+     * name since v61.</strong> That is exactly the case the rename was built for: delete, create
+     * the name again, then restore the old row — which comes back as
+     * {@code 原名-restored-<id>}. Only when there is no tombstone does a visible live skill become
+     * the 409 "nothing to restore"; one the caller cannot see is the ordinary 404.
      *
-     * <p>An invisible or deleted skill resolves through the ordinary restore path, so "not yours"
-     * and "never existed" stay one answer.
+     * <p>A live skill the caller can see but does not own is a 403 — restoring is the owner's
+     * alone, and a 404 would send them to check an address that is right.
      *
-     * @return the restored skill's id, or empty when the address names nothing the caller may touch
+     * @return the restored row, or empty when the address names nothing the caller may touch
      * @throws com.skillmasterai.common.ConflictException {@code skill_not_deleted} for a live skill
      * @throws NotPermittedException for a live skill owned by somebody else
      */
     @Transactional
-    public Optional<String> restoreFromApi(String namespaceSlug, String name,
-            AuthenticatedSubject subject) {
+    public Optional<SkillMetadataService.Restored> restoreFromApi(String namespaceSlug, String name,
+            String id, AuthenticatedSubject subject) {
         Optional<com.skillmasterai.modules.namespace.Namespace> namespace =
                 namespaces.bySlug(namespaceSlug);
         if (namespace.isEmpty()) {
             return Optional.empty();
+        }
+        Optional<SkillMetadataService.Restored> restored =
+                restore(namespaceSlug, name, id, subject);
+        if (restored.isPresent()) {
+            return restored;
         }
         Caller caller = Callers.of(namespaces, subject);
         Optional<Access> live = metadata.accessFor(namespace.get().id(), name, caller);
@@ -87,6 +94,6 @@ public class RestoreSkillUseCase {
                     com.skillmasterai.common.ErrorCode.SKILL_NOT_DELETED,
                     "'" + name + "' is not deleted; there is nothing to restore");
         }
-        return restore(namespaceSlug, name, subject);
+        return Optional.empty();
     }
 }

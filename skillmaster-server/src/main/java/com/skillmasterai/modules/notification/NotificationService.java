@@ -36,6 +36,19 @@ public final class NotificationService {
         repository.clearRead(id);
     }
 
+    /**
+     * Makes the open 下线中 notice for this skill stop being shown (v61).
+     *
+     * <p>Expiry, not deletion: the row stays for history and only leaves the feed. Cancelling a
+     * ramp and completing it both call this — the completion is followed by its own announcement,
+     * so what disappears is the advance notice, not the record that the skill was taken down.
+     *
+     * @return how many notices were shortened
+     */
+    public int expireOfflineScheduled(String skillId, String at) {
+        return repository.expireOfflineScheduled(skillId, at);
+    }
+
     /** Records how a request-shaped notification ended. A no-op when it was already resolved. */
     public void resolve(String subjectKey, String kind, NotificationOutcome outcome, String at) {
         repository.resolve(subjectKey, kind, outcome.wireName(), at);

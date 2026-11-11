@@ -29,7 +29,10 @@ public record AuthorVersionResponse(Skill skill, Version version, String compati
     public record Skill(String namespace, String name, String address, String access,
             List<String> permissions,
             List<com.skillmasterai.modules.skill.GrantRole.Permission> capabilities,
-            boolean owned, boolean offline, boolean everPublished) {
+            boolean owned, boolean offline, boolean everPublished,
+            @com.fasterxml.jackson.annotation.JsonInclude(
+                    com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            String offlinePendingUntil) {
     }
 
     /**
@@ -75,7 +78,8 @@ public record AuthorVersionResponse(Skill skill, Version version, String compati
                         CredentialPermissions.ofCapabilities(
                                 com.skillmasterai.modules.skill.GrantRole.capabilitiesOf(rung),
                                 credentialMayWrite),
-                        access.owns(), access.offlineAt() != null, access.everPublished()),
+                        access.owns(), access.offlineNow(), access.everPublished(),
+                        access.pendingNow() ? access.offlineDueAt() : null),
                 view(namespaceSlug, access, summary, handles),
                 compatibility);
     }

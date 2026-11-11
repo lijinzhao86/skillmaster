@@ -41,6 +41,8 @@ public record SkillCardView(
         String version,
         String updatedAt,
         String deletedAt,
+        /** The 下线中 ramp's due date while it is ahead, or null (v61, ADR 0184). */
+        String offlinePendingUntil,
         Category category,
         List<PublicTag> publicTags,
         List<MyTag> myTags) {
@@ -52,8 +54,8 @@ public record SkillCardView(
 
     public SkillCardView withMyWhenToUseMatched(boolean matched) {
         return new SkillCardView(id, namespace, name, description, whenToUse, myWhenToUse, matched,
-                source, standing, state, version, updatedAt, deletedAt, category, publicTags,
-                myTags);
+                source, standing, state, version, updatedAt, deletedAt, offlinePendingUntil,
+                category, publicTags, myTags);
     }
 
     public record Category(String key, String name) {

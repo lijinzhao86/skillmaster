@@ -45,7 +45,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **Namespace** | 名字唯一的范围 | `id`。`slug` 是它在地址里的那一段 |
 | **NamespaceMember** | 谁属于哪个命名空间、什么角色 | 复合键 `(namespace_id, user_id)`——它表达的是**关系**，主键就是那对关系 |
 | **SkillGrant** | 谁能对**某一个** skill 做什么——授权是一条五档的梯子（`invoke` / `browse` / `write` / `maintain` / `admin`，[ADR 0047](../decisions/0047-permissions-are-a-ladder.md)） | 复合键 `(skill_id, user_id)`。**挂在 `skill.id` 上而不是地址上**——地址会变，而授权是一条要活过改名的关系（[ADR 0004](../decisions/0004-opaque-id-primary-key.md) §理由 说的「将来的权益记录」就是它） |
-| **Skill** | skill 的**身份**：名字、标题、描述、可见性、指向当前版本 | `id`（不透明 id）。`(namespace_id, name)` 唯一 |
+| **Skill** | skill 的**身份**：名字、标题、描述、可见性、指向当前版本 | `id`（不透明 id）。`(namespace_id, name)` **只对未删除的行唯一**（部分唯一索引，[ADR 0183](../decisions/0183-deleting-a-skill-releases-its-name.md)）：删除立即释放名字，同名可以留下多条软删的行 |
 | **SkillVersion** | skill 的一次**内容快照**，外加一个会变的状态（`draft` / `published` / `discarded` / `revoked`）。**只有 `draft` 行的内容能改**，改一次 `digest` / `file_count` / `total_bytes` 跟着动（[ADR 0064](../decisions/0064-a-draft-may-change-a-published-version-may-not.md)） | `digest`——对清单算出来的摘要，**不含时间、作者与状态**。`id` 是行主键，也是作者面上草稿与已丢弃行的地址（[ADR 0063](../decisions/0063-a-draft-is-addressed-by-a-short-code.md)），版本名是别名 |
 | **VersionFile** | 清单里的一项：某个路径指向哪个字节 | 复合键 `(version_id, relpath)` |
 | **Blob** | 一份字节的**元数据行**（大小、创建时间） | `sha256`——**内容本身就是地址** |
@@ -106,6 +106,8 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 **同一个钉也可以写在请求头里**（`X-Skill-Version: 1.2.3`，语法与 `@` 后缀同一套），只在 `/api/v1` 的读接口上生效——URL 保持不变而版本随请求走。**它与地址里的钉同时给出却不一致时是 400**：两个来源说不同的话，说明调用方自己也不知道要哪一版，那必须响，不能靠「谁优先」猜。
 
 **地址不解析就没有更多可说的**：没有这个 skill、不是你的、skill 已软删、版本不存在——四种情况**同一个 404 与同一个错误码**。多一个码就多一处可以用来探测的信息。
+
+**唯一的例外是「公开且曾发布」的已删地址**（v61，[ADR 0184](../decisions/0184-taking-a-public-skill-down-is-a-service-lifecycle.md)）：它答 410 `skill_gone`，因为地址本来就对公众开放过，说「已删除」不泄露任何原本不公开的事；私有与从未发布的已删 skill 仍是 404，同名下已有新的活 skill 时也回到 404。
 
 ### 钉版：客户端携带，服务端无状态
 

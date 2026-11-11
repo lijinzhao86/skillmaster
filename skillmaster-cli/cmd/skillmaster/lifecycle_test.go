@@ -412,7 +412,7 @@ func TestTheFileVerbsRefuseANewDraftBeforeAnyRequest(t *testing.T) {
 func TestNewCommandsTranslateFailuresAndCarryTheCode(t *testing.T) {
 	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":{"code":"skill_deleted","message":"restore it first",` +
+		_, _ = w.Write([]byte(`{"error":{"code":"skill_already_exists","message":"taken",` +
 			`"details":[]}}`))
 	})
 	err := createSkill(context.Background(),
@@ -421,10 +421,10 @@ func TestNewCommandsTranslateFailuresAndCarryTheCode(t *testing.T) {
 	if !ok {
 		t.Fatalf("error = %T %v", err, err)
 	}
-	if !failure.JSON || failure.Code != "skill_deleted" {
+	if !failure.JSON || failure.Code != "skill_already_exists" {
 		t.Fatalf("failure = %#v", failure)
 	}
-	if !strings.Contains(failure.Message, "到网页") {
+	if !strings.Contains(failure.Message, "已经被一个 skill 占着") {
 		t.Errorf("message = %q", failure.Message)
 	}
 }

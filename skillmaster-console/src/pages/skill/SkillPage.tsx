@@ -147,6 +147,7 @@ export default function SkillPage({
     skillTags,
     params,
     offlineAt: skill?.offline_at ?? null,
+    pendingUntil: skill?.offline_pending_until ?? null,
   })
 
   /* **版本 is a library section** (2026-11-05): a public skill the caller has not joined shows 信息
@@ -243,6 +244,26 @@ export default function SkillPage({
     setCopyOpen(false)
     copyMoreRef.current?.focusTrigger()
   }
+
+  /* v61: a notification's 「复制到我的库」 opens this page with `?copy=1`, so the one place that
+     knows how to copy is the page that owns the versions. Waits for the skill, because `canCopy`
+     is only answerable once the versions are back. */
+  const copyAsked = useRef(false)
+  useEffect(() => {
+    if (copyAsked.current || skill === null || params.get('copy') === null) {
+      return
+    }
+    copyAsked.current = true
+    if (canCopy) {
+      setCopyOpen(true)
+      return
+    }
+    // A notice's 「复制」 can reach a reader who may not copy — joining only needs `invoke`. Say
+    // why the sheet did not open instead of leaving a click that looks broken.
+    detail.setBanner('这里现在不能复制：复制需要「浏览」档，且这个 skill 仍在线。')
+    // The address is fixed for the life of the page, like every other opening state here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skill, canCopy])
   const detailRoute = detailRouteOf(
     legacyDiff,
     versionRoute,
@@ -275,7 +296,8 @@ export default function SkillPage({
      version has it — an author's own skill included — while a private, never-published or
      offline one has nothing to say. The number is a bucket, never an exact call count. */
   const evidence =
-    skill !== null && skill.visibility === 'public' && liveVersion !== null && skill.offline_at == null
+    skill !== null && skill.visibility === 'public' && liveVersion !== null
+      && skill.offline_at == null && skill.offline_pending_until == null
       ? evidenceLine(skill.usage ?? null)
       : null
   const library = membership.library
@@ -404,7 +426,8 @@ export default function SkillPage({
             canCopy={canCopy}
             onCopy={() => setCopyOpen(true)}
             moreRef={copyMoreRef}
-            onJoin={membership.joinLibrary}
+            onJoin={membership.askJoin}
+            joinButton={membership.joinButton}
             removeButton={membership.removeButton}
             onAskRemove={membership.askRemove}
             homeHref={baseAddress(null)}
@@ -517,6 +540,9 @@ export default function SkillPage({
               visibilityChoice={settings.visibilityChoice}
               onChangeVisibility={(choice) => void settings.changeVisibility(choice)}
               offline={settings.offline}
+              phase={settings.phase}
+              joins={settings.joins}
+              grantees={settings.grantees}
               offlineButton={settings.offlineButton}
               onAskOffline={settings.askOffline}
               deleteButton={settings.deleteButton}
@@ -533,7 +559,15 @@ export default function SkillPage({
         publicBrowseError={settings.publicBrowseError}
         onAcceptPublicBrowse={settings.acceptPublicBrowse}
         onCancelPublicBrowse={settings.cancelPublicBrowse}
+        joinOpen={membership.joinOpen}
+        joining={membership.joining}
+        onConfirmJoin={membership.confirmJoin}
+        onCancelJoin={membership.cancelJoin}
         offline={settings.offline}
+        phase={settings.phase}
+        publicSkill={(skill?.visibility ?? 'private') !== 'private'}
+        joins={settings.joins}
+        grantees={settings.grantees}
         offlineOpen={settings.offlineOpen}
         offlinePending={settings.offlinePending}
         offlineError={settings.offlineError}

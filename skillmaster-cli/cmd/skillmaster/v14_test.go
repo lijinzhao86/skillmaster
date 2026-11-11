@@ -954,15 +954,28 @@ func TestJoinAndLeaveRefusalsAreNamedByCode(t *testing.T) {
 		verb   string
 		status int
 		code   string
-		want   string
+		// details is the envelope's `details` array as JSON, or empty when the refusal carries none.
+		details string
+		want    string
 	}{
 		{name: "已在库里", verb: "join", status: http.StatusConflict, code: "skill_not_joinable", want: "加入不了"},
+		{name: "下线中", verb: "join", status: http.StatusConflict, code: "skill_offline_pending", want: "下线中"},
+		{name: "下线中带日期", verb: "join", status: http.StatusConflict, code: "skill_offline_pending",
+			details: `[{"field":"pending_until","issue":"2026-12-11T00:00:00Z"}]`, want: "2026-12-11"},
+		{name: "下线中给出可执行的复制命令", verb: "join", status: http.StatusConflict, code: "skill_offline_pending",
+			details: `[{"field":"pending_until","issue":"2026-12-11T00:00:00Z"}]`,
+			want:    "skmr skill copy dev/pdf-tools --name"},
 		{name: "没有引用", verb: "leave", status: http.StatusConflict, code: "library_reference_missing", want: "没有可移除的加入引用"},
 		{name: "看不见", verb: "join", status: http.StatusNotFound, code: "skill_not_found", want: "找不到这个 skill"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			newFakeServer(t, func(recordedRequest) (int, string) {
-				return test.status, `{"error":{"code":"` + test.code + `","message":"refused"}}`
+				details := ""
+				if test.details != "" {
+					details = `,"details":` + test.details
+				}
+				return test.status, `{"error":{"code":"` + test.code + `","message":"refused"` +
+					details + `}}`
 			})
 			stdout, stderr, status := runCaptured(t, "skill", test.verb, "dev/pdf-tools", "--yes")
 			if status == 0 || stdout != "" || !strings.Contains(stderr, test.want) {
@@ -1008,6 +1021,20 @@ func TestRestorePostsAndRefusesAPin(t *testing.T) {
 	stdout, stderr, status := runCaptured(t, "skill", "restore", "dev/pdf-tools@1.2.3")
 	if status == 0 || stdout != "" || !strings.Contains(stderr, "@版本") {
 		t.Errorf("a pin was accepted: status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+}
+
+// v61 (ADR 0183): the name is free while the skill is deleted, so the restore may have to answer
+// under a different address. Printing the old one would point the reader at somebody else's skill.
+func TestRestoreSaysTheNameChangedWhenSomebodyTookIt(t *testing.T) {
+	newFakeServer(t, func(recordedRequest) (int, string) {
+		return http.StatusOK,
+			`{"address":"dev/pdf-tools-restored-01jz8q2v7c4m5n6p7q8r9s0t1u","renamed":true}`
+	})
+	want := "已恢复。原名已被占用，这个 skill 现在叫 " +
+		"dev/pdf-tools-restored-01jz8q2v7c4m5n6p7q8r9s0t1u。\n"
+	if out := mustRun(t, "skill", "restore", "dev/pdf-tools"); out != want {
+		t.Errorf("output = %q, want %q", out, want)
 	}
 }
 

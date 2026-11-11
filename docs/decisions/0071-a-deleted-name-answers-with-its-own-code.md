@@ -1,7 +1,8 @@
 # 0071 · 提交到已删除的名字答 409 `skill_deleted`，不是泛泛的 400
 
-- **状态**：已采纳
+- **状态**：被 0183 取代
 - **日期**：2026-10-21
+- **被 [0183](0183-deleting-a-skill-releases-its-name.md) 取代**：删除立即释放名字，创建与提交不再返回 `skill_deleted`。正文按原样保留。
 - **依赖**：[0050](0050-deleting-a-skill-can-be-undone.md)（删除留名、恢复是一个有意的动作）
 - **这一条修订 [0050](0050-deleting-a-skill-can-be-undone.md) 中「提交到已删名字 → 400 `invalid_request`」那一条的状态码与码名**：决定本身（拒绝而不是复活）不变
 

@@ -1,7 +1,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import type { Notification, NotificationState } from '../../api/types'
 import { rungLabel } from '../../rungs'
-import { formatTime } from '../../time'
+import { formatDay, formatTime } from '../../time'
 
 const RESULT_LABEL: Record<NotificationState, string> = {
   pending: '待处理',
@@ -60,6 +60,15 @@ function KindIcon({ kind }: { kind: Notification['kind'] }) {
       </svg>
     )
   }
+  /* v61: a clock — it is a scheduled departure, not a person leaving and not a broadcast. */
+  if (kind === 'skill_offline_scheduled') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 10v4a1 1 0 0 0 1 1h2l5 3V6L7 9H5a1 1 0 0 0-1 1Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
@@ -102,6 +111,17 @@ function sentence(row: Notification): ReactNode {
       </>
     )
   }
+  /* v61: still serving, and still time to keep a copy. The deadline is the notification's
+     `expires_at` — the server sets it to the ramp's due date, so the two cannot disagree. */
+  if (row.kind === 'skill_offline_scheduled') {
+    const deadline = formatDay(row.expires_at)
+    return (
+      <>
+        <b>{actor}</b> 将于 {deadline} 下线 <SkillName skill={row.skill} />。
+        要保留它，复制到你的库。
+      </>
+    )
+  }
   if (row.kind === 'access_request_result') {
     return row.state === 'approved'
       ? <>你对 <SkillName skill={row.skill} /> 的「{role}」申请已批准</>
@@ -136,6 +156,8 @@ export interface NoticeRowProps {
   onView: (row: Notification) => void
   /** Opens the skill's settings › collaborators. */
   onHandle: (row: Notification) => void
+  /** v61: the ramp's way out — takes the reader to that skill's copy sheet. */
+  onCopy?: (row: Notification) => void
 }
 
 export default function NoticeRow({
@@ -145,6 +167,7 @@ export default function NoticeRow({
   onDecline,
   onView,
   onHandle,
+  onCopy,
 }: NoticeRowProps) {
   const pendingInvitation = row.kind === 'share_invitation' && row.state === 'pending'
   const pendingRequest = row.kind === 'access_request' && row.state === 'pending'
@@ -156,10 +179,14 @@ export default function NoticeRow({
     !pendingInvitation &&
     !pendingRequest &&
     row.kind !== 'announcement' &&
+    row.kind !== 'skill_offline_scheduled' &&
     row.viewable &&
     (row.state === 'accepted' || row.state === 'approved' || row.state === 'rejected')
+  /* v61: the ramp's only action is the way out — a snapshot of your own. The row is not a link:
+     the point is to take a copy before the service goes, not to browse it now. */
+  const canCopy = row.kind === 'skill_offline_scheduled' && onCopy !== undefined
   const destination = pendingRequest ? () => onHandle(row) : canView ? () => onView(row) : null
-  const hasAction = pendingInvitation || pendingRequest || canView
+  const hasAction = pendingInvitation || pendingRequest || canView || canCopy
 
   const actions = (
     <>
@@ -174,6 +201,11 @@ export default function NoticeRow({
       )}
       {canView && (
         <button type="button" className="link-button" onClick={() => onView(row)}>查看</button>
+      )}
+      {canCopy && (
+        <button type="button" className="button is-quiet" onClick={() => onCopy?.(row)}>
+          复制到我的库
+        </button>
       )}
     </>
   )
@@ -232,7 +264,7 @@ export default function NoticeRow({
       <li {...rowProps}>
         <span className="notice-icon"><KindIcon kind={row.kind} /></span>
         <div className="notice-body">
-          <p className="notice-text">{sentence(row)}</p>
+          <p className="notice-text is-clamped">{sentence(row)}</p>
           <div className="notice-meta">
             {meta}
             {hasAction && <span className="notice-acts">{actions}</span>}

@@ -82,7 +82,11 @@ public record SkillMetaResponse(
         /* v54 (ADR 0173): where this skill was copied from, when it was produced by a copy.
            Absent on every skill that was written rather than copied, and on an older server. */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        CopiedFrom copiedFrom) {
+        CopiedFrom copiedFrom,
+        /* v61 (ADR 0184): the 下线中 ramp's due date while the skill still serves, or null. The CLI
+           warns on every invoke/run that lands here and points at `skill copy`. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String offlinePendingUntil) {
 
     public record Origin(String kind, String role, String label, String locator, String path,
             String url, String revision, String checkedAt, String status,
@@ -165,7 +169,8 @@ public record SkillMetaResponse(
                 !boundEnvNames.isEmpty(),
                 required,
                 missingOf(required, boundEnvNames),
-                copiedFromOf(sources, detail.id()));
+                copiedFromOf(sources, detail.id()),
+                detail.offlinePendingUntil());
     }
 
     /**

@@ -1,11 +1,13 @@
 # 0050 · 删除是可以撤销的，而名字不释放
 
-- **状态**：已采纳
+- **状态**：部分被取代（§决定 3 由 0183 取代）
 - **日期**：2026-10-17
 - **所属版本**：[`v5-skill-management`](../versions/v5-skill-management/README.md)
+- **被 [0183](0183-deleting-a-skill-releases-its-name.md) 部分取代**：§决定 3「名字不释放」——删除现在立即释放名字，恢复冲突时自动改名。决定 1、2、4、5 仍然成立，正文按原样保留。
 - **依赖**：[0046](0046-deleting-a-skill-happens-in-the-browser.md)（删除只在浏览器面）、[0047](0047-permissions-are-a-ladder.md)（删除是所有者独有的能力）、[0012](0012-addressing-and-version-pinning.md)（地址解析不出就一律 404）
 - **兑现**：[0046](0046-deleting-a-skill-happens-in-the-browser.md) §后果 留下的那个空档——「删除在控制台入口画出来之前无处可做」。**该 ADR 正文四段保持原样。**
 - **状态码与码名被 [0071](0071-a-deleted-name-answers-with-its-own-code.md) 修订**：提交到已删名字从 400 `invalid_request` 改为 409 `skill_deleted`；「拒绝而不是复活」的决定不变。
+- **§决定 5 被 [0184](0184-taking-a-public-skill-down-is-a-service-lifecycle.md) 局部修订**：公开且曾发布的已删地址从 404 改为 410 + 原因；恢复仍只能从「已删除」列表发起，**正文按原样保留**。
 
 ## 背景
 

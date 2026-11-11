@@ -192,6 +192,8 @@
 - `offline_at` — TEXT
 - `category_key` — TEXT REFERENCES skill_category(key)
 - `ever_published_at` — TEXT
+- `offline_pending_at` — TEXT
+- `offline_due_at` — TEXT
 
 ## `skill_version`
 

@@ -251,7 +251,6 @@ export default function DemoBar({
         push(add('菜单', '?page=skills&new=open', params.get('new') === 'open'))
         push(add('在线编辑', '?page=skills&newskill=open', params.get('newskill') === 'open'))
         push(add('名字已占用', '?page=skills&newskill=error', params.get('newskill') === 'error'))
-        push(add('名字属于已删除的 skill', '?page=skills&newskill=deleted', params.get('newskill') === 'deleted'))
         push(add('导入对话框', '?page=skills&import=open', params.get('import') === 'open'))
         push(add('导入失败', '?page=skills&import=error', params.get('import') === 'error'))
         push(add('名字不可用', '?page=skills&import=bad-names', params.get('import') === 'bad-names'))
@@ -259,7 +258,6 @@ export default function DemoBar({
         push(add('内容已存在', '?page=skills&import=exists', params.get('import') === 'exists'))
         push(add('内容已存在（草稿）', '?page=skills&import=exists-draft', params.get('import') === 'exists-draft'))
         push(add('内容已存在（读不到）', '?page=skills&import=exists-hidden', params.get('import') === 'exists-hidden'))
-        push(add('名字已删除', '?page=skills&import=deleted', params.get('import') === 'deleted'))
       }
     }
 

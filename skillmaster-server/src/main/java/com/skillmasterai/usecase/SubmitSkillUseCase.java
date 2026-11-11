@@ -17,7 +17,6 @@ import com.skillmasterai.modules.skill.SkillMetadata;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.Manifest;
 import com.skillmasterai.modules.version.ManifestEntry;
-import com.skillmasterai.modules.version.SkillDeletedException;
 import com.skillmasterai.modules.version.SkillVersionService;
 import com.skillmasterai.modules.version.ReleaseType;
 import com.skillmasterai.modules.version.SubmitOutcome;
@@ -115,7 +114,8 @@ public class SubmitSkillUseCase {
         // would take the two in opposite orders and deadlock (see underExclusiveWrite).
         SubmitOutcome outcome = versions.underExclusiveWrite(() -> versions.submit(
                 metadata.findOrCreate(namespace.id(), skill, subject.userId(), at)
-                        .orElseThrow(() -> new SkillDeletedException(skill.name())),
+                        .orElseThrow(() -> new IllegalStateException(
+                                "submitting '" + skill.name() + "' produced no row")),
                 skill, manifest, name, label, subject.userId(), source, at,
                         ReleaseType.canonicalOrNull(releaseType)));
 

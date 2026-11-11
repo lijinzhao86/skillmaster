@@ -73,11 +73,12 @@ public class ListAuthoredSkillsUseCase {
 
         return rows.stream()
                 .map(row -> new AuthoredSkillSummary(
+                        row.id(),
                         slugs.getOrDefault(row.namespaceId(), row.namespaceId()),
                         row.name(), row.title(), row.description(), row.visibility(),
                         row.currentVersion(), row.currentDigest(), row.drafts(),
                         row.newestDraftVersion(), row.newestDraftDigest(), row.updatedAt(),
-                        row.deletedAt(), row.offlineAt()))
+                        row.deletedAt(), row.offlineAt(), row.offlinePendingUntil()))
                 .toList();
     }
 }

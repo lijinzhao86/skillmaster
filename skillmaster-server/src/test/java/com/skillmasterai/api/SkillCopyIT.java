@@ -429,7 +429,7 @@ class SkillCopyIT extends AbstractAccountIT {
     }
 
     @Test
-    void aDeletedNameIsANamedConflict() {
+    void aDeletedNameIsFreeAgain() {
         published("source", "1.0.0", Map.of());
         makePublic("source", "browse");
         assertThat(createSkill("source-copy").statusCode()).isEqualTo(201);
@@ -437,11 +437,11 @@ class SkillCopyIT extends AbstractAccountIT {
                 .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build()).statusCode())
                 .isEqualTo(204);
 
-        HttpResponse<String> refused = copy("source", Map.of("name", "source-copy"));
+        // v61 (ADR 0183): the copy's target name was released by the delete.
+        HttpResponse<String> created = copy("source", Map.of("name", "source-copy"));
 
-        assertThat(refused.statusCode()).isEqualTo(409);
-        assertThat(body(refused).get("error").get("code").asText()).isEqualTo("skill_deleted");
-        assertThat(count("SELECT COUNT(*) FROM skill_copy")).isZero();
+        assertThat(created.statusCode()).as("copy: %s", created.body()).isEqualTo(201);
+        assertThat(count("SELECT COUNT(*) FROM skill_copy")).isEqualTo(1);
     }
 
     @Test

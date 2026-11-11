@@ -493,7 +493,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 检查脚本里守着这些的断言，名字就是它们的口径：「十条一屏放下，卡片的脚（分页条）没被底部演示条压住」量 952px（齐平点上一个像素）下**卡片底**（也就是分页条底）与演示条顶之间还剩多少——量的是末行的话，分页条被压住也看不出来、「窗口高出来的不是行高，分页条是卡片的最后一行」量 1200px 下行高**没变**、**分页条整个在卡片里面**（分页条底边不越过卡片底边）、「导航栏与正文面板在同一个高度收底」量两个高度下各差多少（现在都是 0.0px）；每页条数由五条断言守着——默认 10 条、`?per=20` 是 20 条、`?per=50` 把 23 条装进一页且**页码与两个箭头都不画**、**在第 3 页换档会回到第 1 页并把 `per` 写进地址**；「装得下就不分页」那一条守着 ≤10 条时整条脚不出现。**这里原先是第三条「分页条和侧栏的「退出登录」在同一条水平线上」——断言和它量的那个东西一起没了**：账号搬去了顶栏，侧栏不再有脚。
 
-每栏**两行**：第一行是名字 + **档位章**（调用／浏览／写入／维护／管理；我拥有的不画），右端是**状态章**（已上线 @版本 / 草稿 / 已下线）；第二行是说明，右端是**更新于**。**档位用描边的章，状态用带底色的章**——并排时眼睛先看见状态，再看见你能拿它做什么；两枚章都填色的话，一行就有两个同样响的信号。
+每栏**两行**：第一行是名字 + **档位章**（调用／浏览／写入／维护／管理；我拥有的不画），右端是**状态章**（已上线 @版本 / 草稿 / 下线中 / 已下线）；第二行是说明，右端是**更新于**。**档位用描边的章，状态用带底色的章**——并排时眼睛先看见状态，再看见你能拿它做什么；两枚章都填色的话，一行就有两个同样响的信号。
 
 **说明只占一行，超出用省略号（v35）。** 那一格画的是 `description`，它是 `SKILL.md` 的 frontmatter 正文——**天生是一段话**：实测本机 55 个真实 skill（口径见 [`prd.md`](../docs/versions/v35-skill-list/prd.md) §用户与场景：`~/Developer/skill-inbox/` 下的 `SKILL.md`，取 frontmatter 的 `description`，按 YAML 解出值——多行带引号的折成一行、`>-` 的折行标记剥掉——再把连续空白折叠成一个空格，按字符计），中位 **281 字**、平均 337.5 字、最长 **949 字**，55 个里 46 个超过 200 字。以前它不截断、行高又被 `--row-max` 钉住，一段 588 字的描述占 6 行、126px，**文字越过本行下边框 22px，压到下一行的名字与状态章上**。现在 `.skill .skill-title` 是一行（13px / 19.5px 行高）、`text-overflow:ellipsis`、**行宽 `--measure-row` 640px**，行高因此恒为 **66–67px**（名字行 22.5 ＋ 间距 4 ＋ 说明 19.5 ＋ 上下内边距 20，实测），**一屏十条照样成立**。**行宽那一半是第二轮补的**：只截断的话，那一行仍有 **884px**——14px 字能排约 **118 个西文字符**，是舒适行宽（45–75）的 1.5 倍，读起来还是一堵墙，而且文字几乎贴到右端的日期上。收到 640px（≈85 个西文 / 45 个中文）并把字号降到 13px（与「更新于」同一档）之后，右端空出固定的空白，**名字重新成为全页唯一的大字**。全文有两条路：悬停出 `title` 提示；主路是点名字进 skill 页的「信息 › 描述」（那里画的才是完整的那一段）。
 
@@ -819,7 +819,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 | 版本 | `?page=skill&tab=versions` | 列表上面两行工具栏：**状态胶囊**（全部 / 线上 / 草稿 / 历史版本 / 已下架 / 已丢弃，带计数）、**新建版本**（v8 起是真入口），下面一整行**搜索**（`&filter=` / `&q=`，见「版本列表：过滤、搜索与新建版本」）。每个版本一段两行：**上面**是版本名称（提交时必填的作者面名字；旧行退回版本号）、版本号（上线时分配，草稿是 `—`）与状态章（线上 / 草稿 / 历史版本 / 已下架 / 已丢弃）；**下面**左边是说明（单行截断），右端是**作者面的一枚版本码与「复制版本码」**（新行 8 位短码，旧行 26 位 ULID；次要信息，所以不占上一行；调用档没有，见「版本表行内可以有的只剩只读动作」），再往右是谁在什么时候提交（**调用者那一行只写「上线于 …」**）。**没有列头**，像 GitHub 的 PR 列表；**这一段只导航**：第一段（作者面是版本名称，**调用者是版本号**）是唯一的真链接，它的 `::after` 铺满整行——**整行都能点进去**，悬停整行压一层底色；右上角还有一枚「更多操作」（菜单项也全是链接）；点进去是那一版自己的页面——所有改变版本状态的动作都在那里（见「版本列表：整行就是那个链接」「版本列表：行右上角的更多操作」与文件末尾那一节） |
 | 版本 · 单版页 | `?page=skill&tab=versions&version=7K3M9QX2` | 清单收起，换成这一版：版本头（名称 + 版本号 + 状态 + 主动作）、状态条，下面是**三栏**——概览（说明 + 时间线 + 右侧版本事实）、改动（`&sub=diff`）、操作（`&sub=actions`；普通动作在上、危险操作在页底）。没有基线时不画改动，没有动作时不画操作；线上那一版没有危险操作，回滚在「操作」里。**标题一直是这一版的名称**，草稿与发布后都一样；上线时分配的版本号是名称旁的一枚等宽标识。演示件里草稿的地址后缀就是它的 **8 位短码**（旧行是 26 位 ULID；不是内容摘要，也不带 `draft:` 前缀） |
 | 设置 › 协作者 | `?page=skill&tab=settings&sub=collaborators` | 「共享给」+ 名单（含所有者那一行；夹具本来就有十三个协作者，所以**默认就分两页**，`&q=` 搜索、`&p=` 翻页；`&members=none` 演示「还没有别人」）+ 待处理的申请（有才画）；**二级不写就落在「常规」**（它是侧栏的第一项） |
-| 设置 › 常规 | `?page=skill&tab=settings&sub=general` | 非官方：可见性只有「私有」+ 一句说明；`&official=1` 是官方账号那一态（三选一，`&vis=public-invoke` / `public-browse` 是另外两档）＋ 页底的**危险操作**（只有所有者看得见：下线整个 skill / 删除；`&offline=1` 是已下线那一态） |
+| 设置 › 常规 | `?page=skill&tab=settings&sub=general` | 非官方：可见性只有「私有」+ 一句说明；`&official=1` 是官方账号那一态（三选一，`&vis=public-invoke` / `public-browse` 是另外两档）＋ 页底的**危险操作**（只有所有者看得见：下线整个 skill / 删除；`&pending=1` 是下线中那一态，`&offline=1` 是已下线那一态；`&no-joins=1` 把公开 skill 的入库人数置零） |
 
 **两个路径参数不会同时出现。** 一个文件的身世已经在它自己的路径里了，所以列表跟着文件走，不必再被告知一次——换来的是「下面那个文件必定在上面那张列表里」。地址里的目录不存在时落回根目录，不认识的分区落回「文件」，都不是空白页。
 
@@ -902,6 +902,8 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 | 不在库、可加入 | **证据行** + 收藏占位 + **主色实心按钮「入库」** + **「⋯」› 复制**（浏览及以上） | 没有我的标签 |
 | 不在库、当前不可加入（下线 / 没有当前版本） | 没有证据行、没有按钮 | 一句原因 |
 | 库条目休眠 | 没有证据行、没有按钮 | 一句「暂时不可见，恢复后会回来」 |
+
+**「入库」先弹一次确认**（v61，ADR 0184）：入库是依赖声明，不是收藏——确认框写清「收进库、不是复制一份内容」「作者下线时会提前 30 天通知你，删除时也会通知你」「要长期独立运行请用「复制」」，确认钮「确认入库」**不染红**（它不拿走任何东西）。发现页那一行仍是点一下即加（2026-10-22 的即时回退），这个确认只在详情页出现：那里是决定「要不要依赖它」的地方，人正在读它的说明与版本。
 
 **「⋯」和里面的复制只在「浏览」及以上出现，而且必须有一版读得到的已发布版本**（v54）。只有「调用」档的人能调用、却读不到文件清单；没有已发布版本的 skill 没有一版可以拿走；已下线的不服务。这些情况下连「⋯」都不画——不是画成灰的（同上面那条「够不到的东西不画」）。自己创建的 skill 也没有：要改自己的 skill 直接新建版本，复制只会多一个改名的副本。
 
@@ -1108,7 +1110,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 - **版本名称**：必填，1–40 个码点（与编辑页同一条规矩；第 41 个进不去）。**网页不解析压缩包，名称始终由人填**；包里的 `version.name` 在网页这条路里不会被用上（照常写进包，供 CLI 往返）。真正用上这个兜底的是 CLI——包里有名称时 `--name` 可以省略。**说明留空 = 没给**：空着时服务端用包里的 `version.note`，填了就覆盖。
 - **说明（可选）**：至多 200 个码点。
 - **导入**：主按钮。**没有选文件或名称为空时是 `disabled`**，不是灰着的假按钮：没有东西可提交时，一个按下去什么都不做的按钮只会让人怀疑是不是坏了。进行中写「正在导入…」，两个按钮都不可用。
-- **失败留在表里**：一行危险色说原因，字段与按钮都在原处，改完再试。已知的原因按入口分：**两个入口都有**——不是 zip、空包、缺根 `SKILL.md`、顶层目录名与 `name` 不符、超过 512 个文件、整包导入超过 128 MiB（压缩包本身或解压后）、包内重复路径、符号链接、**路径不规范**（写「压缩包里的路径不合法：不能有绝对路径、`..` 或空段。」）、网络或超时（写「导入失败：服务器没有响应，文件没有导入。重试一次。」）；**只有版本列表导入有**——地址名与内容名不一致（写「地址是 pdf-tools，SKILL.md 里写的是 split。把 SKILL.md 的 name 改成 pdf-tools。」——两个名字都写出来，并说清改哪一边；我的 skill 那一路没有地址名可比）；**只有「我的 skill」导入与「在线编辑」有**——名字被已删除的 skill 占着（写「这个名字属于一个已删除的 skill。」并给 `去恢复`）。**两个入口都有、v33 起**——压缩包里的名字在该下载方还原不了：同一块红字里，首句「压缩包里有 N 个文件名不能用在所有系统上，没有导入。」，下面**最多 3 行**「<路径>：<原因>。」，超出补一行「还有 N 个。」，末行「改好压缩包再选一次。」——弹窗里没有改名的位置，所以只点名、给下一步，不把这一屏变成清单。**首句与「还有 N 个」数的都是文件**：碰撞一行写两个名字，就数两个；解不出名字的那一条（`invalid_zip_name`，原名在解码时就丢了）没有路径可写，那一行只有句子。**只有一个文件出问题时**不列清单，一句话写完：「压缩包里的 <路径> 不能用在所有系统上：<原因>。」＋ 末行。原因包括 Windows 非法字符（冒号 / 星号 / 问号 / 竖线 / 尖括号 / 引号 / 控制字符）、保留设备名、结尾的空格或点、路径过长、大小写碰撞、编码写法碰撞、解不出的名字。原因句子与编辑器的行内校验、CLI 的逐条输出共用一套（v33 `prd.md` §措辞）。元数据文件的未知字段、`schema_version`、类型不对，以及保留路径出现在内容里，也各有一句：「.skillmaster/metadata.json 有无法识别的字段：<字段>。」「.skillmaster/metadata.json 的 schema_version 不认识；这个包可能是更新的版本写的。」「.skillmaster/metadata.json 的 <字段> 类型不对。」「压缩包里有 .skillmaster/metadata.json；这个路径留给平台元数据，不能作为 skill 的内容。」（上传里这个路径上的文件**只有整份解析成合法元数据才算 sidecar**；解析不了就落到这一句，不静默丢弃。）**每条具名原因都要有上屏文案**：这些导入失败走的是 `invalid_upload` 这一类顶层码，而 `CODE_MESSAGES` 里那条通用句会先命中、把 `details[].issue` 盖掉（`errors.ts` 今天就是这样），所以**必须给 `details[].issue` 一张自己的文案表，并在查表时不经过 `codeMessage('invalid_upload')`**；只有表里没有的码才回退服务端原句。再补一条传输层的：压缩包本身超过 520 MB（请求体上限；代理是 540 MB）——写「压缩包太大，服务器没有接收。压小一点再试。」。这是今天的 `errors.ts` 策略，不是新规矩。**「内容已存在」不是失败**，见下。
+- **失败留在表里**：一行危险色说原因，字段与按钮都在原处，改完再试。已知的原因按入口分：**两个入口都有**——不是 zip、空包、缺根 `SKILL.md`、顶层目录名与 `name` 不符、超过 512 个文件、整包导入超过 128 MiB（压缩包本身或解压后）、包内重复路径、符号链接、**路径不规范**（写「压缩包里的路径不合法：不能有绝对路径、`..` 或空段。」）、网络或超时（写「导入失败：服务器没有响应，文件没有导入。重试一次。」）；**只有版本列表导入有**——地址名与内容名不一致（写「地址是 pdf-tools，SKILL.md 里写的是 split。把 SKILL.md 的 name 改成 pdf-tools。」——两个名字都写出来，并说清改哪一边；我的 skill 那一路没有地址名可比）。**两个入口都有、v33 起**——压缩包里的名字在该下载方还原不了：同一块红字里，首句「压缩包里有 N 个文件名不能用在所有系统上，没有导入。」，下面**最多 3 行**「<路径>：<原因>。」，超出补一行「还有 N 个。」，末行「改好压缩包再选一次。」——弹窗里没有改名的位置，所以只点名、给下一步，不把这一屏变成清单。**首句与「还有 N 个」数的都是文件**：碰撞一行写两个名字，就数两个；解不出名字的那一条（`invalid_zip_name`，原名在解码时就丢了）没有路径可写，那一行只有句子。**只有一个文件出问题时**不列清单，一句话写完：「压缩包里的 <路径> 不能用在所有系统上：<原因>。」＋ 末行。原因包括 Windows 非法字符（冒号 / 星号 / 问号 / 竖线 / 尖括号 / 引号 / 控制字符）、保留设备名、结尾的空格或点、路径过长、大小写碰撞、编码写法碰撞、解不出的名字。原因句子与编辑器的行内校验、CLI 的逐条输出共用一套（v33 `prd.md` §措辞）。元数据文件的未知字段、`schema_version`、类型不对，以及保留路径出现在内容里，也各有一句：「.skillmaster/metadata.json 有无法识别的字段：<字段>。」「.skillmaster/metadata.json 的 schema_version 不认识；这个包可能是更新的版本写的。」「.skillmaster/metadata.json 的 <字段> 类型不对。」「压缩包里有 .skillmaster/metadata.json；这个路径留给平台元数据，不能作为 skill 的内容。」（上传里这个路径上的文件**只有整份解析成合法元数据才算 sidecar**；解析不了就落到这一句，不静默丢弃。）**每条具名原因都要有上屏文案**：这些导入失败走的是 `invalid_upload` 这一类顶层码，而 `CODE_MESSAGES` 里那条通用句会先命中、把 `details[].issue` 盖掉（`errors.ts` 今天就是这样），所以**必须给 `details[].issue` 一张自己的文案表，并在查表时不经过 `codeMessage('invalid_upload')`**；只有表里没有的码才回退服务端原句。再补一条传输层的：压缩包本身超过 520 MB（请求体上限；代理是 540 MB）——写「压缩包太大，服务器没有接收。压小一点再试。」。这是今天的 `errors.ts` 策略，不是新规矩。**「内容已存在」不是失败**，见下。
 - **内容已存在**：弹窗不关，字段下面多一行中性的话——「这个 skill 已经有一版同样的内容（@1.2.3）；没有新建。」后面跟 `查看 @1.2.3`。**链接跟着那一版走**：已发布写 `@1.2.3`，草稿写版本码；**当前这个人读不到那一版时（已丢弃，或对他是不可读的已下架）不给链接**，只写「这个 skill 已经有一版同样的内容；那一版现在读不到。」——给一个点进去 404 的链接比不给更糟。它是幂等，不是错误，所以不染红、也不清空已经填好的东西。
 - **取消与 Esc 是同一个答案**，焦点回到打开它的那颗按钮。
 - **成功后**落到新草稿的版本页——不另画一张「导入成功」的卡：那一版自己就是结果。
@@ -1120,14 +1122,14 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 - **描述**：必填——`SKILL.md` 的 `description` 是规范必填项。
 - **版本名称**：默认「第一版」，可改，必填，1–40 个码点。
 - **创建**：一次事务建出 skill 与它的第一条草稿，落在这条草稿的编辑页；列表里这一行是「草稿」，线上指针不动（ADR 0031）。**草稿里已经有一份根 `SKILL.md`**，frontmatter 的 `name` / `description` 就是表单填的这两个值——编辑页打开的就是它，不是一张空表。进行中写「正在创建…」，两个按钮都不可用。
-- **名字已被占用**：拒绝，原地写「这个名字已经有了。」并给 `查看 <名字>`；**名字属于已删除的 skill**：同形，写「这个名字属于一个已删除的 skill。」并给 `去恢复`（服务端具名码 `skill_deleted`）。
+- **名字已被占用**：拒绝，原地写「这个名字已经有了。」并给 `查看 <名字>`。
 - **取消与 Esc 是同一个答案**，焦点回到打开它的那颗「新建 skill」。
 - **其余校验**：名字为空、描述为空、版本名称为空时「创建」不可用；服务端对非法名字与超长仍给具名原因，**每条都要有中文上屏文案**，不把英文原句放上屏：`name_too_long` →「名字不能超过 64 个字符。」；`name_not_usable_as_a_directory` →「名字里不能有空格或路径分隔符。」；`name_contains_version_separator` →「名字里不能有 @。」；`name_contains_unaddressable_char` →「名字里不能有 % 或 ;。」；`required_field_missing` →「名字和描述都要填。」。表里没有的码才回退服务端原句。
-- **演示件的态**：`?page=skills&newskill=open|error|deleted`；`error` 与 `deleted` 都填好名字与描述，差别只在最后一行与那个链接。
+- **演示件的态**：`?page=skills&newskill=open|error`；`error` 填好名字与描述，差别只在最后一行与那个链接。
 
 **这一版没有**：选本地文件夹（只收 zip）、拖拽上传、上传进度条（只有「正在导入…」）、一次导入多个 skill、把平台字段（可见性、协作者）随包带进带出。理由在 v9 PRD §不做。
 
-**演示件的态是地址**：菜单本身是 `?page=skill&tab=versions&new=open`、`?page=skill&tab=files&new=open`（文件栏表头那颗）与 `?page=skills&new=open`；导入对话框在版本列表是 `import=open|error|bad-names|bad-name-single|mismatch|exists|exists-draft|exists-hidden`，在「我的 skill」是 `import=open|error|bad-names|bad-name-single|deleted|exists|exists-draft|exists-hidden`（**两个入口各自只出现它真会遇到的那几种**：`mismatch` 只在版本列表，`deleted` 只在「我的 skill」）；新建 skill 是 `?page=skills&newskill=open|error|deleted`。填好的那几支差别只在最后一行——一条具名的拒绝，或「内容已存在」的三种落点（已发布写 `@1.2.3`、草稿写版本码、读不到就不给链接）。它们也在演示条对应视图的变体里。**接受之后弹窗关闭、页面不动**：演示件没有服务端，真实产品里落在这一版的版本页。
+**演示件的态是地址**：菜单本身是 `?page=skill&tab=versions&new=open`、`?page=skill&tab=files&new=open`（文件栏表头那颗）与 `?page=skills&new=open`；导入对话框在版本列表是 `import=open|error|bad-names|bad-name-single|mismatch|exists|exists-draft|exists-hidden`，在「我的 skill」是 `import=open|error|bad-names|bad-name-single|exists|exists-draft|exists-hidden`（**两个入口各自只出现它真会遇到的那几种**：`mismatch` 只在版本列表）；新建 skill 是 `?page=skills&newskill=open|error`。填好的那几支差别只在最后一行——一条具名的拒绝，或「内容已存在」的三种落点（已发布写 `@1.2.3`、草稿写版本码、读不到就不给链接）。它们也在演示条对应视图的变体里。**接受之后弹窗关闭、页面不动**：演示件没有服务端，真实产品里落在这一版的版本页。
 
 ### 六种人看这一页
 
@@ -1172,6 +1174,8 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **两份共用一个页头、一个搜索、一个排序，不共用行。** 已删除那一行没有链接：它的地址已经打不开，一个看起来像链接、点了没处的名字比纯文字更糟。右边是「恢复」，下面写的是「删除于 …」——「更新于」说的是一个已经不存在的页面，不是这个人此刻在问的事。
 
+**恢复之后，如果原名已经被新 skill 占用**，旧条目会以 `原名-restored-<id>` 回来；那一刻列表顶部用一条横幅说出新地址（「已恢复。原名已被占用，这个 skill 现在叫 …」），不让人回头找旧名字。演示件没有复现这一态（它的夹具只有一个墓碑、恢复不遇冲突）；产品侧照这条实现。
+
 **数量跟着那一份说**：标题旁边是「2 个已删除」。
 
 ### 通知：待处理与全部（v45）
@@ -1198,9 +1202,11 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 **时间取什么。** 未收口的行显示 `created_at`；收口的行显示 `resolved_at`；读取时才判定为过期的邀请没有 `resolved_at`，显示 `expires_at`——这样「结果与时间」对懒过期也成立，而不用为了一个能当场回答的问题去写行。
 
-**一行里有什么。** 左起：类型图标（共享邀请 / 权限申请 / 申请结果 / 公告 / 作者已注销）、一句话、时间与结果章、右侧的动作。共享邀请给「接受 / 拒绝」；权限申请给「去处理」，把人送到那个 skill 的设置 › 协作者；只有已接受 / 已批准 / 未通过且 `viewable` 的行给「查看」（已拒绝 / 已过期 / 已撤销不给）；公告没有动作。
+**一行里有什么。** 左起：类型图标（共享邀请 / 权限申请 / 申请结果 / 公告 / 作者已注销 / 下线中通知）、一句话、时间与结果章、右侧的动作。共享邀请给「接受 / 拒绝」；权限申请给「去处理」，把人送到那个 skill 的设置 › 协作者；下线中通知给「复制到我的库」，把入库的引用变成自己的快照；只有已接受 / 已批准 / 未通过且 `viewable` 的行给「查看」（已拒绝 / 已过期 / 已撤销不给）；公告没有动作。
 
-**五类通知的样张都在夹具里**（`fixtures/notifications.ts`）。其中公告是**底层能力的样张**，不是本版的发布入口——v45 没有发布面；「作者已注销」是 v56 的第五类（ADR 0175），图标是「人 + 断开的连线」，不是公告的喇叭：它不是平台广播，也没有任何可接受的动作，状态是 `info`（无结果章、不进「待处理」）。
+**各类通知的样张都在夹具里**（`fixtures/notifications.ts`）。其中公告在 v45 里是**底层能力的样张**、没有发布面；v61 起它也是产品真的会发的三条生命周期通知（下线完成 / 取消 / 删除）的载体，正文带地址与日期，没有动作；「作者已注销」是 v56 的第五类（ADR 0175），图标是「人 + 断开的连线」，不是公告的喇叭：它不是平台广播，也没有任何可接受的动作，状态是 `info`（无结果章、不进「待处理」）；「下线中通知」（`skill_offline_scheduled`）是 v61 新增的一类，图标是时钟，句子写明下线日期，动作是「复制到我的库」。**它不在 `NOTICES` 里**——900px 的通知页多一行就多一条滚动条，演示件用 `?page=notifications&status=all&notice=offline` 把公告那一行换成它。
+
+**「复制到我的库」在演示件里是当前页开一张复制弹窗；产品里它是跳到那个 skill 页的复制流程**（`?copy=1`）——版本与名字在那一页才看得全，弹窗在这里拿不到它们的完整清单。没有「浏览」档的人（下线中通知也发给 `invoke` 档的入库者）点进去会看到一句说明：复制需要「浏览」档；不给一个点了没反应的按钮。
 
 **「已撤回」没有默认样张。** 900px 的通知页放不下第九行，撤回那一行暂时只在组件与产品实现里；要改它请开 `?page=notifications&status=all` 并临时加回夹具，别照着「已拒绝」的样式猜。
 
@@ -1610,7 +1616,7 @@ file:///Users/lijinzhao/Developer/skillmaster/design/skillmaster-控制台演示
 
 | 你在哪一屏 | 变体 |
 |---|---|
-| 我的 skill | 正常 · 空 · 加载中 · 出错 · 已删除 · 新建 skill（菜单 · 在线编辑 · 名字已占用 · 名字属于已删除的 skill） · 导入（对话框 · 失败 · 名字不可用 · 名字不可用（一个） · 内容已存在 · 内容已存在（草稿） · 内容已存在（读不到） · 名字已删除） |
+| 我的 skill | 正常 · 空 · 加载中 · 出错 · 已删除 · 新建 skill（菜单 · 在线编辑 · 名字已占用） · 导入（对话框 · 失败 · 名字不可用 · 名字不可用（一个） · 内容已存在 · 内容已存在（草稿） · 内容已存在（读不到）） |
 | 一个 skill · 信息 | 正常 · 没有 title · 没有这个 skill |
 | 一个 skill · 文件 | 根目录 · 子目录 · 读一个文件 · 只有草稿 · 新建版本菜单（2026-10-21） |
 | 一个 skill · 版本 | 全部 · 筛选：草稿 · 搜索无结果 · 很多版本 · 新建版本菜单 · 导入（对话框 · 失败 · 名字不可用 · 名字不可用（一个） · 名字不一致 · 内容已存在 · 内容已存在（草稿） · 内容已存在（读不到）） |
@@ -1757,7 +1763,7 @@ node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html"
 node design/scripts/dom-compare.mjs <旧产物.html> "<新产物.html>" [--only <前缀> | --home]
 ```
 
-⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **178 个状态**（v33 加了 4 个：编辑页行内的名字不可用、两个导入入口的多文件态、导入的单文件态；v35 加了 10 个：`skills-long`、`discover-long`、`skills-per50`、`skills-last-page`、六张 `skills-preview*`；v39 加了 1 个：`editor-pdf`；v45 加了 11 个：通知页的六个状态、铃铛下拉三态、长地址与窄屏；v48 加了 2 个：常规页的非官方态与它的窄屏）、**十一个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
+⚠️ **改一页就跑那一页，别整套跑。** 整套是给「方向定稿」和「要交给别人」用的——2026-10-20 上一次全量是 **413 条**、三十七个状态与七个分组；此后又加了 3 个非编辑页状态与 25 个编辑页状态（`editor` 一组），v9 又加了 18 个（导入与新建 skill 的菜单、对话框、拒绝与幂等的落点、窄屏）——当前 `--list` 是 **229 个状态**（组数 15；数字会随版本变，引用前跑一次 `--list`）（v33 加了 4 个：编辑页行内的名字不可用、两个导入入口的多文件态、导入的单文件态；v35 加了 10 个：`skills-long`、`discover-long`、`skills-per50`、`skills-last-page`、六张 `skills-preview*`；v39 加了 1 个：`editor-pdf`；v45 加了 11 个：通知页的六个状态、铃铛下拉三态、长地址与窄屏；v48 加了 2 个：常规页的非官方态与它的窄屏）、**15 个分组**（v14 加了 `discover` 与 `my-tags`，v18 加了 `publish`）；2026-10-22 整套走完是 **503 条检查、0 失败**（React 化之后的那一次，八个分组逐组跑的总和）。**成文的耗时口径**：2026-10-16 那次 199 条、本机实测 **11.9 秒**（Chrome、1440 宽、**无窗口跑法**——同一天把等待改对之前是 77 秒，改对且有窗口是 9.7–10.4 秒）。**条数和秒数都会随改动变，要引用就重量一次**——别把这两个数抄下来当常数。而一次改动的实际影响面通常只有一页：
 
 > **这两套检查为什么快得起来（2026-10-16）。** 它们原先 126 秒里约 **85 秒是白等**：每次导航都等 `networkidle0`——一个 `file://` 页面没有网络，那只是在等 500ms 静默窗口（实测 559ms / 982ms，而 `load` 是 13ms / 19ms）；而 `settle()` 是写死的睡眠（首页 700ms × 41 次、控制台 250ms × 53 次）。
 >
@@ -1818,7 +1824,7 @@ node design/scripts/console-states.mjs "…控制台演示.html" artifacts/desig
 | `package.json` | 构建依赖（react / react-dom / esbuild / typescript）与四条脚本：`build`（两份一起）/ `build:console` / `build:home` / `type-check`。 |
 | `partials/` | **已删除**：命令式那一版的共享浮层（[ADR 0076](../docs/decisions/0076-the-design-file-is-react-source.md)）。对照旧实现用 `git show 49a98b0:design/partials/auth-overlay.html`。 |
 | `demos/dir1-swiss.html`、`demos/dir2-resend.html` | 另外两个落选方向，**已归档不再维护**，留作对照。 |
-| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十九张**是控制台五条流程（登录、注册、找回密码、授权、退出引导）的截图（`interaction-check.mjs` 里那是十九条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 181 张**：`SHOTS` 里 178 个状态 + 登录屏 3 张；`--list` 只列那 178 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
+| `../artifacts/design/`（仓库根，不进版本库） | 首页的首屏（含卡片）、页脚、两档与已登录变体截图在 `home/`（`home-check.mjs` 写 `00-home*`，含 `00-home-signed-in.png`；`00-home-cards.png`、两档 `-cards` 与 `00-home-full.png` 是遗留图，脚本已不再写；`home/variants/` 下是背景方案与已登录态的对照图，也不由脚本产出）；`states/` 下**十九张**是控制台五条流程（登录、注册、找回密码、授权、退出引导）的截图（`interaction-check.mjs` 里那是十九条 `shot()`）；`console/` 下是控制台页面状态截图（**脚本写出 232 张**：`SHOTS` 里 229 个状态 + 登录屏 3 张；`--list` 只列那 229 个，**不含登录屏那 3 张**。**目录里还躺着几批没人再写的遗留图**（脚本已不产出，不影响任何检查）：`version-choose.png`、`version-big-single.png`、`publish-filtered.png`，以及整组 `pending-*.png`（这一页还叫「待发布」时的八张）与 `auth-*.png` 三张）。版本这一版新增：`version-overview`、`version-draft`、`version-publish`、`version-rollback`、`version-revoke`、`version-revoked`、`version-missing`、`skill-offline`；`version-publish` / `version-rollback` / `version-revoke` / `version-revoked` 都落在「操作」栏，`version-overview` 是纯阅读的概览；`skill-no-live` 改用 `no-live=1` 造出「只有草稿」那一态。**v8 新增编辑版本的 27 张**（v39 加 `editor-pdf`）：`editor-new`、`editor-blank`、`editor-base-draft`、`editor-draft`、`editor-note`、`editor-name`、`editor-name-error`、`editor-label-error`、`editor-dirty`、`editor-conflict`、`editor-duplicate`、`editor-duplicate-draft`、`editor-binary`、`editor-pdf`、`editor-new-file`、`editor-new-file-error`、`editor-new-file-bad-name`、`editor-new-folder`、`editor-empty-folder`、`editor-rename`、`editor-delete`、`editor-leave`、`editor-error`、`editor-loading`、`editor-missing`、`editor-denied`，以及 400px 的 `editor-narrow`。**v9 新增导入与新建 skill 的 18 张**：`versions-new-menu`、`versions-import`、`versions-import-error`、`versions-import-mismatch`、`versions-import-exists`、`versions-import-exists-draft`、`versions-import-exists-hidden`、`versions-import-narrow`（400px）、`skills-new-menu`、`skills-import`、`skills-import-error`、`skills-import-exists`、`skills-import-exists-draft`、`skills-import-exists-hidden`、`skills-import-deleted`、`skills-new-skill`、`skills-new-skill-error`、`skills-new-skill-deleted`（后两个 `*-deleted` 在 v61 退出：删除不再占名字，演示件不再有这一态）。**v33 新增 4 张**：`editor-new-file-bad-name`、`versions-import-bad-names`、`versions-import-bad-name-single`、`skills-import-bad-names`。 |
 | `spec.md` | **首页**三版最初的共同输入（历史）：产品、受众、真实文案、必须实现的交互、约束。v15 起当前设计以首页演示与本节为准；改首页需求先改 `src/home/`，并回写本节。控制台那份的需求写在本文的「控制台演示」一节。 |
 | `brand-spec.md` | 品牌资产：调色板、字体栈、标记 SVG、真实产品截图。**两份演示共用**。 |
 | `voice-spec.md` | **界面文案的权威**：声音与温度、人称、名词表（一个东西一个名字）、禁用词与禁用写法、按界面类型的句式。改任何一句界面文案先看它。 |
@@ -1943,7 +1949,8 @@ node design/scripts/console-states.mjs "…控制台演示.html" artifacts/desig
 **版本退役只有下架一种；整个 skill 下线是另一件事，作用域不同：**
 
 - **下架**（`maintain` 及以上）：这一版对**消费面**不可读；原因选填（不向调用者回显，只有维护者看得到；[ADR 0059](../docs/decisions/0059-delist-reason-is-optional.md)）；可以重新上架。入口在单版页「操作」栏的页底危险操作。**当前线上版本不能被直接下架**——要先回滚成历史版本，再下架；所以下架永远不会让一个有过发布版本的 skill 失去当前版本。
-- **下线整个 skill**（**仅所有者**）：服务暂停，**不是版本状态**。可见的调用者收到 503 `skill_offline`，看不到这个 skill 的人仍是 404；它从搜索与公开列表里消失；作者面照常可读，只多一枚「已下线」章。版本状态与线上指针都不动，恢复后不需要重新上线。入口在设置 › 常规 › 危险操作。
+- **下线整个 skill**（**仅所有者**）：服务暂停，**不是版本状态**。公开、有线上版本且有入库者时先进入 **「下线中」30 天**：期间照常可调用，每次调用带提醒，信息页标「下线中 · <日期> 下线」、公域卡片标「下线中 · <日期>」，入库者与授权者收到通知与「复制到我的库」；满 30 天转 **「已下线」**，可见的调用者收到 503 `skill_offline`，看不到这个 skill 的人仍是 404；它从搜索与公开列表里消失；作者面照常可读，只多一枚「已下线」章。私有 skill、没有入库者的公开 skill、以及没有线上版本的公开 skill 仍是一步下线。下线中不接受新入库，但可以**取消下线**回到在线。版本状态与线上指针都不动，恢复后不需要重新上线。入口在设置 › 常规 › 危险操作。
+- **删除释放名字，数据仍然保留（v61）**：公开、有线上版本且有入库者的 skill 必须走完「已下线」才能删除；删除确认列出**公开/私有、授权人数、入库人数**三件事，删除后通知他们。**公开且曾发布的** skill 删除后地址返回 **410 + 原因**；私有、从未发布、或同名下已有新的活 skill 时仍是 404。同名的旧条目还在「已删除」里；恢复**不动服务状态**（删除前是已下线/下线中的，恢复后仍是），名字已被新 skill 占用时自动改名为 `原名-restored-<id>`。数据不真删。
 - 已下架的行只给 `maintain` 及以上看（内容与原因也在那里）；`browse` / `write` 看不到它。历史版本与已上线一样，能打开版本栏的人都看得到。
 
 **状态只有一枚章，`0.y.z` 不另加「试用」（2026-10-20 定）。** 版本号本身已经说了它还没到 1.0；再打一枚章，等于把一个没有下一步的语义做成界面负担（为什么收回，见 [`prd.md`](../docs/versions/v6-version-management/prd.md) §不做）。版本表、单版页与三个版本选择器都只标状态（线上 / 草稿 / 历史版本 / 已下架 / 已丢弃）；选择器的选项是名称 + 版本号 + 状态 tag，不写说明。「已下线」不是状态章：它属于整个 skill，画在名字旁边，与可见性标相邻。

@@ -64,18 +64,18 @@ class CreateSkillIT extends AbstractAccountIT {
     }
 
     @Test
-    void aDeletedNameIsANamedConflict() {
+    void aDeletedNameIsFreeAgain() {
         assertThat(create("pdf-tools", "one", "第一版").statusCode()).isEqualTo(201);
         assertThat(webPost(BASE + "/" + username + "/pdf-tools/delete", "").statusCode())
                 .isEqualTo(204);
         long[] before = rows();
 
+        // v61 (ADR 0183): the name is released, so this creates a second skill rather than
+        // refusing; the tombstone stays in the deleted list.
         HttpResponse<String> again = create("pdf-tools", "two", "第一版");
 
-        assertThat(again.statusCode()).isEqualTo(409);
-        assertThat(body(again).get("error").get("code").asText()).isEqualTo("skill_deleted");
-        // Zero writes, all three tables (PRD #19), not just the skill row.
-        assertThat(rows()).isEqualTo(before);
+        assertThat(again.statusCode()).as("recreate: %s", again.body()).isEqualTo(201);
+        assertThat(rows()[0]).isEqualTo(before[0] + 1);
     }
 
     @Test

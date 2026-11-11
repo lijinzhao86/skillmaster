@@ -150,12 +150,6 @@ export function importFailure(
           : '导入失败：服务器没有响应，文件没有导入。重试一次。',
     }
   }
-  if (result.code === 'skill_deleted') {
-    return {
-      message: '这个名字属于一个已删除的 skill。',
-      action: { label: '去恢复', href: '/skills?show=deleted' },
-    }
-  }
   const mismatch = result.details.find((detail) => detail.issue === 'name_mismatch')
   if (mismatch !== undefined) {
     const address = issueValue(result.details, 'address_name') ?? ''

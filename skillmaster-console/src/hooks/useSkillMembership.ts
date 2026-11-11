@@ -18,19 +18,36 @@ export interface SkillMembershipProps {
   params: URLSearchParams
   /** `skill.offline_at != null`, read by the rail's sentence when joining is not possible. */
   offlineAt: string | null
+  /** v61: the 下线中 ramp's due date, or null. It refuses joins too, with its own sentence. */
+  pendingUntil: string | null
 }
 
-export function useSkillMembership({ skillTags, params, offlineAt }: SkillMembershipProps) {
+export function useSkillMembership({ skillTags, params, offlineAt, pendingUntil }:
+    SkillMembershipProps) {
   const library = skillTags.groups?.library ?? null
   const [joining, setJoining] = useState(false)
+  /* v61: 入库 is a dependency, not a bookmark. The design asks once and says what it means —
+     the author's 下线/删除 reaches everyone in the library, and an independent copy is 复制. */
+  const [joinOpen, setJoinOpen] = useState(false)
   const [removeOpen, setRemoveOpen] = useState(false)
   const [removePending, setRemovePending] = useState(false)
   const removeButton = useRef<HTMLButtonElement | null>(null)
+  const joinButton = useRef<HTMLButtonElement | null>(null)
 
-  const joinLibrary = async (): Promise<void> => {
+  function askJoin(): void {
+    setJoinOpen(true)
+  }
+
+  function cancelJoin(): void {
+    setJoinOpen(false)
+    requestAnimationFrame(() => joinButton.current?.focus())
+  }
+
+  async function confirmJoin(): Promise<void> {
     setJoining(true)
     await skillTags.join()
     setJoining(false)
+    setJoinOpen(false)
   }
 
   function askRemove(): void {
@@ -79,7 +96,9 @@ export function useSkillMembership({ skillTags, params, offlineAt }: SkillMember
           ? ''
           : offlineAt != null
             ? '已下线，暂时不能入库。'
-            : '还没有上线的版本，暂时不能入库。'
+            : pendingUntil != null
+              ? '下线中，暂时不能入库。'
+              : '还没有上线的版本，暂时不能入库。'
         : library.active
           ? ''
           : '暂时不可见，恢复后会回到你的库。'
@@ -87,7 +106,11 @@ export function useSkillMembership({ skillTags, params, offlineAt }: SkillMember
   return {
     library,
     joining,
-    joinLibrary,
+    joinOpen,
+    joinButton,
+    askJoin,
+    confirmJoin,
+    cancelJoin,
     removeOpen,
     removePending,
     removeButton,

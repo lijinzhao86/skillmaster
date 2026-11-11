@@ -39,6 +39,9 @@ type AuthorSkill struct {
 	Owned         bool `json:"owned"`
 	Offline       bool `json:"offline"`
 	EverPublished bool `json:"ever_published"`
+	// OfflinePendingUntil is the 下线中 ramp's due date while the skill still serves (v61, ADR
+	// 0184). The page actions read it so `skill online` opens the page that cancels the ramp.
+	OfflinePendingUntil string `json:"offline_pending_until"`
 }
 
 // AuthorVersion is one version record on the author plane.

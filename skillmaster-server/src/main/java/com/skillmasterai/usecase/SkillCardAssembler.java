@@ -88,6 +88,7 @@ public class SkillCardAssembler {
                 row.version(),
                 row.updatedAt(),
                 row.deletedAt(),
+                row.offlinePendingUntil(),
                 row.categoryKey() == null ? null
                         : new SkillCardView.Category(row.categoryKey(), row.categoryName()),
                 publicTags.getOrDefault(row.id(), List.of()).stream()

@@ -4,6 +4,8 @@
 - **日期**：2026-11-09
 - **所属版本**：[`v54-skill-copy`](../versions/v54-skill-copy/README.md)
 - **依赖**：[ADR 0048](0048-visibility-hands-out-a-rung.md)（公开最多给到浏览）、[ADR 0051](0051-the-author-plane-serves-by-tier.md)（按档位服务）、[ADR 0064](0064-a-draft-may-change-a-published-version-may-not.md)（版本不可变）、[ADR 0070](0070-creating-a-skill-creates-its-first-draft.md)（建 skill 即建第一条草稿）、[ADR 0160](0160-imports-are-renamed-by-an-optional-source-prefix.md)（改名的内容改写规则）
+- **被 [0183](0183-deleting-a-skill-releases-its-name.md) 修订**：复制到一个刚被删除、名字因此空出来的地址不再撞上已删行；**正文按原样保留**。
+- **被 [0184](0184-taking-a-public-skill-down-is-a-service-lifecycle.md) 确认**：下线中的源仍可复制——被拒的是新入库，不是复制（复制正是下线中给出的迁移出路）。
 
 ## 背景
 

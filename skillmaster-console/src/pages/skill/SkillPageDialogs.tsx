@@ -15,11 +15,22 @@ export interface SkillPageDialogsProps {
   onCancelPublicBrowse: () => void
 
   offline: boolean
+  /* v61: the service's three states, and the two counts the copy asks for. */
+  phase: 'online' | 'pending' | 'offline'
+  publicSkill: boolean
+  joins: number
+  grantees: number
   offlineOpen: boolean
   offlinePending: boolean
   offlineError: string | null
   onConfirmOffline: () => Promise<void>
   onCancelOffline: () => void
+
+  /* v61: 入库 is a dependency, so it is confirmed once with what it means. */
+  joinOpen: boolean
+  joining: boolean
+  onConfirmJoin: () => Promise<void>
+  onCancelJoin: () => void
 
   removeOpen: boolean
   removePending: boolean
@@ -53,6 +64,14 @@ export default function SkillPageDialogs({
   onAcceptPublicBrowse,
   onCancelPublicBrowse,
   offline,
+  phase,
+  publicSkill,
+  joins,
+  grantees,
+  joinOpen,
+  joining,
+  onConfirmJoin,
+  onCancelJoin,
   offlineOpen,
   offlinePending,
   offlineError,
@@ -78,6 +97,19 @@ export default function SkillPageDialogs({
   onCloseImport,
   onNavigate,
 }: SkillPageDialogsProps) {
+  /* v61: the confirmation says the consequence that applies — a ramp announcement, a cancellation,
+     a resume, or an immediate stop — and never a generic one. */
+  const pending = phase === 'pending'
+  const ramped = publicSkill && joins > 0
+  const impactParts: string[] = []
+  if (grantees > 0) impactParts.push(`${grantees} 人获得授权`)
+  if (joins > 0) impactParts.push(`${joins} 人入库`)
+  // A3: the confirmation names all three facts — 公开/私有, grantees, joiners — in the same
+  // sentence the design's own sheet uses.
+  const visibilityWord = publicSkill ? '公开' : '私有'
+  const impact = impactParts.length > 0
+    ? `它是${visibilityWord}的；有 ${impactParts.join('、')}；删除后他们会收到通知。`
+    : `它是${visibilityWord}的；没有其他人获得授权或入库。`
   return (
     <>
       {/* 公开 · 浏览 的确认: the selector does not change before this is answered, so cancelling
@@ -95,17 +127,37 @@ export default function SkillPageDialogs({
         onCancel={onCancelPublicBrowse}
       />
 
+      {/* v61: 入库 is a dependency declaration, not a favourite. Said before the click takes
+          effect, so somebody who needs an independent copy learns it here (ADR 0184). */}
+      <ConfirmDialog
+        open={joinOpen}
+        title="入库这个 skill？"
+        body="入库是把它收进你的库，不是复制一份内容。作者下线时会提前 30 天通知你，删除时也会通知你；要长期独立运行，请用「复制」留一份自己的。"
+        confirmLabel="确认入库"
+        pendingLabel="正在入库…"
+        danger={false}
+        pending={joining}
+        error={null}
+        onConfirm={onConfirmJoin}
+        onCancel={onCancelJoin}
+      />
+
       {/* 下线 / 恢复服务，与删除：同一个确认壳，取消是默认焦点，Esc 等于取消。 */}
       <ConfirmDialog
         open={offlineOpen}
-        title={offline ? '恢复服务' : '下线这个 skill'}
+        title={pending ? '取消下线？' : offline ? '恢复服务' : '下线这个 skill'}
         body={
-          offline
-            ? '恢复后，当前线上版本直接重新对外，不需要重新上线。'
-            : '下线后，所有调用都会失败；版本状态与当前版本都不变。'
+          pending
+            ? '取消后恢复正常服务，调用提醒消失；入库与授权的人会收到通知。'
+            : offline
+              ? '恢复后，当前线上版本直接重新对外，不需要重新上线。'
+              : ramped
+                ? `它已公开，有 ${joins} 人入库、${grantees} 人获得授权。确认后进入 30 天下线中：期间仍可调用，每次调用都会提醒；满 30 天后正式下线。入库与授权的人会收到通知。`
+                : '下线后，所有调用都会失败；版本状态与当前版本都不变。'
         }
-        confirmLabel={offline ? '确认恢复服务' : '确认下线'}
-        pendingLabel={offline ? '正在恢复服务…' : '正在下线…'}
+        confirmLabel={pending ? '确认取消下线' : offline ? '确认恢复服务' : ramped ? '开始下线' : '确认下线'}
+        pendingLabel={pending ? '正在取消下线…' : offline ? '正在恢复服务…' : ramped ? '正在开始下线…' : '正在下线…'}
+        danger={!pending && !offline}
         pending={offlinePending}
         error={offlineError}
         onConfirm={onConfirmOffline}
@@ -130,7 +182,7 @@ export default function SkillPageDialogs({
       <ConfirmDialog
         open={deleteOpen}
         title="删除这个 skill？"
-        body="删除后，该名称将无法用于创建新 skill，当前地址立即失效。"
+        body={`删除后，当前地址立即失效；名字会立即释放，可以用同一个名字创建新 skill。${impact}`}
         confirmLabel="确认删除"
         pendingLabel="正在删除…"
         pending={deletePending}

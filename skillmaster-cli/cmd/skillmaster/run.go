@@ -366,7 +366,9 @@ func resolveDigest(ctx context.Context, base, address string, named bool) (strin
 		if !named {
 			rememberDigest(base, digest)
 		}
-		return digest, "", runCredentials{Bound: meta.CredentialsBound, Missing: meta.CredentialsMissing}, nil
+		// v61: a skill inside its 下线中 ramp still runs; the caller is told before it is too late.
+		return digest, offlinePendingNote(meta, base),
+			runCredentials{Bound: meta.CredentialsBound, Missing: meta.CredentialsMissing}, nil
 	}
 
 	// **A reference the public plane does not accept is asked of the author plane** (ADR 0178).

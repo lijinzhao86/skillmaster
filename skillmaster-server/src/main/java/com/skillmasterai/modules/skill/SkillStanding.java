@@ -16,7 +16,8 @@ package com.skillmasterai.modules.skill;
  */
 public record SkillStanding(String skillId, String namespaceId, String name, String visibility,
         String publicRung, String grantRole, String source, boolean owns, boolean active,
-        boolean discoverable, String offlineAt, String currentVersionId) {
+        boolean discoverable, String offlineAt, String offlinePendingAt, String offlineDueAt,
+        String currentVersionId) {
 
     /** The effective rung: the higher of the grant and the public rung (ADR 0048). */
     public String rung() {

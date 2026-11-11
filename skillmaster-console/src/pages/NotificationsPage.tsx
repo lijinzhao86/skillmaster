@@ -174,6 +174,18 @@ export default function NotificationsPage() {
               onDecline={(id) => void decline(id)}
               onView={(value) => void view(value)}
               onHandle={(value) => void handle(value)}
+              onCopy={(value) => {
+                // v61: the copy sheet lives on the skill's page, with the versions it offers —
+                // this row only knows the address. Acting on the notice also reads it, as every
+                // other row action here does.
+                void markRead(value.id)
+                if (value.skill !== null) {
+                  go(
+                    `/skills/${encodeURIComponent(value.skill.namespace)}/` +
+                      `${encodeURIComponent(value.skill.name)}?copy=1`,
+                  )
+                }
+              }}
             />
           ))}
           <li className="pager-row">

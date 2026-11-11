@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -56,5 +57,26 @@ func TestSkillShowPrintsTheFieldsInOrderAndOmitsTheEmptyOnes(t *testing.T) {
 	})
 	if out := mustRun(t, "skill", "show", "dev/pdf-tools"); out != "dev/pdf-tools\n" {
 		t.Errorf("an all-empty skill printed more than its address: %q", out)
+	}
+}
+
+// v61 (ADR 0184): the ramp is a state with a date, and `skill show` is where a reader looks for it.
+func TestSkillShowNamesTheRampAndItsDate(t *testing.T) {
+	newFakeServer(t, func(r recordedRequest) (int, string) {
+		switch r.Path {
+		case "/api/v1/skills/dev/pdf-tools/metadata":
+			return http.StatusOK, `{"namespace":{"slug":"dev"},"name":"pdf-tools",
+				"offline_pending_until":"2026-12-11T00:00:00Z"}`
+		case "/api/v1/skills/dev/pdf-tools/tags":
+			return http.StatusOK, threeGroups
+		case "/api/v1/skills/dev/pdf-tools/my-when-to-use":
+			return http.StatusOK, `{"when_to_use":null}`
+		}
+		return http.StatusNotFound, `{}`
+	})
+
+	out := mustRun(t, "skill", "show", "dev/pdf-tools")
+	if !strings.Contains(out, "  状态：下线中 · 2026-12-11\n") {
+		t.Errorf("skill show does not name the ramp and its date:\n%s", out)
 	}
 }

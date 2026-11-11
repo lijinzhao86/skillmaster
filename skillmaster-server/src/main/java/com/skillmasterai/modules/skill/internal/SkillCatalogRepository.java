@@ -170,7 +170,8 @@ public final class SkillCatalogRepository {
                 SELECT t.id, t.namespace_id, t.name, t.title, t.description, t.when_to_use,
                        t.updated_at, t.relevance, t.source, t.grant_role, t.public_rung,
                        t.state, t.version,
-                       t.deleted_at, t.category_key, t.category_name, t.active
+                       t.deleted_at, t.category_key, t.category_name, t.active,
+                       t.offline_pending_until
                 FROM (
                     SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.when_to_use, s.source,
                            %s,
@@ -184,10 +185,8 @@ public final class SkillCatalogRepository {
                            -- The display state. Derived, never stored: the three facts are already
                            -- columns and a fourth would need a backfill for something the query
                            -- already knows (TD §谓词).
-                           CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
-                                WHEN s.current_version_id IS NULL THEN 'draft'
-                                WHEN s.offline_at IS NOT NULL THEN 'offline'
-                                ELSE 'live' END AS state,
+                           %s AS state,
+                           %s AS offline_pending_until,
                            s.current_version_name AS version,
                            s.deleted_at,
                            s.category_key,
@@ -221,7 +220,8 @@ public final class SkillCatalogRepository {
                 ORDER BY %s
                 LIMIT :limit
                 OFFSET :offset
-                """.formatted(SkillPredicates.STANDING, SkillPredicates.LIST_UPDATED_AT, RELEVANCE,
+                """.formatted(SkillPredicates.STANDING, SkillPredicates.LIST_UPDATED_AT,
+                RELEVANCE, SkillPredicates.STATE, SkillPredicates.PENDING_UNTIL,
                 SkillPredicates.ACTIVE,
                 SkillPredicates.DISCOVERABLE, SkillPredicates.VISIBLE, textFilter, categoryFilter,
                 publicTagFilter, keyset(byRelevance), order(byRelevance));
@@ -252,7 +252,8 @@ public final class SkillCatalogRepository {
                         rs.getString("deleted_at"),
                         rs.getString("category_key"),
                         rs.getString("category_name"),
-                        rs.getBoolean("active"))).list();
+                        rs.getBoolean("active"),
+                        rs.getString("offline_pending_until"))).list();
     }
 
 
@@ -300,10 +301,8 @@ public final class SkillCatalogRepository {
                        0 AS relevance,
                        s.source,
                        %s,
-                       CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
-                            WHEN s.current_version_id IS NULL THEN 'draft'
-                            WHEN s.offline_at IS NOT NULL THEN 'offline'
-                            ELSE 'live' END AS state,
+                       %s AS state,
+                       %s AS offline_pending_until,
                        s.current_version_name AS version,
                        s.deleted_at,
                        s.category_key,
@@ -315,7 +314,9 @@ public final class SkillCatalogRepository {
                    AND %s
                    %s
                 """.formatted(SkillPredicates.LIST_UPDATED_AT, SkillPredicates.STANDING,
-                SkillPredicates.ACTIVE, predicateOf(scope), filterClauses(filters, params));
+                SkillPredicates.STATE, SkillPredicates.PENDING_UNTIL, SkillPredicates.ACTIVE,
+                predicateOf(scope),
+                filterClauses(filters, params));
         return jdbc.sql(sql).params(params)
                 .query((rs, rowNum) -> new SkillCatalogService.CatalogRow(
                         rs.getString("id"),
@@ -334,7 +335,8 @@ public final class SkillCatalogRepository {
                         rs.getString("deleted_at"),
                         rs.getString("category_key"),
                         rs.getString("category_name"),
-                        rs.getBoolean("active"))).list();
+                        rs.getBoolean("active"),
+                        rs.getString("offline_pending_until"))).list();
     }
 
     /**
@@ -355,7 +357,7 @@ public final class SkillCatalogRepository {
         // work done to it (state is never copied into `skill_embedding`), so filtering is the only
         // thing that makes "下线后立即消失" true.
         String library = "s.source IS NOT NULL AND " + SkillPredicates.ACTIVE
-                + " AND s.current_version_id IS NOT NULL AND s.offline_at IS NULL";
+                + " AND s.current_version_id IS NOT NULL AND NOT " + SkillPredicates.OFFLINE;
         return switch (scope) {
             case LIBRARY -> "(" + library + ")";
             case PUBLIC -> "(" + SkillPredicates.DISCOVERABLE + ")";
@@ -450,6 +452,11 @@ public final class SkillCatalogRepository {
                        CASE WHEN s.current_version_id IS NOT NULL THEN s.description
                             ELSE COALESCE(s.newest_description, s.description) END AS description,
                        s.visibility, s.deleted_at, s.offline_at,
+                       -- v61: the 下线中 ramp's date while it is still ahead. The list draws the
+                       -- chip from it and keeps the row in the live list (ADR 0184).
+                       CASE WHEN s.offline_at IS NULL AND s.offline_due_at IS NOT NULL
+                                 AND s.offline_due_at::timestamptz > now()
+                            THEN s.offline_due_at END AS offline_pending_until,
                        s.current_version_name AS current_version, s.current_digest,
                        s.draft_count AS drafts,
                        s.newest_draft_version, s.newest_draft_digest,
@@ -470,8 +477,11 @@ public final class SkillCatalogRepository {
                         OR (NOT :deleted
                             AND ( s.namespace_id = :ownNamespaceId
                                   OR s.grant_role = ANY(:writeAndUp) )) )
-                -- Newest submission first — the time the card shows.
-                ORDER BY updated_at DESC, s.id ASC
+                -- Newest submission first — the time the card shows — except on the deleted list,
+                -- which answers "when did it go" (v61: restore takes the first row, so the two
+                -- orders have to agree).
+                ORDER BY (CASE WHEN :deleted THEN s.deleted_at END) DESC NULLS LAST,
+                         updated_at DESC, s.id ASC
                 LIMIT :limit
                 """.formatted(SkillPredicates.LIST_UPDATED_AT))
                 .param("ownNamespaceId", caller.ownNamespaceId())
@@ -495,7 +505,8 @@ public final class SkillCatalogRepository {
                         rs.getString("newest_draft_digest"),
                         rs.getString("updated_at"),
                         rs.getString("deleted_at"),
-                        rs.getString("offline_at")))
+                        rs.getString("offline_at"),
+                        rs.getString("offline_pending_until")))
                 .list();
     }
 

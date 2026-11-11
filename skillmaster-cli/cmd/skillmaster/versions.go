@@ -182,6 +182,15 @@ func printSkillShow(address string, meta api.Metadata, tags api.SkillTags,
 	if version := api.VersionSuffix(meta.Version.Name, meta.Version.Digest); version != "" {
 		fmt.Printf("  版本：%s\n", version)
 	}
+	// v61: a ramp serves, so this read answered — and the date belongs on the page the person
+	// opens to decide what to do about it. Offline skills never reach here (503).
+	if meta.OfflinePendingUntil != "" {
+		until := meta.OfflinePendingUntil
+		if len(until) >= 10 {
+			until = until[:10]
+		}
+		fmt.Printf("  状态：下线中 · %s\n", until)
+	}
 	if tags.Category != nil && tags.Category.Name != "" {
 		fmt.Printf("  分类：%s\n", tags.Category.Name)
 	}

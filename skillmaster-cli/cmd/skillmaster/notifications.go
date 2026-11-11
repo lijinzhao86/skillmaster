@@ -359,6 +359,15 @@ func printNotificationLine(row api.Notification) {
 	if row.Body != "" {
 		fmt.Printf("    %s\n", row.Body)
 	}
+	// v61 (ADR 0184): the ramp notice carries its date on `expires_at`; the sentence the server
+	// would send is empty, so the CLI states the one fact the notice exists to convey.
+	if row.Kind == "skill_offline_scheduled" && row.ExpiresAt != "" {
+		until := row.ExpiresAt
+		if len(until) >= 10 {
+			until = until[:10]
+		}
+		fmt.Printf("    下线日期：%s\n", until)
+	}
 	for _, next := range notificationNextCommands(row) {
 		fmt.Printf("    %s\n", next)
 	}
@@ -371,6 +380,15 @@ func notificationNextCommands(row api.Notification) []string {
 		return nil
 	}
 	address := row.Skill.Address()
+	// v61 (ADR 0184): the ramp notice is information, and its one action is the way out — a copy.
+	// It is given whether or not the row is still `viewable`: the copy reads the version, and the
+	// whole point is to keep it before the date arrives.
+	if row.Kind == "skill_offline_scheduled" {
+		if !row.Viewable {
+			return nil
+		}
+		return []string{"复制到你的库：skmr skill copy " + address + " --name <新名字>"}
+	}
 	if row.State == "pending" {
 		switch row.Kind {
 		case "share_invitation":
@@ -418,6 +436,8 @@ func notificationKindLabel(kind string) string {
 		return "申请结果"
 	case "announcement":
 		return "公告"
+	case "skill_offline_scheduled":
+		return "下线中通知"
 	default:
 		return kind
 	}

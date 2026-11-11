@@ -67,7 +67,9 @@ digest. Which is why `submit`'s `--name` became optional: given none, the name c
 package's sidecar, and an explicit `--name` still wins. A package with a broken sidecar is refused by
 name rather than submitted with a guessed one. `submit` also learned to read a `409 skill_deleted`:
 a deleted skill's name is not available, and the message says so instead of the generic
-`服务端答 409`.
+`服务端答 409`. **That code is retired in v61** ([ADR 0183](../docs/decisions/0183-deleting-a-skill-releases-its-name.md)):
+deleting a skill releases its name at once, so a same-name submit creates a new skill instead of
+being refused.
 
 **v14 added the library and the two tag layers** ([ADR 0079](../docs/decisions/0079-cli-manages-tags-and-library-references.md)–[0084](../docs/decisions/0084-l1-search-extension.md)).
 `skills list` is now the caller's **library** — skills they created, were shared, or joined — with

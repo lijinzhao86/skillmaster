@@ -67,7 +67,7 @@ class CliAuthoringIT extends AbstractAccountIT {
     }
 
     @Test
-    void anExistingOrDeletedNameIsANamedConflictWithZeroWrites() {
+    void anExistingNameIsANamedConflictAndADeletedOneIsFree() {
         assertThat(createSkill("hello", "one", "第一版").statusCode()).isEqualTo(201);
         long[] before = rows();
 
@@ -79,13 +79,10 @@ class CliAuthoringIT extends AbstractAccountIT {
 
         assertThat(webPost("/web/skills/" + username + "/hello/delete", "").statusCode())
                 .isEqualTo(204);
-        long[] afterDelete = rows();
 
+        // v61 (ADR 0183): deletion releases the name, so the same create now succeeds.
         HttpResponse<String> deleted = createSkill("hello", "three", "第一版");
-        assertThat(deleted.statusCode()).isEqualTo(409);
-        assertThat(JSON.readTree(deleted.body()).get("error").get("code").asText())
-                .isEqualTo("skill_deleted");
-        assertThat(rows()).isEqualTo(afterDelete);
+        assertThat(deleted.statusCode()).as("recreate: %s", deleted.body()).isEqualTo(201);
     }
 
     @Test

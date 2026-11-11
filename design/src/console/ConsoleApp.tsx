@@ -142,17 +142,17 @@ export default function ConsoleApp() {
     const listMode = at === 'skills'
 
     const askedImport = search.get('import')
-    const imports = ['open', 'error', 'bad-names', 'bad-name-single', 'exists', 'exists-draft', 'exists-hidden', 'deleted', 'mismatch']
+    const imports = ['open', 'error', 'bad-names', 'bad-name-single', 'exists', 'exists-draft', 'exists-hidden', 'mismatch']
     if (askedImport && imports.includes(askedImport)) {
       /* **两个入口各自只出现它真会遇到的拒绝**（v9 PRD 做 #6）：地址名不一致只可能在版本列表这一路
-         发生；名字属于已删除的 skill 只可能在「我的 skill」这一路发生。 */
-      if (!(askedImport === 'deleted' && !listMode) && !(askedImport === 'mismatch' && listMode)) {
+         发生。v61 起名字不再被已删行占用，`deleted` 这一态随之退出演示件。 */
+      if (!(askedImport === 'mismatch' && listMode)) {
         dialogs.openImport(listMode ? 'list' : 'skill', askedImport as ImportAsked)
       }
     }
 
     const askedNew = search.get('newskill')
-    if (askedNew === 'open' || askedNew === 'error' || askedNew === 'deleted') {
+    if (askedNew === 'open' || askedNew === 'error') {
       dialogs.openNewSkill(askedNew as NewSkillMode)
     }
   }, [])

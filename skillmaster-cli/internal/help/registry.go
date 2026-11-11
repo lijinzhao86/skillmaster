@@ -33,7 +33,7 @@ var codes = []Code{
 
 	// Skill and version states a caller can meet.
 	{Name: "skill_not_found", Text: "这个 skill 在你的库里找不到", Exit: 1},
-	{Name: "skill_deleted", Text: "名字属于一个已删除的 skill", Exit: 1},
+	{Name: "skill_gone", Text: "这个 skill 已被作者删除", Exit: 1},
 	{Name: "skill_offline", Text: "这个 skill 已下线", Exit: 1},
 	{Name: "skill_already_exists", Text: "这个名字已被占用", Exit: 1},
 	{Name: "invalid_name", Text: "新名字不能用作 skill 名字", Exit: 1},
@@ -59,6 +59,7 @@ var codes = []Code{
 
 	// Membership and tags.
 	{Name: "skill_not_joinable", Text: "这个 skill 现在加入不了", Exit: 1},
+	{Name: "skill_offline_pending", Text: "这个 skill 正在下线中，不能再入库", Exit: 1},
 	{Name: "library_reference_missing", Text: "库里没有这个引用", Exit: 1},
 	{Name: "skill_not_in_library", Text: "这个 skill 不在你的库里", Exit: 1},
 	{Name: "my_when_to_use_too_long", Text: "我的适用场景超过 200 个字符", Exit: 1},

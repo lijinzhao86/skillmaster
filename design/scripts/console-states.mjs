@@ -203,7 +203,7 @@ const only =
 /* The groups, defined up here because the "matched nothing" guard below has to know about them: a
    `--only list` names a group and no state at all, and exiting on that would be the tool refusing a
    perfectly good request. Their guards and bodies are further down. */
-const GROUPS = ['auth', 'keys', 'sessions', 'secrets', 'skillsecrets', 'list', 'usage', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'publish']
+const GROUPS = ['auth', 'keys', 'sessions', 'secrets', 'skillsecrets', 'list', 'usage', 'detail', 'editor', 'settings', 'layout', 'discover', 'my-tags', 'notifications', 'publish']
 const selected = (name) => !only || only.some((prefix) => name.startsWith(prefix))
 
 if (rest.includes('--list')) {
@@ -1566,6 +1566,13 @@ check(
   offlineOwn.rows[0]?.status === '已下线' && offlineShared.rows[0]?.status === '已下线',
   `${offlineOwn.rows[0]?.status} / ${offlineShared.rows[0]?.status}`,
 )
+/* **下线中也是一枚状态章（v61）**：它仍在「在用」，因为它还在服务。 */
+const pendingOwn = await listAt('?page=skills&q=dead-code')
+check(
+  '列表：下线中仍留在「在用」，写着下线中',
+  pendingOwn.rows[0]?.status === '下线中',
+  String(pendingOwn.rows[0]?.status),
+)
 /* 休眠的条目**不显示**，但库不是空的——这正是「只有休眠」那一态与「库为空」的差别。 */
 const allRows = (await listAt('?page=skills')).rows.concat(
   (await listAt('?page=skills&p=2')).rows,
@@ -2463,6 +2470,12 @@ const skillAt = async (query) => {
     offlineBadge: document.getElementById('skillOfflineBadge').hidden
       ? null
       : document.getElementById('skillOfflineBadge').textContent,
+    pendingBadge: document.getElementById('skillPendingBadge').hidden
+      ? null
+      : document.getElementById('skillPendingBadge').textContent,
+    offlineHint: document.getElementById('offlineWhy')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+    deleteDisabled: document.getElementById('deleteSkill')?.disabled ?? null,
+    deleteHint: document.getElementById('deleteWhy')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
     dangerBoxBorder: getComputedStyle(document.querySelector('.danger-box')).borderTopWidth,
     dangerFill: getComputedStyle(document.getElementById('dangerZone')).backgroundColor,
     count: document.getElementById('versionCount').textContent,
@@ -6679,6 +6692,79 @@ check(
     offlineSettings.offlineButton === '恢复服务',
   `${offlineSettings.offlineBadge} / ${offlineSettings.dangerTitles.join(',')} / ${offlineSettings.offlineButton}`,
 )
+/* **公开且有入库者：下线先进 30 天下线中；删除等下线完成（v61）。** */
+const rampSettings = await skillAt('?page=skill&tab=settings&sub=general&official=1&vis=public-invoke')
+check(
+  '设置 · 公开且有入库：下线先说 30 天，删除等下线完成',
+  rampSettings.offlineHint.includes('30 天的「下线中」') &&
+    rampSettings.deleteDisabled === true &&
+    rampSettings.deleteHint.includes('先走完下线'),
+  `${rampSettings.offlineHint} / ${rampSettings.deleteDisabled} / ${rampSettings.deleteHint}`,
+)
+await clickIn('#offlineSkill')
+const rampAsk = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+}))
+check(
+  '设置 · 公开且有入库：下线弹窗写清 30 天，确认钮是「开始下线」',
+  rampAsk.open && rampAsk.body.includes('30 天下线中') && rampAsk.accept === '开始下线',
+  `${rampAsk.body} / ${rampAsk.accept}`,
+)
+await clickIn('#dangerConfirmCancel')
+
+/* **下线中：页头有日期章，第一行变成「取消下线」，删除仍不可用。** */
+const pendingSettings = await skillAt('?page=skill&tab=settings&sub=general&official=1&vis=public-invoke&pending=1')
+check(
+  '设置 · 下线中：页头有日期章，危险区是「取消下线」，删除不可用',
+  pendingSettings.pendingBadge === '下线中 · 2026/12/11 下线' &&
+    pendingSettings.dangerTitles.join(',') === '取消下线,删除这个 skill' &&
+    pendingSettings.offlineButton === '取消下线' &&
+    pendingSettings.deleteDisabled === true,
+  `${pendingSettings.pendingBadge} / ${pendingSettings.dangerTitles.join(',')} / ${pendingSettings.offlineButton} / ${pendingSettings.deleteDisabled}`,
+)
+await clickIn('#offlineSkill')
+const cancelAsk = await page.evaluate(() => ({
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+}))
+check(
+  '设置 · 下线中：取消下线用「取消下线」这个名字',
+  cancelAsk.title === '取消下线？' && cancelAsk.accept === '确认取消下线',
+  JSON.stringify(cancelAsk),
+)
+await clickIn('#dangerConfirmCancel')
+
+/* **公开但没有入库者：一步下线、删除可用（v61）。** */
+const noJoins = await skillAt('?page=skill&tab=settings&sub=general&official=1&vis=public-invoke&no-joins=1')
+check(
+  '设置 · 公开但无入库：删除可用，提示名字立即释放',
+  noJoins.deleteDisabled === false && noJoins.deleteHint.includes('名字会立即释放'),
+  `${noJoins.deleteDisabled} / ${noJoins.deleteHint}`,
+)
+
+/* **入库先说明它是引用，不复制（v61）。** */
+await page.goto(base + '?page=skill&in=visible', { waitUntil: 'load' })
+await settle()
+await clickIn('#joinSkill')
+const joinAsk = await page.evaluate(() => ({
+  open: !document.getElementById('dangerConfirm').hidden,
+  title: document.getElementById('dangerConfirmTitle').textContent,
+  body: document.getElementById('dangerConfirmBody').textContent,
+  accept: document.getElementById('dangerConfirmAccept').textContent,
+  red: document.getElementById('dangerConfirmAccept').classList.contains('is-danger'),
+}))
+check(
+  '信息：入库先说明它是引用、不复制，确认钮不染红',
+  joinAsk.open && joinAsk.title === '入库这个 skill？' &&
+    joinAsk.body.includes('提前 30 天通知') &&
+    joinAsk.body.includes('不是复制一份内容') &&
+    joinAsk.accept === '确认入库' && !joinAsk.red,
+  JSON.stringify(joinAsk),
+)
+await clickIn('#dangerConfirmCancel')
+
 const offlineAsAdmin = await skillAt('?page=skill&tab=settings&sub=general&as=admin')
 check(
   '设置 · 管理看不到「下线」那一行：停整个 skill 是所有者的事',
@@ -7333,6 +7419,41 @@ check('设置：点二级菜单也走得回去', backToCollaborators === '?page=
 
 } /* settingsGroup */
 
+notificationsGroup: {
+  if (!selected('notifications')) break notificationsGroup
+
+  /* v61：下线预告是一条信息型通知，带一个迁移动作。 */
+  await page.goto(base + '?page=notifications&status=all&notice=offline', { waitUntil: 'load' })
+  await settle()
+  const notice = await page.evaluate(() => {
+    const row = document.querySelector('[data-kind="skill_offline_scheduled"]')
+    return {
+      text: row?.textContent.replace(/\s+/g, ' ').trim() ?? null,
+      copy: row?.querySelector('button')?.textContent ?? null,
+      total: document.querySelectorAll('#noticeList .notice').length,
+    }
+  })
+  check(
+    '通知 · 下线预告：写着日期，给「复制到我的库」',
+    notice.text?.includes('将于 2026/12/11 下线') === true && notice.copy === '复制到我的库',
+    JSON.stringify(notice),
+  )
+  await page.evaluate(() => {
+    document.querySelector('[data-kind="skill_offline_scheduled"] button')?.click()
+  })
+  await settle()
+  const copyOpen = await page.evaluate(() => ({
+    open: document.getElementById('copyDialog') !== null && !document.getElementById('copyDialog').hidden,
+    title: document.getElementById('copyTitle')?.textContent ?? null,
+  }))
+  check(
+    '通知 · 下线预告：点「复制到我的库」打开复制弹窗',
+    copyOpen.open && copyOpen.title === '复制 skill',
+    JSON.stringify(copyOpen),
+  )
+  await page.evaluate(() => document.getElementById('copyCancel')?.click())
+}
+
 skillSecretsGroup: {
   if (!selected('skillsecrets')) break skillSecretsGroup
 
@@ -7582,6 +7703,7 @@ discoverGroup: {
         action: card.querySelector('.result-error .link-button')?.textContent.trim() ?? null,
         joinAction: card.querySelector('.result-actions .result-join')?.textContent.trim() ?? null,
         joinState: card.querySelector('.result-actions .result-join')?.getAttribute('data-state') ?? null,
+        chips: [...card.querySelectorAll('.result-head .chip')].map((el) => el.textContent.trim()),
         joinDisabled: card.querySelector('.result-actions .result-join')?.disabled ?? null,
         error: card.querySelector('.result-error')?.textContent ?? null,
         hasSourceLine: card.querySelector('.result-source') !== null,
@@ -7820,6 +7942,14 @@ discoverGroup: {
     '发现：不在库的结果有「加入」',
     results.cards[1].inLibrary === null && results.cards[1].joinAction === '入库',
     String(results.cards[1].joinAction),
+  )
+  const rampCard = await discoverAt('?page=discover&q=doc-translate')
+  check(
+    '发现：下线中的卡片标「下线中 · 日期」，且不画一个会被拒绝的入库按钮',
+    rampCard.cards.length === 1 &&
+      rampCard.cards[0].chips.includes('下线中 · 2026/12/11') &&
+      rampCard.cards[0].joinAction === null,
+    JSON.stringify({ chips: rampCard.cards[0]?.chips, join: rampCard.cards[0]?.joinAction }),
   )
   check('发现：结果数量在标题旁边', results.count === '2 个结果', results.count)
 

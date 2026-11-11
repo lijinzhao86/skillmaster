@@ -373,7 +373,7 @@ export default function RegisterPage() {
           {/* Said here rather than on a help page: it becomes the first segment of every address this
               account publishes, and addresses get pinned and copied. */}
           <p className="hint">
-            用户名不可更改，它会成为你发布的每个 skill 地址的第一段（<code>用户名/名称</code>）。请不要使用真实姓名或手机号。
+            用户名不可更改，它会成为你发布的每个 skill 地址的第一段（<code>用户名/名字</code>）。请不要使用真实姓名或手机号。
           </p>
         </div>
 

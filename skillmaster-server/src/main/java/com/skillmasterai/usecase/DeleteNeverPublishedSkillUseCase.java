@@ -1,6 +1,7 @@
 package com.skillmasterai.usecase;
 
 import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
@@ -31,13 +32,18 @@ public class DeleteNeverPublishedSkillUseCase {
     private final SkillVersionService versions;
     private final SkillMetadataService metadata;
     private final AuditLog audit;
+    private final SkillLifecycleNotices notices;
+    private final AccountDirectory accounts;
 
     public DeleteNeverPublishedSkillUseCase(NamespaceService namespaces,
-            SkillVersionService versions, SkillMetadataService metadata, AuditLog audit) {
+            SkillVersionService versions, SkillMetadataService metadata, AuditLog audit,
+            SkillLifecycleNotices notices, AccountDirectory accounts) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.metadata = metadata;
         this.audit = audit;
+        this.notices = notices;
+        this.accounts = accounts;
     }
 
     @Transactional
@@ -45,13 +51,21 @@ public class DeleteNeverPublishedSkillUseCase {
             AuthenticatedSubject subject) {
         // The delete writes a metadata row; the sweep it must share a transaction with is M7's
         // (ADR 0053), so the same exclusive-write wrapper the browser path uses is taken here.
+        String at = Timestamps.now();
         Optional<DeleteResult> result = namespaces.bySlug(namespaceSlug)
                 .map(namespace -> versions.underExclusiveWrite(() -> metadata.deleteNeverPublished(
-                        namespace.id(), name, Callers.of(namespaces, subject), Timestamps.now())));
+                        namespace.id(), name, Callers.of(namespaces, subject), at)));
 
         result.filter(attempt -> attempt.outcome() == SkillMetadataService.DeleteOutcome.DELETED)
-                .ifPresent(attempt -> audit.record(
-                        AuditEvent.of(subject.userId(), "delete", "skill", attempt.skillId())));
+                .ifPresent(attempt -> {
+                    audit.record(
+                            AuditEvent.of(subject.userId(), "delete", "skill", attempt.skillId()));
+                    // v61 (ADR 0184): a never-published skill can still be shared, and A11 is the
+                    // same promise for it — whoever held access hears that it is gone.
+                    notices.deleted(attempt.skillId(), subject.userId(),
+                            accounts.handleOf(subject.userId()).orElse(null),
+                            namespaceSlug + "/" + name, at);
+                });
         return result.map(DeleteResult::outcome)
                 .orElse(SkillMetadataService.DeleteOutcome.NOT_FOUND);
     }

@@ -131,10 +131,9 @@ export default function CopyDialog({
     setPending(false)
 
     if (!answer.ok) {
-      if (answer.code === 'skill_already_exists' || answer.code === 'skill_deleted') {
-        /* The design draws one conflict state. A deleted skill's name is still taken; the way out
-           is to pick another name, which is the sentence the design already has. The restore entry
-           lives under 「我的 skill › 已删除」, not in this sheet. */
+      if (answer.code === 'skill_already_exists') {
+        /* v61: since deletion releases the name, this is the only conflict left — a live skill
+           holds it — and the way out is another name. */
         setRefused(submitted)
         return
       }

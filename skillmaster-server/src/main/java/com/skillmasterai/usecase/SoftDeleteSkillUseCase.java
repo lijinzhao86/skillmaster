@@ -4,6 +4,7 @@ import com.skillmasterai.modules.audit.AuditEvent;
 import com.skillmasterai.modules.audit.AuditLog;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.account.AccountDirectory;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.SkillMetadataService;
 import com.skillmasterai.modules.version.SkillVersionService;
@@ -37,13 +38,18 @@ public class SoftDeleteSkillUseCase {
     private final SkillVersionService versions;
     private final SkillMetadataService metadata;
     private final AuditLog audit;
+    private final SkillLifecycleNotices notices;
+    private final AccountDirectory accounts;
 
     public SoftDeleteSkillUseCase(NamespaceService namespaces, SkillVersionService versions,
-            SkillMetadataService metadata, AuditLog audit) {
+            SkillMetadataService metadata, AuditLog audit, SkillLifecycleNotices notices,
+            AccountDirectory accounts) {
         this.namespaces = namespaces;
         this.versions = versions;
         this.metadata = metadata;
         this.audit = audit;
+        this.notices = notices;
+        this.accounts = accounts;
     }
 
     /** @return the deleted skill's id, or empty when there was nothing the caller may delete */
@@ -52,13 +58,20 @@ public class SoftDeleteSkillUseCase {
             AuthenticatedSubject subject) {
         // The delete writes a metadata row; the sweep it must share a transaction with is M7's
         // (ADR 0053). `underExclusiveWrite` takes the GC's lock first, then runs the delete.
+        String at = Timestamps.now();
         Optional<String> deleted = namespaces.bySlug(namespaceSlug)
                 .flatMap(namespace -> versions.underExclusiveWrite(() -> metadata.softDelete(
-                        namespace.id(), name, Callers.of(namespaces, subject), Timestamps.now())));
+                        namespace.id(), name, Callers.of(namespaces, subject), at)));
 
         // Inside the transaction on purpose: a trace that can outlive the rollback of the change it
         // describes reads as evidence of something that never happened.
-        deleted.ifPresent(id -> audit.record(AuditEvent.of(subject.userId(), "delete", "skill", id)));
+        deleted.ifPresent(id -> {
+            audit.record(AuditEvent.of(subject.userId(), "delete", "skill", id));
+            // v61 (ADR 0184): whoever was using it hears that it is gone. A private skill with
+            // nobody outside the owner has no recipients, and this writes nothing.
+            notices.deleted(id, subject.userId(), accounts.handleOf(subject.userId()).orElse(null),
+                    namespaceSlug + "/" + name, at);
+        });
         return deleted;
     }
 }

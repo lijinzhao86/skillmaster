@@ -6,7 +6,7 @@ import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 var otherSpecs = []*help.Spec{
 	{
 		Path: "skills list", Summary: "列出我的库",
-		Usage: "skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created|shared|joined]... [--sort recent|name] [--show live|draft|offline|deleted|all] [--verbose] [--no-login]",
+		Usage: "skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created|shared|joined]... [--sort recent|name] [--show live|draft|offline|pending|deleted|all] [--verbose] [--no-login]",
 		Flags: []help.Flag{
 			{Name: "--all", Summary: "保留；列表现默认列全"},
 			{Name: "--namespace", Value: "<命名空间>", Summary: "只看某个命名空间"},
@@ -15,7 +15,7 @@ var otherSpecs = []*help.Spec{
 			{Name: "--public-tag", Value: "<标签>", Summary: "按公开标签筛"},
 			{Name: "--source", Value: "created|shared|joined", Summary: "按来源筛"},
 			{Name: "--sort", Value: "recent|name", Summary: "排序方式"},
-			{Name: "--show", Value: "live|draft|offline|deleted|all", Summary: "看哪种状态"},
+			{Name: "--show", Value: "live|draft|offline|pending|deleted|all", Summary: "看哪种状态"},
 			{Name: "--verbose", Summary: "加描述与一行详情（来源/状态/版本等）"},
 			{Name: "--no-login", Summary: "没有凭据时立即失败"},
 		},

@@ -76,10 +76,27 @@ public class ReadSkillUseCase {
      * still the author's to manage.
      */
     private static Access serving(Access access) {
-        if (access.offlineAt() != null) {
+        // The due date is the state, not the job: a ramp that reached its date is offline even if
+        // the daily materialiser has not run yet (v61, ADR 0184).
+        if (access.offlineNow()) {
             throw new com.skillmasterai.common.SkillOfflineException("'" + access.name()
                     + "' is offline; its owner has stopped serving it. Try again later."
                     + " Reading or managing it from the console still works.");
+        }
+        return access;
+    }
+
+    /**
+     * The access lookup every consumption read starts with, plus v61's one extra answer: a public
+     * skill that had a live version and was deleted returns 410 instead of the 404 an empty lookup
+     * gives (ADR 0184). Private deletions and never-published ones stay 404.
+     */
+    private Optional<Access> accessible(com.skillmasterai.modules.namespace.Namespace namespace,
+            String name, Caller caller) {
+        Optional<Access> access = metadata.accessFor(namespace.id(), name, caller);
+        if (access.isEmpty() && metadata.deletedPublicEverPublished(namespace.id(), name)) {
+            throw new com.skillmasterai.common.SkillGoneException(
+                    "'" + name + "' was deleted by its owner; its address is no longer served");
         }
         return access;
     }
@@ -90,7 +107,7 @@ public class ReadSkillUseCase {
             AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                .flatMap(namespace -> accessible(namespace, name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.detailOf(namespace, access, pin)));
     }
@@ -108,7 +125,7 @@ public class ReadSkillUseCase {
             AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                .flatMap(namespace -> accessible(namespace, name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.metaOf(namespace, access, pin)));
     }
@@ -119,7 +136,7 @@ public class ReadSkillUseCase {
             AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                .flatMap(namespace -> accessible(namespace, name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.bodyOf(namespace, access, pin)));
     }
@@ -135,7 +152,7 @@ public class ReadSkillUseCase {
             VersionPin pin, String relpath, AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                .flatMap(namespace -> accessible(namespace, name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.fileOf(namespace, access, pin, relpath)));
     }
@@ -154,7 +171,7 @@ public class ReadSkillUseCase {
             String name, VersionPin pin, String relpath, AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                .flatMap(namespace -> accessible(namespace, name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(access -> distribution.streamFileOf(namespace, access, pin, relpath)
                                 .map(resolved -> {
@@ -200,7 +217,7 @@ public class ReadSkillUseCase {
             AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         return namespaces.bySlug(namespaceSlug)
-                .flatMap(namespace -> metadata.accessFor(namespace.id(), name, caller)
+                .flatMap(namespace -> accessible(namespace, name, caller)
                         .map(ReadSkillUseCase::serving)
                         .flatMap(versions::liveVersionsOf));
     }

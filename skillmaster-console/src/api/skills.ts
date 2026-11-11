@@ -366,12 +366,22 @@ export function deleteSkill(namespace: string, name: string): Promise<ApiResult<
   })
 }
 
-/** Clears a soft delete. The same action the deleted list's 恢复 calls; ownership is checked. */
-export function restoreSkill(namespace: string, name: string): Promise<ApiResult<void>> {
-  return request<void>({
+/**
+ * Clears a soft delete. The same action the deleted list's 恢复 calls; ownership is checked.
+ *
+ * v61 (ADR 0183): several tombstones may share a name, so the list sends the row it clicked. The
+ * answer says which address the skill came back under — it is `原名-restored-<id>` when a live
+ * skill has taken the original.
+ */
+export function restoreSkill(
+  namespace: string,
+  name: string,
+  id?: string,
+): Promise<ApiResult<{ address: string; renamed: boolean }>> {
+  return request<{ address: string; renamed: boolean }>({
     method: 'POST',
     path: `${skillPath(namespace, name)}/restore`,
-    body: {},
+    body: id === undefined ? {} : { id },
   })
 }
 

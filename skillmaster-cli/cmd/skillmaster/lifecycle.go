@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -376,6 +377,22 @@ func joinLibrary(ctx context.Context, args []string, join bool) error {
 		return client.LeaveLibrary(ctx, address)
 	})
 	if err != nil {
+		// **The migration command names the skill.** The shared server sentence cannot — it does
+		// not know which address the caller typed — so the command prints its own, runnable one.
+		var server *api.ServerError
+		if errors.As(err, &server) && server.Code == "skill_offline_pending" {
+			until := server.Details["pending_until"]
+			if len(until) >= 10 {
+				until = until[:10]
+			}
+			copyCommand := "skmr skill copy " + address + " --name <新名字>"
+			if until != "" {
+				return fmt.Errorf("这个 skill 正在下线中，将于 %s 正式下线，不能再入库。"+
+					"要保留它，复制到自己的库：%s。", until, copyCommand)
+			}
+			return fmt.Errorf("这个 skill 正在下线中，不能再入库。"+
+				"要保留它，复制到自己的库：%s。", copyCommand)
+		}
 		return v14Error(err)
 	}
 	if join {
@@ -416,12 +433,23 @@ func restoreSkill(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if _, err := authenticated(ctx, func(client api.Client) (api.Change, error) {
+	restored, err := authenticated(ctx, func(client api.Client) (api.Restored, error) {
 		return client.RestoreSkill(ctx, address)
-	}); err != nil {
+	})
+	if err != nil {
 		return v14Error(err)
 	}
-	fmt.Printf("已恢复 %s。\n", address)
+	// v61 (ADR 0183): the name may have been taken while the skill was deleted; the restore then
+	// answers under 原名-restored-<id>, and saying the old address would be false.
+	target := restored.Address
+	if target == "" {
+		target = address
+	}
+	if restored.Renamed {
+		fmt.Printf("已恢复。原名已被占用，这个 skill 现在叫 %s。\n", target)
+		return nil
+	}
+	fmt.Printf("已恢复 %s。\n", target)
 	return nil
 }
 

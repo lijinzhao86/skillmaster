@@ -388,7 +388,7 @@ describe('the deleted list', () => {
             card({ state: 'deleted', deleted_at: '2026-10-07T09:00:00Z', updated_at: null }),
           ]),
         ),
-      () => empty(204),
+      () => json(200, { address: 'demo-user/pdf-tools', renamed: false }),
     )
 
     expect(requests[0]?.path).toBe('/web/library?show=deleted')
@@ -401,6 +401,31 @@ describe('the deleted list', () => {
 
     expect(requests[1]?.path).toBe('/web/skills/demo-user/pdf-tools/restore')
     expect(requests[1]?.method).toBe('POST')
+  })
+
+  it('says the new address when the name was taken while it was deleted', async () => {
+    at('/?show=deleted')
+    const { container } = await showLibrary(
+      () =>
+        json(
+          200,
+          pageOf([
+            card({ state: 'deleted', deleted_at: '2026-10-07T09:00:00Z', updated_at: null }),
+          ]),
+        ),
+      () =>
+        json(200, {
+          address: 'demo-user/pdf-tools-restored-01jz8q2v7c4m5n6p7q8r9s0t1u',
+          renamed: true,
+        }),
+    )
+
+    fireEvent.click(container.querySelector('.restore') as HTMLButtonElement)
+    await flush()
+
+    expect(container.querySelector('.banner')?.textContent).toContain(
+      'demo-user/pdf-tools-restored-01jz8q2v7c4m5n6p7q8r9s0t1u',
+    )
   })
 
   it('says the deleted list is empty without calling the library empty', async () => {

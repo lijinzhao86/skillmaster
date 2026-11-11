@@ -591,22 +591,22 @@ func TestSubmitRefusalsKeepTheRightShape(t *testing.T) {
 
 }
 
-// **A 409 is a named refusal too** (v9, ADR 0071). It used to fall through to the generic
-// "服务端答 409" line, which kept the code off the `ServerError` and made the command layer's
-// `skill_deleted` sentence unreachable — this is the branch that lost it.
+// **A 409 is a named refusal too** (v9). It used to fall through to the generic "服务端答 409"
+// line, which kept the code off the `ServerError` and made the command layer's sentences
+// unreachable — this is the branch that lost it.
 func TestAConflictCarriesItsCodeToTheCommandLayer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
-		_, _ = w.Write([]byte(`{"error":{"code":"skill_deleted",
-			"message":"the name 'pdf-tools' belongs to a deleted skill","details":[]}}`))
+		_, _ = w.Write([]byte(`{"error":{"code":"skill_already_exists",
+			"message":"the name 'pdf-tools' is taken","details":[]}}`))
 	}))
 	defer server.Close()
 
 	_, err := Client{BaseURL: server.URL, Token: "t"}.Submit(context.Background(), []byte("zip"),
 		"a name", "", "")
 	var failure *ServerError
-	if !errors.As(err, &failure) || failure.Code != "skill_deleted" {
-		t.Fatalf("err = %v, want a ServerError carrying skill_deleted", err)
+	if !errors.As(err, &failure) || failure.Code != "skill_already_exists" {
+		t.Fatalf("err = %v, want a ServerError carrying skill_already_exists", err)
 	}
 }
 

@@ -31,7 +31,7 @@ func versionOpen(ctx context.Context, args []string) error {
 	facts := readPageFacts(ctx, pageSpec{path: "version open"},
 		pageArgs{skill: target.skill, pin: pin})
 	if facts.known {
-		if code, reason := pageReason(pageSpec{path: "version open"}, facts); reason != "" {
+		if code, reason := pageReason(pageSpec{path: "version open"}, facts, target.skill); reason != "" {
 			return pageRefusal(jsonMode, code, reason, address)
 		}
 	}

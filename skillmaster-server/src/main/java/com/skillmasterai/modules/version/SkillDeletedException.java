@@ -14,7 +14,8 @@ public class SkillDeletedException extends RuntimeException {
     private final transient String skillName;
 
     public SkillDeletedException(String skillName) {
-        super("the skill '" + skillName + "' was deleted; restore it before publishing to that name");
+        super("the skill '" + skillName + "' was deleted while this version was being published;"
+                + " submit the version again, or restore the deleted skill");
         this.skillName = skillName;
     }
 

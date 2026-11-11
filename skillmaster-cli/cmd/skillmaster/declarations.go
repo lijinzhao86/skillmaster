@@ -213,6 +213,7 @@ var topSpecs = []*help.Spec{
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "-- 后面没有命令，或给了不止一个地址", Next: "按 skmr run <地址> -- <命令> 写"},
 			{Code: "not_found", Summary: "地址不存在，或这个版本看不到", Next: "skmr skill versions <地址> 看有哪些版本"},
+			{Code: "skill_gone", Summary: "这个 skill 已被作者删除", Next: "地址不再服务；换一个用 skmr skills search"},
 			{Code: "network", Summary: "连不上服务端", Next: "先跑 skmr doctor 看网络与沙箱"},
 			{Code: "credential_quota_exceeded", Summary: "绑定的凭据今天到上限了", Next: "让用户跑 skmr secret quota；别自行提高"},
 		},

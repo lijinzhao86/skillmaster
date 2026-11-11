@@ -101,8 +101,6 @@ public final class SyncDraftWriter {
             });
         } catch (OriginConflict conflict) {
             return WriteResult.blocked("origin_conflict");
-        } catch (com.skillmasterai.modules.version.SkillDeletedException deleted) {
-            return WriteResult.blocked("skill_deleted");
         }
 
         SubmittedSkill submitted = written.submitted();
