@@ -964,7 +964,7 @@ func TestJoinAndLeaveRefusalsAreNamedByCode(t *testing.T) {
 			details: `[{"field":"pending_until","issue":"2026-12-11T00:00:00Z"}]`, want: "2026-12-11"},
 		{name: "下线中给出可执行的复制命令", verb: "join", status: http.StatusConflict, code: "skill_offline_pending",
 			details: `[{"field":"pending_until","issue":"2026-12-11T00:00:00Z"}]`,
-			want: "skmr skill copy dev/pdf-tools --name"},
+			want:    "skmr skill copy dev/pdf-tools --name"},
 		{name: "没有引用", verb: "leave", status: http.StatusConflict, code: "library_reference_missing", want: "没有可移除的加入引用"},
 		{name: "看不见", verb: "join", status: http.StatusNotFound, code: "skill_not_found", want: "找不到这个 skill"},
 	} {

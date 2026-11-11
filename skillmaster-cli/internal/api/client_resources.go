@@ -415,16 +415,16 @@ type Card struct {
 	// public result the caller has no relation to. State is the display state (live / draft / offline
 	// / deleted), derived by the server rather than stored. Version is the current version's author
 	// given name; DeletedAt is the soft-delete time and only appears on the deleted view.
-	Source     string    `json:"source"`
-	State      string    `json:"state"`
-	Version    string    `json:"version"`
-	UpdatedAt  string    `json:"updated_at"`
-	DeletedAt  *string   `json:"deleted_at"`
+	Source    string  `json:"source"`
+	State     string  `json:"state"`
+	Version   string  `json:"version"`
+	UpdatedAt string  `json:"updated_at"`
+	DeletedAt *string `json:"deleted_at"`
 	// OfflinePendingUntil is the 下线中 ramp's date on a row whose state is `pending` (v61).
-	OfflinePendingUntil string `json:"offline_pending_until"`
-	Category   *Category `json:"category"`
-	PublicTags []Tag     `json:"public_tags"`
-	MyTags     []Tag     `json:"my_tags"`
+	OfflinePendingUntil string    `json:"offline_pending_until"`
+	Category            *Category `json:"category"`
+	PublicTags          []Tag     `json:"public_tags"`
+	MyTags              []Tag     `json:"my_tags"`
 	// Score is the cosine similarity a semantic search ranked this row by (v19), or nil on the
 	// keyword path. A pointer because zero is a real similarity and "no score" is a different fact.
 	Score *float64 `json:"score"`

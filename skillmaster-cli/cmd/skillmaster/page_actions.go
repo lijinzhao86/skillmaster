@@ -254,12 +254,12 @@ func parseSkillPageArgs(spec pageSpec, args []string) (pageArgs, error) {
 // only source of a version's state, of `owned`, and of `offline`; the consumer plane answers a rung
 // at every tier (ADR 0051), which is why it is the fallback.
 type pageFacts struct {
-	known         bool // a rung is known
-	fromAuthor    bool
-	rung          string
-	owned         bool
-	status        string
-	offline       bool
+	known      bool // a rung is known
+	fromAuthor bool
+	rung       string
+	owned      bool
+	status     string
+	offline    bool
 	// pending is the 下线中 ramp: still serving, but `skill offline` and `skill online` are both
 	// meaningful there — the page switches it back on.
 	pending       bool
@@ -289,7 +289,7 @@ func readPageFacts(ctx context.Context, spec pageSpec, parsed pageArgs) pageFact
 				known: true, fromAuthor: true,
 				rung: envelope.Skill.Access, owned: envelope.Skill.Owned,
 				status: envelope.Version.Status, offline: envelope.Skill.Offline,
-				pending: envelope.Skill.OfflinePendingUntil != "",
+				pending:       envelope.Skill.OfflinePendingUntil != "",
 				everPublished: envelope.Skill.EverPublished,
 			}
 		}
@@ -317,8 +317,8 @@ func skillFacts(ctx context.Context, address string) pageFacts {
 		return pageFacts{
 			known: true, fromAuthor: true,
 			rung: listed.Skill.Access, owned: listed.Skill.Owned,
-			offline: listed.Skill.Offline,
-			pending: listed.Skill.OfflinePendingUntil != "",
+			offline:       listed.Skill.Offline,
+			pending:       listed.Skill.OfflinePendingUntil != "",
 			everPublished: listed.Skill.EverPublished,
 		}
 	}

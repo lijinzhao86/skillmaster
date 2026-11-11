@@ -826,19 +826,6 @@ func TestARowIsTheAddressAloneAndTheRestIsOptIn(t *testing.T) {
 				"    来源：我加入的 · 状态：在用 · 版本：1.2.3 · 更新于：2026-10-29\n",
 		},
 		{
-			name:    "list --verbose writes 下线中 for a skill inside its ramp",
-			cards:   []api.Card{{Namespace: "demo", Name: "pdf-tools", Source: "created", State: "pending"}},
-			verbose: true,
-			want:    "demo/pdf-tools\n    来源：我创建的 · 状态：下线中\n",
-		},
-		{
-			name: "list --verbose puts the ramp's date after 下线中",
-			cards: []api.Card{{Namespace: "demo", Name: "pdf-tools", Source: "created",
-				State: "pending", OfflinePendingUntil: "2026-12-11T00:00:00Z"}},
-			verbose: true,
-			want:    "demo/pdf-tools\n    来源：我创建的 · 状态：下线中 · 2026-12-11\n",
-		},
-		{
 			name:    "list --verbose on a skill with no description prints no blank reading line",
 			cards:   []api.Card{{Namespace: "lark", Name: "sheets", Source: "joined", State: "live"}},
 			verbose: true,

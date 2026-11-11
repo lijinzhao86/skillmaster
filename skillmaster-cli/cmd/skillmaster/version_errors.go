@@ -95,10 +95,10 @@ var versionMessages = map[string]string{
 	"skill_offline":          "这个 skill 已下线，暂时不提供服务。",
 	// v61: a public skill that had a live version and was deleted answers 410 rather than 404, so
 	// the address is not mistaken for a typo (ADR 0184).
-	"skill_gone": "这个 skill 已被作者删除，不再提供服务。",
-	"invalid_request":        "提交的内容有问题，请检查后重试。",
-	"too_many_requests":      "请求太频繁了，等一会儿再试。",
-	"internal_error":         "服务端出错了，请稍后重试。",
+	"skill_gone":        "这个 skill 已被作者删除，不再提供服务。",
+	"invalid_request":   "提交的内容有问题，请检查后重试。",
+	"too_many_requests": "请求太频繁了，等一会儿再试。",
+	"internal_error":    "服务端出错了，请稍后重试。",
 	// v10's authoring verbs. Their refusals arrive as top-level codes or as `details[].issue`; both
 	// are translated here so a person does not get the server's English in a Chinese CLI.
 	"skill_already_exists":   "这个名字已经被一个 skill 占着。",
