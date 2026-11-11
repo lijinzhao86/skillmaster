@@ -145,10 +145,6 @@ function SearchRow({ row, open, hitOnly, onToggle }: {
                 {/* **行里不放链接**：整行是开关，点哪里都展开。要看那条 skill，展开后在结果列表里点。 */}
                 <span className="notice-skill" title={invocation.skill}>{invocation.skill}</span>
                 <span className="usage-version">@{invocation.version}</span>
-                <span className="usage-rank usage-rank-full">第 {invocation.rank} 个结果</span>
-                <span className="usage-rank usage-rank-short" title={'第 ' + invocation.rank + ' 个结果'}>
-                  #{invocation.rank}
-                </span>
                 {row.invocations.length > 1 && (
                   <span className="usage-invocation-at" title={invocation.at}>{invocation.at.slice(11)}</span>
                 )}

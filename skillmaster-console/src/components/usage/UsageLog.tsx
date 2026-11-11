@@ -176,10 +176,6 @@ function SearchRow({
                   {invocation.skill}
                 </span>
                 <span className="usage-version">@{invocation.version}</span>
-                <span className="usage-rank usage-rank-full">第 {invocation.rank} 个结果</span>
-                <span className="usage-rank usage-rank-short" title={'第 ' + invocation.rank + ' 个结果'}>
-                  #{invocation.rank}
-                </span>
                 {row.invocations.length > 1 && (
                   <span className="usage-invocation-at" title={fullStamp(invocation.at)}>
                     {stamp(invocation.at).slice(6)}
