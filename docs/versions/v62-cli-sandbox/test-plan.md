@@ -1,12 +1,12 @@
 # v62-cli-sandbox · 测试方案
 
-> **最后更新**：2026-11-11
+> **最后更新**：2026-11-12
 > **状态**：进行中（已实现；自动化全绿，真机 WorkBuddy、Claude Code 沙箱失败与终端隔离配置成功、安装器已跑；T17–T19 与部分真机项未跑——见 §结果）
 > **所属版本**：[`README.md`](README.md)
 
 ## 验收映射
 
-把 [`prd.md`](prd.md) §验收与指标 的 18 条逐条映射到用例。
+把 [`prd.md`](prd.md) §验收与指标 的 18 条逐条映射到用例。T21 来自[迭代 0001](iterations/0001-agent-install-chain.md)，不在 PRD 的 18 条内。
 
 | prd 验收标准 | 对应用例 |
 |---|---|
@@ -142,7 +142,7 @@
 
 - **前置**：装有 Claude Code / WorkBuddy 的机器；先备份配置。
 - **步骤**：跑 `install.sh`（pty 与无 tty 各一次）。
-- **期望**：不出现 `[Y/n]`、不读 `/dev/tty`；打印 `--dry-run` 与 `--fix` 命令；配置文件不变；提示里没有 JSON/TOML 键名。之后运行 `doctor --fix` 才写入。
+- **期望**：不出现 `[Y/n]`、不读 `/dev/tty`；打印 `--dry-run` / `--fix` / `--undo` 命令，收尾先 `auth status`、已登录再 `startup`；配置文件不变；提示里没有 JSON/TOML 键名。之后运行 `doctor --fix` 才写入。
 - **判定**：通过 / 失败
 
 ### T17 · 单条命令出沙箱
@@ -172,6 +172,14 @@
 - **步骤**：`go test ./...`；`go vet ./...`。
 - **期望**：全绿；vet 无输出。
 - **判定**：通过 / 失败
+
+### T21 · agent 沙箱安装链路（[迭代 0001](iterations/0001-agent-install-chain.md)）
+
+- **前置**：Claude Code 裸沙箱（`sandbox.enabled=true`，无 `allowWrite` / `allowedDomains`）；临时 `HOME` 与 `SKILLMASTER_INSTALL_DIR`；产物取自 `https://dl.skillmasterai.com/beta`（该次沙箱放行了下载域名；也可用 `SKILLMASTER_DL_URL` 指向本地产物）。
+- **步骤**：在沙箱内跑 `mktemp -d "${TMPDIR:-/tmp}/..."` 与 `install.sh`；分别用 Bash 和 Agent 的 Write 工具写同一个技能目录；`SANDBOX_RUNTIME=1` 且无凭据时跑一条读命令，再跑 `skmr startup`。
+- **期望**：显式模板的 `mktemp` 成功；`install.sh` 退出码 0；Bash 写技能目录被拒、Write 工具成功；无凭据的 `clientFor` 不启动浏览器登录，立即返回 API key 指引；沙箱内无凭据的 `startup` 退出码 4，提示含「沙箱外」与 `SKILLMASTER_API_KEY`（`TestStartupInASandboxNamesTheTerminalItHasToRunIn`）。
+- **判定**：通过 / 失败
+- **覆盖边界**：4.5 的同意/拒绝、第 5 步的 `auth status` 分支，以及第 2 步的复制 / 恢复失败路径（备份保留、半截文件删除、路径提示）是文档级，未在本用例的真机步骤里覆盖。
 
 ## 环境与数据
 
@@ -204,11 +212,12 @@
 | T13 | 部分 | `TestBadFileIsLeftAlone`（坏 JSON，sha256 不变）、`TestBadTOMLIsLeftAlone`（坏 TOML）；「打印片段」由 `printFragment` 实现，未单独断言 |
 | T14 | 部分 | `TestNothingInstalled`（不写任何文件）+ `TestNoConfigSurfaceLinesNameTheClients`（指引里点名各家）；文案未在真机跑 |
 | T15 | 通过（终端半用隔离配置） | 沙箱内（`sandbox.enabled=true`，`SANDBOX_RUNTIME=1`）跑 `doctor --fix`：写 Claude 配置时 `operation not permitted`，打印文件开头与「在你自己的终端里跑一次：skmr doctor --fix」，退出码 1；同一次里 WorkBuddy 写成功（沙箱实际放行了它），并顺带写入 Codex / Copilot 的真实配置（Codex 用 `config.toml.skillmaster.bak` 逐字节恢复，Copilot 删除新建的 `settings.json`）。终端半：非沙箱 shell 里用隔离的 `CLAUDE_CONFIG_DIR`（`CODEX_HOME`/`COPILOT_HOME` 指向不存在的路径）跑 `--fix`，退出码 0，隔离配置写入 `allowWrite`、`allowedDomains` 与 `allowLocalBinding`；真实 `~/.claude/settings.json` 的 sha256 未变（所以它是终端路径验证，不是 T10 的真机写入）。单元侧 `TestFixFailure` / `TestFailedChanges` / `TestDescribeChangeFailure` 覆盖失败聚合与描述 |
-| T16 | 通过 | 2026-11-12，本地产物 + 临时 `HOME`：pty 与无 tty 各跑一次 `install.sh`，都不出现 `[Y/n]`、不读 `/dev/tty`，只打印 `--dry-run` 与 `--fix` 命令，配置保持 `{}`；提示只出现客户端名，没有 JSON/TOML 键名。之后手动运行 `doctor --fix` 才写入（写入行为由 T9 覆盖） |
+| T16 | 通过 | 2026-11-12，本地产物 + 临时 `HOME`：pty 与无 tty 各跑一次 `install.sh`，都不出现 `[Y/n]`、不读 `/dev/tty`，打印 `--dry-run` / `--fix` / `--undo` 命令，收尾先 `auth status`、已登录再 `startup`，配置保持 `{}`；提示只出现客户端名，没有 JSON/TOML 键名。之后手动运行 `doctor --fix` 才写入（写入行为由 T9 覆盖） |
 | T17 | 未执行 | 需要 Claude Code / Codex 真机 |
 | T18 | 未执行 | 需要禁用 bypass 的模拟配置 |
 | T19 | 未执行 | 需要带脚本的 skill 与 Claude Code 沙箱 |
 | T20 | 通过 | `go test ./...` 退出 0；`go vet ./...` 无输出 |
+| T21 | 通过 | 2026-11-12 Claude Code 裸沙箱：显式模板 `mktemp` 成功；新 `install.sh` 在沙箱内退出 0、`--version` 正常；Bash 写 `~/.claude/skills` 被拒而 Agent 的 Write 工具成功；`SANDBOX_RUNTIME=1` + 无凭据的 `skills list` 立即退出 1 并给 API key 指引，没有等浏览器；同一环境下的 `startup` 退出 4，提示「在沙箱外的终端运行 skmr login」与 API key 指引 |
 
 **实现侧额外验过的**：
 

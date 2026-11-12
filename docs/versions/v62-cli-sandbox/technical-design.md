@@ -133,7 +133,7 @@ type Change struct {
 ### 沙箱外执行
 
 - **不是 CLI 能强制的**：`doctor --fix` 只能在做不到时给出可执行的下一步。
-- `startup` skill 增加一步：先跑 `skmr doctor --fix`；需要出沙箱时，按客户端声明「仅这一条命令出沙箱」（Claude Code `dangerouslyDisableSandbox`、Codex `on-request`、Copilot bypass、Zed `unsandboxed`），用户点一次同意。
+- `startup` skill 增加一步：先跑 `skmr doctor --fix --dry-run`（只打印、不落盘）看哪些客户端还缺配置；都齐了就跳过。有缺口时用 `AskUserQuestion` 问一次，同意后再跑 `skmr doctor --fix`；需要出沙箱时，按客户端声明「仅这一条命令出沙箱」（Claude Code `dangerouslyDisableSandbox`、Codex `on-request`、Copilot bypass、Zed `unsandboxed`），用户点一次同意。安装 4.5 已拒绝的，`startup` 不绕过这个拒绝再写。
 - **排除清单**：`skmr run` 永不声明出沙箱；只允许 `doctor --fix` / `login` / `logout` / `update`。
 
 ## 分期
@@ -141,7 +141,7 @@ type Change struct {
 | 期 | 交付 | 验收 |
 |---|---|---|
 | P0 | 凭据文件默认 + `--keyring` + `Source()`；`doctor --fix` 的引擎、客户端配置写入（含 Codex TOML）与安装脚本的确认说明（不读终端）；`--undo` / `--dry-run` / 备份 / 坏文件拒绝；两条 ADR | PRD 第 1–8、10–14、16–18 条，加 #9 的客户端配置副本部分 |
-| P1 | `startup` skill 的出沙箱指引（平台发布，不在本仓库）；WorkBuddy/Claude Code 与其余客户端逐家真机复测 | PRD 第 9 条的真机部分、第 15 条 |
+| P1 | `startup` skill 的沙箱配置步骤（只读 `--dry-run` 探测 → 必要时提问 → 同意后 `--fix`，不覆盖安装拒绝；平台发布，不在本仓库）；WorkBuddy/Claude Code 与其余客户端逐家真机复测 | PRD 第 9 条的真机部分、第 15 条 |
 | P2 | `sandbox.toml`（Gemini 工具级）等源码能力 | 本版不验收；满足条件后另开版本 |
 
 **P0 明确不做**：Gemini 工具级 `sandbox.toml`、任何客户端的删除权限。
@@ -152,7 +152,7 @@ type Change struct {
 |---|---|---|---|
 | Q1 | 钥匙串的可选入口用 flag、环境变量还是配置键？ | **已定**：`skmr login --keyring`；`help env` 页不能再加变量（权威是 `TestHelpEnvPage`），flag 在 `login --help` 里看得到 | 已由 ADR 0185 决定 |
 | Q2 | 读路径要不要总是碰钥匙串？ | **已定**：默认 store 文件先读，文件没有再读钥匙串 | 已由 ADR 0185 决定 |
-| Q3 | `doctor --fix` 由谁调起？ | **已定**：`install.sh` 只打印命令；agent 先用 `AskUserQuestion` 问用户再运行，人在终端运行即同意；`startup` skill 让 agent 跑；沙箱内写不动时给出终端命令 | 已由 ADR 0186 决定；真机复核见 Q4/Q5 |
+| Q3 | `doctor --fix` 由谁调起？ | **已定**：`install.sh` 只打印命令；agent 先用 `AskUserQuestion` 问用户再运行，人在终端运行即同意；`startup` skill 先跑只读 `doctor --fix --dry-run`，未配置且用户同意才跑 `--fix`，不覆盖安装 4.5 的拒绝；沙箱内写不动时给出终端命令 | 已由 ADR 0186 决定；真机复核见 Q4/Q5 |
 | Q4 | WorkBuddy 运行中改 `settings.json` 会不会被覆盖？ | 先改文件、要求重启后生效，避免与正在运行的进程抢写 | 改一次、重启、再读 |
 | Q5 | Claude Code 的 `allowWrite` 对 `~/Library/Application Support/skillmaster` 是否生效？ | 文档说受保护的是 `.claude` 等路径，状态目录不在其中，倾向认为生效 | 在沙箱里写一次 `--fix` 后的状态目录 |
 | Q6 | 写客户端配置时如何保证不破坏原有格式？ | JSON 解析后只增键；TOML 用 `go-toml/v2`；先备份；解析失败就拒绝 | 用真实配置副本做测试，比对未触碰的键 |
@@ -176,7 +176,7 @@ type Change struct {
 | `cmd/skillmaster/doctor.go` | 解析 `--fix` / `--undo` / `--dry-run`，调用 `agentconfig` |
 | `cmd/skillmaster/auth.go` | `login --keyring`；`auth status` 用 `Source()` |
 | `cmd/skillmaster/declarations.go` | `doctor` 与 `login` 的 `Usage` / `Output` / `Flags` |
-| `install/install.sh` | 第 8 步（RELEASE.md §7）：检测客户端 → 只打印改动与 `--dry-run` / `--fix` 命令，不读终端、不写配置；agent 先用 `AskUserQuestion` 问用户 |
+| `install/install.sh` | 第 8 步（RELEASE.md §7）：检测客户端 → 只打印改动、绝对路径命令（`--dry-run` / `--fix` / `--undo`）与 `auth status` 收尾，不读终端、不写配置；agent 先用 `AskUserQuestion` 问用户 |
 | `go.mod` | 加 `github.com/pelletier/go-toml/v2`（Codex） |
 
 ### 附录 B · 来源与出处

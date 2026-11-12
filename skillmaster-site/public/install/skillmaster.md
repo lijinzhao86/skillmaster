@@ -2,7 +2,7 @@
 
 这份文档是给 Agent 执行的安装步骤：读它，再照做。
 
-它按顺序做四件事：**先确认两个前提**；**把 SkillMaster 的技能装进来**；**确认命令行客户端的状态，没有就装上**；**交给 `skmr startup`**——登录和迁移本机技能由它负责。
+它按顺序做五件事：**先确认两个前提**；**把 SkillMaster 的技能装进来**；**确认命令行客户端的状态，没有就装上**；**问一次要不要现在配置沙箱**；**交给 `skmr startup`**——迁移本机技能由它接手；登录在第 5 步交棒前确认。
 
 **现在装的是内测版（`1.1.0-beta`）。** 内测期的安装命令永远装最近一次构建：版本串相同、内容可能不同，用 `--version` 打印的提交号区分。内测版不承诺兼容，命令随时可能增删。
 
@@ -100,7 +100,7 @@
   - 仍然选「先不安装」→ 说第 4 行，结束整个流程，不做任何改动。
 - 用户提问 → 先回答（第 5 行）；答完等他表态，他说不想继续就按第 4 行结束。
 
-**整个流程只有这一步是请用户决定「要不要做」**；后面顺利时不问、只告知，出问题时按上面那四组固定搭配给选项卡；走第 25 / 26 行时只有文字，不给选项卡。
+**整个流程有两处安装决策：要不要安装（这一步），以及装完客户端后要不要现在配置沙箱（4.5，可以拒绝）。** 另外三处也要用户表态：第 2 步 shell 被拒时请求「只这一次出沙箱」，4.5 同意后请求「单条命令出沙箱」，第 5 步发现没登录时选择登录方式——它们不是安装决策，但同样用选项卡。其余顺利时只告知，出问题时按上面那四组固定搭配给选项卡；走第 25 / 26 行时只有文字，不给选项卡。
 
 ### 2 · 装技能
 
@@ -117,30 +117,54 @@
 
 目录由你判断——你知道自己从哪里读技能。这份文档不给路径表。
 
-**能直接写的情况。** 下面两种写法都是：先下到临时目录、解开、数够 1 个文件，**确认无误之后才动旧的那一份**——下载失败、包不完整、目标目录不可写，都不会留下半套，也不会先删掉旧的。
+**能直接写的情况。** 先下到临时目录、解开、数够 1 个文件，**确认无误之后才动旧的那一份**。
+
+**先试你自己的文件写入工具**（例如 Claude Code 的 Write）：下载并解到临时目录后，用 `cat` 读出 `$tmp/skillmaster/SKILL.md`，再用写入工具写到 `<技能目录>/skillmaster/SKILL.md`。读临时目录是允许的；写技能目录通常也不经过 shell 的沙箱（实测 Claude Code 的 Write 能写 `~/.claude/skills`，Bash 不能）。
+
+**写文件工具失败，或这个 agent 只能用 shell**，再用下面这条。技能内容只有一个文件；命令会建目录、可能临时备份旧文件，但**不 rename、不删目录**：WorkBuddy 的沙箱允许写文件内容、拒绝 rename 覆盖已有文件。
 
 macOS / Linux：
 
 ```bash
 set -e
 dir="<技能目录>"
-tmp="$(mktemp -d)"
-curl -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$tmp/skillmaster.tgz"
-tar -xzf "$tmp/skillmaster.tgz" -C "$tmp"
-test "$(find "$tmp/skillmaster" -type f | wc -l)" -eq 1
-mkdir -p "$dir"
-test -w "$dir"
-backup_dir="$(mktemp -d "$dir/.skillmaster-old.XXXXXX")"
-backup="$backup_dir/skillmaster"
-if [ -e "$dir/skillmaster" ]; then mv "$dir/skillmaster" "$backup"; fi
-if ! mv "$tmp/skillmaster" "$dir/skillmaster"; then
-  rm -rf "$dir/skillmaster" || true
-  if [ -e "$backup" ]; then mv "$backup" "$dir/skillmaster"; fi
-  rm -rf "$backup_dir" "$tmp" || true
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/skillmaster.XXXXXX")"
+curl -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$tmp/skillmaster.tgz" ||
+  { echo "技能包获取失败" >&2; exit 1; }
+tar -xzf "$tmp/skillmaster.tgz" -C "$tmp" ||
+  { echo "技能包展开失败" >&2; exit 1; }
+if ! test "$(find "$tmp/skillmaster" -type f | wc -l)" -eq 1; then
+  echo "技能文件数不对" >&2
   exit 1
 fi
-rm -rf "$backup_dir" "$tmp" || true
+mkdir -p "$dir/skillmaster"
+target="$dir/skillmaster/SKILL.md"
+# 备份用每次调用独有的名字；只有本次真的建成了，才把它当作回滚源。
+backup=""
+if [ -f "$target" ]; then
+  backup="$(mktemp "$target.skillmaster-old.XXXXXX")" || { echo "技能备份失败" >&2; exit 1; }
+  cp "$target" "$backup" || { rm -f "$backup" 2>/dev/null || true; echo "技能备份失败" >&2; exit 1; }
+fi
+if ! cp "$tmp/skillmaster/SKILL.md" "$target"; then
+  if [ -n "$backup" ] && [ -f "$backup" ]; then
+    if cp "$backup" "$target"; then
+      rm -f "$backup" 2>/dev/null || true
+    else
+      echo "技能恢复失败：旧文件备份在 $backup" >&2
+      exit 1
+    fi
+  else
+    rm -f "$target" 2>/dev/null || true
+    [ ! -f "$target" ] || echo "技能写入失败：$target 可能不完整，请删掉它或改用导入" >&2
+  fi
+  echo "技能写入失败" >&2
+  exit 1
+fi
+rm -f "$backup" 2>/dev/null || true
+rm -f "$tmp/skillmaster.tgz" 2>/dev/null || true
 ```
+
+**如果这条 shell 也被沙箱拒绝**（`operation not permitted` / `Permission denied`，或脚本说 `技能备份失败`）：不要直接放弃。先请用户同意「只这一次把这条安装命令放到沙箱外跑」，重跑一次；用户不同意，或客户端没有这个机制时：这个客户端有导入界面，就走下面的界面导入；没有导入界面，就说第 9 行、停下，不要接着装客户端。**不要用 `rm -rf` 清技能目录，也不要用 `mv` 覆盖已有技能。**（这一段的任何失败——包括 `技能备份失败` / `技能写入失败` / `技能恢复失败` / `技能包获取失败` / `技能包展开失败` / `技能文件数不对`，以及 `mktemp` / `mkdir` 的原始报错——都不走附录 A；附录 A 是客户端安装器的报错。技能没装成按第 9 行处理。**例外**：看到 `技能恢复失败：旧文件备份在 <路径>` 或 `技能写入失败：<路径> 可能不完整` 时，把路径原文告诉用户——旧文件备份在哪、哪个技能文件可能不完整、请删掉它或改用导入；不要套第 9 行的「其它东西都没动」，也不要省掉这个路径。）
 
 Windows（PowerShell）：**先下载成文件再解包**。PowerShell 5.1 里 `curl` 是 `Invoke-WebRequest` 的别名，而且两个原生程序之间直接接管道会损坏文件：
 
@@ -150,27 +174,31 @@ $dir = "<技能目录>"
 $tmp = Join-Path $env:TEMP ("skillmaster-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $tmp | Out-Null
 curl.exe -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$tmp\skillmaster.tgz"
-if ($LASTEXITCODE -ne 0) { throw "下载失败" }
+if ($LASTEXITCODE -ne 0) { throw "技能包获取失败" }
 tar -xzf "$tmp\skillmaster.tgz" -C $tmp
-if ($LASTEXITCODE -ne 0) { throw "解包失败" }
-if ((Get-ChildItem -Recurse -File "$tmp\skillmaster").Count -ne 1) { throw "文件数不对" }
-New-Item -ItemType Directory -Force $dir | Out-Null
-$target = Join-Path $dir "skillmaster"
-# **A hidden wrapper, unique per run** — the same shape as the macOS command. A bare
-# `skillmaster.old.<guid>` would put a second `SKILL.md` at the top of the skills directory, and
-# an agent that scans one level would see two skills with the same name after an interrupted run.
-$backupDir = Join-Path $dir (".skillmaster-old." + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Force $backupDir | Out-Null
-$backup = Join-Path $backupDir "skillmaster"
-if (Test-Path $target) { Move-Item $target $backup -ErrorAction Stop }
-try { Move-Item "$tmp\skillmaster" $target -ErrorAction Stop }
-catch {
-  if (Test-Path $target) { Remove-Item -Recurse -Force $target -ErrorAction SilentlyContinue }
-  if (Test-Path $backup) { Move-Item $backup $target -ErrorAction Stop }
-  Remove-Item -Recurse -Force $backupDir -ErrorAction SilentlyContinue
-  throw
+if ($LASTEXITCODE -ne 0) { throw "技能包展开失败" }
+if ((Get-ChildItem -Recurse -File "$tmp\skillmaster").Count -ne 1) { throw "技能文件数不对" }
+$target = Join-Path $dir "skillmaster\SKILL.md"
+New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+$backup = $null
+if (Test-Path $target) {
+  $backup = "$target.skillmaster-old." + [guid]::NewGuid().ToString("N")
+  try { Copy-Item $target $backup -Force -ErrorAction Stop }
+  catch { throw "技能备份失败" }
 }
-Remove-Item -Recurse -Force $backupDir -ErrorAction SilentlyContinue
+try { Copy-Item "$tmp\skillmaster\SKILL.md" $target -Force -ErrorAction Stop }
+catch {
+  if ($backup -and (Test-Path $backup)) {
+    try { Copy-Item $backup $target -Force -ErrorAction Stop }
+    catch { throw "技能恢复失败：旧文件备份在 $backup" }
+    Remove-Item $backup -Force -ErrorAction SilentlyContinue
+  } else {
+    Remove-Item $target -Force -ErrorAction SilentlyContinue
+    if (Test-Path $target) { Write-Error "技能写入失败：$target 可能不完整，请删掉它或改用导入" }
+  }
+  throw "技能写入失败：$($_.Exception.Message)"
+}
+Remove-Item $backup -Force -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 ```
 
@@ -181,23 +209,27 @@ Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 macOS / Linux：
 
 ```bash
-out="/tmp/skillmaster-skill" && rm -rf "$out" && mkdir -p "$out" \
-  && curl -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$out/skillmaster.tgz" \
-  && tar -xzf "$out/skillmaster.tgz" -C "$out" \
-  && rm -f "$out/skillmaster.tgz"
+set -e
+out="$(mktemp -d "${TMPDIR:-/tmp}/skillmaster-skill.XXXXXX")"
+curl -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$out/skillmaster.tgz" ||
+  { echo "技能包获取失败" >&2; exit 1; }
+tar -xzf "$out/skillmaster.tgz" -C "$out" ||
+  { echo "技能包展开失败" >&2; exit 1; }
+rm -f "$out/skillmaster.tgz" 2>/dev/null || true
+echo "$out/skillmaster"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
-$out = Join-Path $env:TEMP "skillmaster-skill"
-Remove-Item -Recurse -Force $out -ErrorAction SilentlyContinue
+$out = Join-Path $env:TEMP ("skillmaster-skill-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $out | Out-Null
 curl.exe -fsSL https://dl.skillmasterai.com/beta/skillmaster.tgz -o "$out\skillmaster.tgz"
-if ($LASTEXITCODE -ne 0) { throw "下载失败" }
+if ($LASTEXITCODE -ne 0) { throw "技能包获取失败" }
 tar -xzf "$out\skillmaster.tgz" -C $out
-if ($LASTEXITCODE -ne 0) { throw "解包失败" }
+if ($LASTEXITCODE -ne 0) { throw "技能包展开失败" }
 Remove-Item "$out\skillmaster.tgz"
+Write-Output (Join-Path $out "skillmaster")
 ```
 
 **直接写的那一支，命令里已经数过文件；界面导入这一支，导入前再数一次**（包里只有一个 `skillmaster/SKILL.md`，一共 1 个）：
@@ -216,19 +248,19 @@ Windows（PowerShell）：
 
 两个都应当输出 `1`。
 
-装好说第 7 行。没装成说第 9 行，给 `再试一次` / `先到这里` 的选项卡；选「先到这里」就停下——**不要接着去装客户端**。
+装好说第 7 行。按上面的顺序都试过（写文件工具、shell、出沙箱重跑、界面导入）仍没装成，说第 9 行，给 `再试一次` / `先到这里` 的选项卡；选「先到这里」就停下——**不要接着去装客户端**。
 
 ### 3 · 确认客户端的安装状态
 
-系统和架构在第 0 步已经查过。这一步只读，不改任何东西；查完直接说结果，不用播报过程。
+系统和架构在第 0 步已经查过。这一步只查状态，不改安装状态与凭据；查完直接说结果，不用播报过程。
 
 客户端装过没有、是不是最新，有四种结果，说法各不相同：
 
 | 看到什么 | 结论 | 说哪行 | 下一步 |
 |---|---|---|---|
 | `skmr --version` 找不到，默认目录里也没有 `skmr` | 没装过 | 10 | 进入「4 · 装客户端」 |
-| 命令找不到，但默认目录里**有** `skmr` | 装过，只是当前终端找不到 | 11 | 把默认目录加进 PATH，**新开终端**，说第 15 行；然后**重新跑一次下面的「是不是最新」判断**，按结果说第 12 或 13 行，进入「5 · 交棒」 |
-| 命令能跑，但不是最新的构建 | 旧了 | 12 | 跑 `skmr update`；再说第 14 行，进入「5 · 交棒」 |
+| 命令找不到，但默认目录里**有** `skmr` | 装过，只是当前终端找不到 | 11 | 把默认目录加进 PATH（给用户以后用），说第 15 行；然后**用绝对路径重新跑一次下面的「是不是最新」判断**，按结果说第 12 或 13 行，进入「5 · 交棒」。不必等用户真的新开一个窗口才能继续 |
+| 命令能跑，但不是最新的构建 | 旧了 | 12 | 跑 `skmr update`；如果它说沙箱里改不了名，请用户在自己的终端跑一次，或重跑安装命令；**不要跳过更新直接交棒**（旧版 `startup` 会写全局记忆）。再说第 14 行，进入「5 · 交棒」 |
 | 命令能跑，且是最新的 | 不用装 | 13 | 说第 13 行，直接进入「5 · 交棒」 |
 
 **为什么修好 PATH 之后还要再查一次**：默认目录里那个 `skmr` 可能是很久以前装的。旧版的 `startup` 还会往全局记忆里写说明，交棒给它就等于把这一版要拆的东西又装回去。
@@ -246,10 +278,10 @@ Windows（PowerShell）：
 **macOS / Linux**：
 
 ```bash
-script="$(mktemp)" \
+script="$(mktemp "${TMPDIR:-/tmp}/skillmaster-install.XXXXXX")" \
   && curl -fsSL https://dl.skillmasterai.com/beta/install.sh -o "$script" \
   && SKILLMASTER_DL_URL=https://dl.skillmasterai.com/beta sh "$script" \
-  && rm -f "$script"
+  && { rm -f "$script" 2>/dev/null || true; }
 ```
 
 **Windows（PowerShell）**：
@@ -272,41 +304,65 @@ if ($code -ne 0) { throw "安装脚本失败（退出 $code）" }
 
 **装完先确认它真的能跑**——用**你实际装到的目录**（默认是 `~/.local/bin`；附录 A 第 18 行让你改过 `SKILLMASTER_INSTALL_DIR` 的话，就是那个目录）：macOS / Linux 跑 `"${SKILLMASTER_INSTALL_DIR:-$HOME/.local/bin}/skmr" --version`，Windows 跑 `& "$(if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' })\skmr.exe" --version`。看到版本串才说第 14 行。
 
-**短名字 `skmr` 找不到不算装失败**——`install.sh` 只打印那个目录的 PATH 指引，不改当前窗口。这种情况按第 11 行处理：把**那个目录**加进 PATH、请你新开一个窗口、说第 15 行。
+**短名字 `skmr` 找不到不算装失败**——`install.sh` 只打印那个目录的 PATH 指引，不改当前窗口。这种情况按第 11 行处理：把**那个目录**加进 PATH、说第 15 行；**后续命令用绝对路径继续，不需要等用户新开窗口**（PATH 只是给用户以后用）。
 
 下载安装脚本失败、或脚本报错时，按附录 A 说**对应那一行**，并按那一行说的重试或停下；附录 A 没列到的按第 20 行。
 
 每次停下都要说清三件事：停在哪一步、这次装成了什么（没装成，或者装上了但没跑起来）、以后怎么继续（把安装说明再发给我）。
 
+### 4.5 · 沙箱配置（问一次）
+
+macOS / Linux 的 `install.sh` 检测到客户端时，最后会打印「还有一步：…」，以及 `--dry-run` / `--fix`，还有 `--undo` 撤回。Windows 的 `install.ps1` 只打印第 4 步那个目录里的绝对路径 `doctor --fix`（以及先 `auth status` 再 `startup`），没有 `--dry-run`，也不会说「没有检测到」——需要先看改动就自己加 `--dry-run`。**不要替用户决定，也不要跳过提问。**
+
+如果 `install.sh` 说「没有检测到带沙箱配置的 AI 工具」，跳过这一步（也可以运行 `"<实际安装目录>/skmr" doctor --fix --dry-run` 看替代指引）。Windows 上先跑一次 `& "<实际安装目录>\skmr.exe" doctor --fix --dry-run`，看有没有可写的客户端；没有就跳过提问。
+
+用这个 Agent 的选项卡/提问组件（Claude Code 是 `AskUserQuestion`）问一次：现在配置吗？
+
+- **同意**：用第 4 步那个目录的绝对路径运行 `doctor --fix`：macOS / Linux 是 `"<实际安装目录>/skmr" doctor --fix`，Windows 是 `& "<实际安装目录>\skmr.exe" doctor --fix`；第 4 步改过 `SKILLMASTER_INSTALL_DIR` 就以那个目录为准（安装器打印的也是绝对路径）。多数客户端要在沙箱外；如果当前命令被沙箱拦，按这个客户端的「单条命令出沙箱」请求一次。WorkBuddy 可以在沙箱内写。请求被拒、客户端没有这个机制，或被企业策略禁用时，把 `doctor --fix` 的可粘贴命令给用户，让他在自己的终端跑一次；说明这次没有写入，然后继续第 5 步（PRD #9 的兜底）。
+- **不同意**：跳过，并告诉用户以后可以自己运行 `doctor --fix`；不要因此停下安装。之后运行 `startup` 时，如果它要求跑 `doctor --fix`，先问用户——这一步的拒绝不能被绕过。
+
+这一步写的是状态目录与 SkillMaster 的域名；它**不包括**技能目录与缓存目录。两个例外：Codex 旧式会另把工作区设为可写；Codex 旧式与 Gemini 的网络侧只有总开关——安装脚本的输出会说明。
+
 ### 5 · 交棒
+
+先确认登录状态（不发起登录）。把 `<实际安装目录>` 换成第 4 步实际装到的目录（默认 `$HOME/.local/bin`；附录 A 第 18 行改过 `SKILLMASTER_INSTALL_DIR` 的话，就是那个目录）。
 
 macOS / Linux：
 
 ```bash
-"${SKILLMASTER_INSTALL_DIR:-$HOME/.local/bin}/skmr" startup
+dir="<实际安装目录>"
+"$dir/skmr" auth status
 ```
 
 Windows（PowerShell）：
 
 ```powershell
-$dir = if ($env:SKILLMASTER_INSTALL_DIR) { $env:SKILLMASTER_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'SkillMaster\bin' }
-& (Join-Path $dir 'skmr.exe') startup
+$dir = "<实际安装目录>"
+& (Join-Path $dir 'skmr.exe') auth status
 ```
+
+- **退出码 0（已登录）**：运行 `"$dir/skmr" startup`（Windows：`& (Join-Path $dir 'skmr.exe') startup`）。
+- **退出码 1，且 stderr 里有「本机没有凭据」**：这就是没登录。**不要在沙箱里直接运行 `startup`**：检测得到沙箱标记的客户端（Claude Code 的 `SANDBOX_RUNTIME`）会立即按没凭据退出；检测不到标记的（如 WorkBuddy）会尝试用 `open` 打开浏览器，可能被拦并等满 5 分钟。用选项卡问用户：在**你自己的终端（沙箱外）**运行 `skmr login`，或给这个 agent 一把 `SKILLMASTER_API_KEY`；拿到凭据后再运行 `startup`。
+- **退出码 4**：凭据本身失效（`unauthenticated` / `token_idle` / `token_expired` / `token_revoked`），或者 `SKILLMASTER_API_KEY` 不是一把有效的 key。按输出里的句子处理：重新登录、续期或新签；环境变量不对就改对或去掉它。不要把旧凭据或坏变量交给 `startup`。账号被停用等其他 401 会落进「其他」，按输出里的句子说。
+- **其他退出码，或 stderr 里没有「本机没有凭据」**：可能是凭据读不出来，也可能是服务器或网络的问题；按输出里的句子说，不要当「已登录」。**客户端已经装好了，不要说「什么都没装成」**；停在这里，把报错原文告诉用户。
 
 （短名字 `skmr` 已经能用的，用短名字也行；第 4 步处理过 PATH 的情况，就用上面这条绝对路径。）
 
-到这一步安装就结束了。登录和迁移本机技能都由 `startup` 负责，它会接着往下走。你不要在这里解释后面的步骤，也不要替它说。
+到这一步安装就结束了。**只有退出码 0 才直接运行 `startup`**；退出码 1（且 stderr 有「本机没有凭据」）/ 4 按上面的分支拿到可用凭据后再运行；其他退出码（包括网络或读取失败的 1）按上面的分支停下，不直接运行 `startup`。你不要在这里解释后面的步骤，也不要替它说。
 
 ## 附录 A · 安装脚本报错时怎么说
 
 | 脚本报什么 | 说哪行 | 接下来怎么做 |
 |---|---|---|
 | 下载失败、`Connection reset by peer`、连不上 | 17 | 重试一次；再失败说第 20 行，停下 |
-| `建不了安装目录` / `复制失败` | 18 | 先 `export SKILLMASTER_INSTALL_DIR=<目录>`（Windows：`$env:SKILLMASTER_INSTALL_DIR='<目录>'`），再跑一遍安装；仍失败说第 20 行，停下 |
+| `建不了临时目录` | 20 | 先请用户同意「只这一次把安装命令放到沙箱外跑」，重跑一次；仍失败说第 20 行，停下 |
+| `建不了安装目录` / `解析不了安装目录` / `复制失败` | 18 | 先 `SKILLMASTER_INSTALL_DIR=<目录>` 放在**同一条命令**里（Windows：`$env:SKILLMASTER_INSTALL_DIR='<目录>'`），再跑一遍安装；如果提示沙箱，先按脚本提示放到沙箱外跑一次；仍失败说第 20 行，停下 |
+| `改不了 … 的权限` / `写不进 … 也改不了名` | 18 | 同上：换 `SKILLMASTER_INSTALL_DIR` 重跑；如果提示沙箱，先放到沙箱外跑一次；仍失败说第 20 行，停下 |
 | `校验和不符` | 19 | 重试一次；再失败说第 20 行，停下 |
 | `解包失败` | 20 | 包坏了或下载不完整，重试一次；再失败停下 |
 | `checksums.txt 里没有 …` | 16 | 清单里没有这台机器的包，按「这台电脑装不了」处理，给选项卡 |
 | `需要 curl` / `需要 sha256sum` | 16 | 这台机器缺少安装工具，按「装不了」处理，给选项卡 |
+| `安装被中断` | —（单独说，不要套第 20 行） | 客户端可能只写了一半，请重跑安装；重跑后 `--version` 仍失败按第 26 行。Windows 安装器没有这条提示，被杀后同样处理 |
 | `装好了但跑不起来` | 26 | 客户端装上了、执行失败；不要说「什么都没装成」 |
 | `不支持的系统` / `认不出架构` | 16 | 这台机器装不了，给选项卡，停下 |
 
@@ -337,7 +393,9 @@ curl -fsSLO https://dl.skillmasterai.com/beta/skillmaster_linux_amd64.tar.gz
 sha256sum -c --ignore-missing checksums.txt     # macOS 用：shasum -a 256 -c --ignore-missing checksums.txt
 tar -xzf skillmaster_linux_amd64.tar.gz
 mkdir -p ~/.local/bin
-mv skmr ~/.local/bin/
+cp skmr ~/.local/bin/skmr      # 不用 mv：沙箱里覆盖已有文件要 rename，会被拒
+chmod 755 ~/.local/bin/skmr
+# 覆盖正在运行的 skmr 会失败（Linux ETXTBSY）：先退出它，或换个目录再继续。
 ```
 
 Windows 用 `Expand-Archive` 解开 zip，把 `skmr.exe` 放进 `%LOCALAPPDATA%\SkillMaster\bin`，并把这个目录加进用户 PATH。

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
 )
 
 // A machine with no credential and no browser gets a refusal, not half a journey.
@@ -32,6 +33,59 @@ func TestStartupRefusesWithoutACredentialAndNamesBothWays(t *testing.T) {
 		t.Errorf("exit code = %d, want 4 (the credential class)", got)
 	}
 	for _, want := range []string{"skmr login", config.ApiKeyEnv} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %q:\n%s", want, err)
+		}
+	}
+}
+
+// **A detectable sandbox can have `open` and still not open a browser.** Starting the login there
+// would print a URL the blocked command cannot relay and wait the full callback timeout. The
+// command takes the no-browser path instead and names the API key.
+func TestASandboxWithoutCredentialDoesNotStartABrowserLogin(t *testing.T) {
+	t.Setenv(config.ApiKeyEnv, "")
+	t.Setenv("SANDBOX_RUNTIME", "1")
+	wasBrowser, wasLogin := browserAvailable, startLogin
+	browserAvailable = func() bool { return true }
+	started := false
+	startLogin = func(context.Context, string, credentials.EnvStore, string) error {
+		started = true
+		return nil
+	}
+	t.Cleanup(func() { browserAvailable, startLogin = wasBrowser, wasLogin })
+
+	_, err := clientFor(context.Background(), false)
+	if err == nil {
+		t.Fatal("clientFor succeeded with no credential in a sandbox")
+	}
+	if started {
+		t.Fatal("a browser login was started inside a detectable sandbox")
+	}
+	for _, want := range []string{config.ApiKeyEnv, "沙箱外"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("message = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+// **The sandbox sentence is the one that can be acted on.** `skmr login` inside the same sandbox
+// reaches the blocked `open`; `startup` has to name the terminal that will work, and keep the
+// credential exit code so an agent can tell it apart from a network failure.
+func TestStartupInASandboxNamesTheTerminalItHasToRunIn(t *testing.T) {
+	t.Setenv(config.ApiKeyEnv, "")
+	t.Setenv("SANDBOX_RUNTIME", "1")
+	original := browserAvailable
+	browserAvailable = func() bool { return true }
+	t.Cleanup(func() { browserAvailable = original })
+
+	err := startup(context.Background(), nil)
+	if err == nil {
+		t.Fatal("startup succeeded with no credential in a sandbox")
+	}
+	if got := reportError(err); got != 4 {
+		t.Errorf("exit code = %d, want 4 (the credential class)", got)
+	}
+	for _, want := range []string{"沙箱外", config.ApiKeyEnv} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q:\n%s", want, err)
 		}

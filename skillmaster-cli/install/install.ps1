@@ -82,6 +82,11 @@ try {
     # exception the document cannot match, and the failure gets relayed verbatim instead.
     try { New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop | Out-Null }
     catch { Die "建不了安装目录：$InstallDir" }
+    # The lines printed below are commands the user or an agent will paste; a relative override
+    # would stop meaning the same thing after a `Set-Location`. Resolve with PowerShell's own
+    # provider, not `[IO.Path]::GetFullPath`: the latter uses the process directory (which
+    # `Set-Location` need not update) and treats `~` as a literal character.
+    $InstallDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InstallDir)
 
     # **Write the executable in place first.** A sandbox can allow writing a file and still refuse
     # to rename over an existing one; this installer is often run by an agent (on Windows the
@@ -131,8 +136,13 @@ try {
     if ($LASTEXITCODE -ne 0) { Die "装好了但跑不起来：$target --version" }
 
     Say ""
-    Say "下一步：skmr doctor --fix（把状态目录写进检测到的 AI 工具配置；Windows 安装器不做这一步）"
-    Say "然后：skmr startup"
+    Say '下一步：'
+    Say ('  & "' + $target + '" doctor --fix')
+    Say '（把状态目录写进检测到的 AI 工具配置；Windows 安装器不做这一步。）'
+    Say '然后：'
+    Say ('  & "' + $target + '" auth status')
+    Say '已登录再运行：'
+    Say ('  & "' + $target + '" startup')
 } finally {
     # The staged copy lives in the install directory (it has to, for the rename to be atomic), so it
     # is not covered by removing $tmp: a failed replace would otherwise leave it beside the old
