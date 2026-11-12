@@ -142,7 +142,7 @@ public final class ModuleMap {
             // through UsageHistory, and the write path goes through RecordActivityUseCase.
             new Module("M17", "activity", MODULES_PACKAGE + ".activity",
                     Set.of("activity_event", "skill_collaborator_day")),
-            // M18 is v63's feedback inbox: one document a person sends the platform. It owns the
+            // M18 is v64's feedback inbox: one document a person sends the platform. It owns the
             // row and its archive pointer; the notification is M14's, the object is M12's.
             new Module("M18", "feedback", MODULES_PACKAGE + ".feedback",
                     Set.of("user_feedback")));

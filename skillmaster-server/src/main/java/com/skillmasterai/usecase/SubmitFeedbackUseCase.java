@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * One feedback document: validate it, apply the throttle, store it, tell the submitter, and leave
- * an audit row (v63).
+ * an audit row (v64).
  *
  * <p><strong>The consent version is the server's, not the client's.</strong> The client sends the
  * version it displayed; the submission is refused if that is not the version this deployment
@@ -85,7 +85,7 @@ public class SubmitFeedbackUseCase {
             throw new RequestException(ErrorCode.FEEDBACK_CONSENT_STALE,
                     "同意说明已更新，请重新预览后再提交。");
         }
-        // **A key prefix is replaced, not confirmed** (v63 做 #13): a client that did not redact
+        // **A key prefix is replaced, not confirmed** (v64 做 #13): a client that did not redact
         // first still gets its document stored, with the key replaced below. The three personal-data
         // categories are the ones the person has to confirm.
         FeedbackSafety.Scan scan = FeedbackSafety.scan(text);

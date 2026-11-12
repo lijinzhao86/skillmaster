@@ -133,6 +133,12 @@ jobs:
     name: Deploy
     # Merging proves the page builds; publishing it is a separate run.
     if: github.event_name == 'workflow_dispatch'
+    # **One site deploy at a time.** Two dispatches share the `site` symlink and the probe's
+    # view of it; the last switch wins, and a job can report "deployed" for a release that is
+    # no longer served. Same arrangement as `server.yml`'s deploy.
+    concurrency:
+      group: site-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -300,10 +306,22 @@ jobs:
           # On 2026-10-26 that reset rolled back a build that was fine, so the probe now asks the
           # question this job can answer: does the site answer through the real name and the real
           # certificate, from the machine that serves it.
+          # **It asks `home`, not `www`** (v63). Both serve this same build today; `www` may stop
+          # serving while the ICP licence is processed.
+          # **It compares bytes, not just the status.** The first `listen 443` block is the
+          # console, so a name nginx does not match — a missing `home` block, a typo — answers
+          # 200 with the console's `index.html`; a status probe would call that a success.
+          # **It follows the redirect, and both names resolve here.** At P2 `home` becomes a 301
+          # to `www`; with `--resolve` on both, the probe still lands on this same build, so no
+          # P2 edit is needed.
           if ! ssh "${opts[@]}" "$target" \
-               'curl -fsS --retry 10 --retry-delay 2 --retry-all-errors --max-time 5 \
-                  --resolve www.skillmasterai.com:443:127.0.0.1 -o /dev/null \
-                  https://www.skillmasterai.com/'; then
+               'f=$(mktemp)
+                trap "rm -f $f" EXIT
+                curl -fsSL --retry 10 --retry-delay 2 --retry-all-errors --max-time 5 \
+                  --resolve home.skillmasterai.com:443:127.0.0.1 \
+                  --resolve www.skillmasterai.com:443:127.0.0.1 \
+                  -o "$f" https://home.skillmasterai.com/index.html &&
+                  cmp "$f" /srv/skillmaster/site/index.html'; then
             echo "the new build did not answer; returning to $previous" >&2
             ssh "${opts[@]}" "$target" \
               "set -e

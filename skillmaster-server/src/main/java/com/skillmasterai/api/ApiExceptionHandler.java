@@ -252,7 +252,7 @@ class ApiExceptionHandler {
         org.springframework.http.HttpStatus status = switch (e.code()) {
             case com.skillmasterai.common.ErrorCode.INVALID_NAME
                     -> org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY;
-            /* v63: a missing receipt is a 404, and a spent hourly budget is a 429 whose message
+            /* v64: a missing receipt is a 404, and a spent hourly budget is a 429 whose message
                carries the time the next one is allowed. The generic 400 would tell the CLI the
                wrong thing to do with either. */
             case com.skillmasterai.common.ErrorCode.FEEDBACK_NOT_FOUND

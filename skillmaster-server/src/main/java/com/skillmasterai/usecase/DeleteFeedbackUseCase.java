@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Withdraws one feedback document: the object storage copy first, then the row, then the audit
- * record (v63).
+ * record (v64).
  *
  * <p><strong>Somebody else's receipt is a 404, not a 403.</strong> The same answer a private skill
  * gives: whether the receipt exists is not information this caller is entitled to.

@@ -39,7 +39,7 @@ public final class PgFeedbackService implements FeedbackService {
     private static final int RECEIPT_RANDOM = 6;
     private static final int RECEIPT_ATTEMPTS = 3;
 
-    /** The only channel v63 has; stored on the row so a future channel is distinguishable. */
+    /** The only channel v64 has; stored on the row so a future channel is distinguishable. */
     private static final String SOURCE = "cli";
 
     private final FeedbackRepository repository;

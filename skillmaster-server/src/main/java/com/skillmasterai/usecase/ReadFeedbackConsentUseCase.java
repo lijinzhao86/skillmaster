@@ -4,7 +4,7 @@ import com.skillmasterai.modules.feedback.FeedbackConsent;
 import org.springframework.stereotype.Component;
 
 /**
- * The notice a person is shown before a feedback document leaves their machine (v63).
+ * The notice a person is shown before a feedback document leaves their machine (v64).
  *
  * <p>The text lives here rather than in the CLI so that a policy change reaches everyone without a
  * CLI release. It is deliberately short: the full clause is in the privacy policy, and this is the

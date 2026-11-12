@@ -1,4 +1,4 @@
--- v63: one feedback document a person sends the platform.
+-- v64: one feedback document a person sends the platform.
 --
 -- **The row is the record; the object storage copy is a durability copy.** Nothing is deleted on
 -- a schedule: the privacy policy says the content is kept for as long as it is needed, and the
@@ -37,7 +37,7 @@ CREATE INDEX idx_user_feedback_pending_archive ON user_feedback(archived_at)
   WHERE archived_at IS NULL;
 
 COMMENT ON TABLE user_feedback IS
-  'A feedback document a person sent the platform (v63). Kept for as long as the privacy policy says; the object storage copy is durability, not the only copy.';
+  'A feedback document a person sent the platform (v64). Kept for as long as the privacy policy says; the object storage copy is durability, not the only copy.';
 COMMENT ON COLUMN user_feedback.id IS
   'ULID. Internal identity; the receipt is the value a person sees and types.';
 COMMENT ON COLUMN user_feedback.receipt IS
@@ -55,7 +55,7 @@ COMMENT ON COLUMN user_feedback.consent_version IS
 COMMENT ON COLUMN user_feedback.consent_at IS
   'RFC3339 UTC. The moment the server accepted the consent.';
 COMMENT ON COLUMN user_feedback.source IS
-  'The channel the submission arrived on. `cli` in v63, the only channel; stored rather than implied so a future channel is distinguishable in the consent record.';
+  'The channel the submission arrived on. `cli` in v64, the only channel; stored rather than implied so a future channel is distinguishable in the consent record.';
 COMMENT ON COLUMN user_feedback.diagnostics IS
   'Only the whitelisted keys (cli_version, os, arch, at, command, error_code). Unknown keys are dropped before the write.';
 COMMENT ON COLUMN user_feedback.archive_key IS

@@ -1,8 +1,12 @@
 # 站点（`skillmaster-site/`）
 
-Workflow：`.github/workflows/site.yml`。产品形态：`www.skillmasterai.com` 的营销页，静态文件。
+Workflow：`.github/workflows/site.yml`。产品形态：`www.skillmasterai.com` 的营销页，静态文件；
+v63 起同一份构建也由 `home.skillmasterai.com` 提供（临时入口，切换与切回步骤见 `deploy/README.md`）。
 
 ## 与控制台完全同形
+
+**一处不同：站点 Deploy 是串行的**（`concurrency: site-deploy`，v63）。两次 dispatch 会共用同一个
+软链与部署探针，后一次会覆盖前一次、前一次还可能报出一个已经不在服务的版本。控制台没有这一条。
 
 | 现象 | 判据 |
 |---|---|

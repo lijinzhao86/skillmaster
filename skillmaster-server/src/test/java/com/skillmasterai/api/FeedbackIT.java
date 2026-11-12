@@ -12,7 +12,7 @@ import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
 
 /**
- * The feedback plane (v63): the notice, the submission, its refusals, the notification, and the
+ * The feedback plane (v64): the notice, the submission, its refusals, the notification, and the
  * withdrawal's ownership rule.
  */
 @Sql("/sql/truncate-business-tables.sql")

@@ -25,7 +25,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Writes one gzip NDJSON object per feedback row that has no durability copy yet (v63).
+ * Writes one gzip NDJSON object per feedback row that has no durability copy yet (v64).
  *
  * <p><strong>The row stays.</strong> Unlike the activity export, this is a copy, not a move: the
  * privacy policy says the content is kept, and the database is where the product reads it. The

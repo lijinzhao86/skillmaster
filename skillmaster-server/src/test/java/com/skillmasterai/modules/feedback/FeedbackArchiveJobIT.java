@@ -23,7 +23,7 @@ import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * The durability copy (v63): one gzip NDJSON object per row, the row stays, and a second sweep
+ * The durability copy (v64): one gzip NDJSON object per row, the row stays, and a second sweep
  * does not upload the same document twice.
  */
 @Sql("/sql/truncate-business-tables.sql")

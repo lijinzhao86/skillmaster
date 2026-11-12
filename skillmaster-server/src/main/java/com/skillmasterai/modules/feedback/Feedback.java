@@ -10,7 +10,7 @@ import java.util.Map;
  * row was written, for the same reason.
  *
  * @param receipt   the value a person sees and types: {@code FB-YYYYMMDD-XXXXXX}
- * @param source    the channel the submission arrived on: {@code cli} in v63
+ * @param source    the channel the submission arrived on: {@code cli} in v64
  * @param archiveKey the object key of the durability copy, or null before the archive job ran
  * @param diagnostics only the whitelisted keys; null when none were sent
  */

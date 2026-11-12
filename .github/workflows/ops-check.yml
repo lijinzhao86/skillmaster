@@ -89,11 +89,28 @@ jobs:
             fi
           done
 
+          # A valid certificate is not the same claim as one that still names every host it
+          # serves: re-issuing with a shorter `-d` list keeps the certificate valid and silently
+          # drops the name. `home` was added in v63, so this is what catches a rebuild from the
+          # old three-name command. Read it into a variable first: a failed `ssh` must be its
+          # own error, not "the certificate no longer names this host".
+          sans=$(ssh "${opts[@]}" "$target" \
+                   "openssl x509 -in /etc/skillmaster/tls/fullchain.pem -noout -ext subjectAltName") \
+            || { echo "::error::cannot read the main certificate"; exit 1; }
+          for name in skillmasterai.com www.skillmasterai.com console.skillmasterai.com \
+                      home.skillmasterai.com; do
+            if ! grep -q "DNS:$name" <<< "$sans"; then
+              echo "::error::the main certificate no longer names $name"
+              exit 1
+            fi
+            echo "certificate names $name"
+          done
+
           # 4. Every name nginx serves must still point at this machine. A missing or changed
           # record is not an outage the URL probe can distinguish from a healthy one until DNS
           # caches expire.
           for name in console.skillmasterai.com www.skillmasterai.com \
-                      dl.skillmasterai.com skillmasterai.com; do
+                      home.skillmasterai.com dl.skillmasterai.com skillmasterai.com; do
             if ! getent ahostsv4 "$name" | awk '{print $1}' | sort -u | grep -qx "$DEPLOY_HOST"; then
               echo "::error::$name does not resolve to $DEPLOY_HOST"
               exit 1

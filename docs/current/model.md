@@ -53,7 +53,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **BlobDeletion** | 待删除的 OSS 对象（outbox） | `sha256`；与删 `Blob` 行同一事务写入，清扫成功后删除 |
 | **SkillStat** | 使用计数（P1 才写） | `skill_id` |
 | **AuditEvent** | 某事发生过的记录 | 自增 `bigint`——只追加、量最大、id 从不进 URL |
-| **Feedback** | 用户或 agent 提交的一份反馈文档；数据库行长期保留，对象存储另有一份副本（[ADR 0188](../decisions/0188-feedback-is-kept-indefinitely-with-an-object-copy.md)） | 双身份：`id`（ULID）是行身份，`receipt`（`FB-YYYYMMDD-XXXXXX`）是人看到、输入与撤回时用的值（v63） |
+| **Feedback** | 用户或 agent 提交的一份反馈文档；数据库行长期保留，对象存储另有一份副本（[ADR 0189](../decisions/0189-feedback-is-kept-indefinitely-with-an-object-copy.md)） | 双身份：`id`（ULID）是行身份，`receipt`（`FB-YYYYMMDD-XXXXXX`）是人看到、输入与撤回时用的值（v64） |
 
 **`current_version_id` 故意没有外键**，因为它指向 `skill_version`，而后者又指回 `skill`，加了就循环。它是模型里唯一的这种指法，值**只由上线动作移动**——可以前进也可以回移，回移就是回滚（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)）。
 

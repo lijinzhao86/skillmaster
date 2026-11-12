@@ -2,7 +2,7 @@ package main
 
 import "github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/help"
 
-// feedbackSpecs is the `feedback` group: the group and three command paths (v63).
+// feedbackSpecs is the `feedback` group: the group and three command paths (v64).
 var feedbackSpecs = []*help.Spec{
 	{
 		Path:      "feedback",

@@ -1,4 +1,4 @@
-# v63-feedback · 技术设计
+# v64-feedback · 技术设计
 
 > **最后更新**：2026-11-13
 > **所属版本**：[`README.md`](README.md)
@@ -45,7 +45,7 @@ CREATE TABLE user_feedback (
   content_sha256 TEXT NOT NULL,                 -- 服务端计算，不信任客户端
   consent_version TEXT NOT NULL,                -- 当前隐私政策版本
   consent_at     TEXT NOT NULL,                 -- RFC3339 UTC
-  source         TEXT NOT NULL,                 -- 提交渠道；v63 只有 cli
+  source         TEXT NOT NULL,                 -- 提交渠道；v64 只有 cli
   diagnostics    JSONB,                         -- 白名单字段，见 §接口
   archive_key    TEXT,                          -- OSS 对象键；未归档为 null
   archived_at    TEXT,
@@ -60,7 +60,7 @@ CREATE INDEX idx_user_feedback_pending_archive ON user_feedback(archived_at) WHE
 - **限流**：提交前 `SELECT count(*) FROM user_feedback WHERE user_id = :id AND created_at > :oneHourAgo`，到 `SubmitFeedbackUseCase.MAX_PER_HOUR` 条拒绝（值见 [`limits.md`](../../current/limits.md)）。并发下可能多放一条，本版接受；错误码里写清窗口。撤回会删掉自己被计数的行，所以「发送后立刻撤回」能重置这份计数——限流防的是失控的 agent，不防蓄意脚本，后者由审计事件留痕。
 - **归档**：`FeedbackArchiveJob` 每天把 `archived_at IS NULL` 的行逐条写成 gzip NDJSON，上传到 `feedback/YYYY/MM/DD/<receipt>.ndjson.gz`，再以 `WHERE id = :id AND archived_at IS NULL` 写回 `archive_key` / `archived_at`；一次运行按 500 条分批，最多 40 批，剩余留给下一次。**逐条一个对象**，撤回时按对象键精确删除；不按天打包，避免撤回要重写整天的文件。写回影响 0 行时：行还在＝另一实例已记同一确定性键，保留；行已不在＝撤回先提交，删掉刚上传的对象。暂存目录做符号链接拒绝与 0700，超过 1 小时的遗留暂存文件会被清理。
 - **删除**：`DeleteFeedbackUseCase` 在事务里用 `SELECT … FOR UPDATE` 锁住这一行（否则归档任务可能在上传后、写回前被删除穿过）→ 有 `archive_key` 先删对象 → 删行 → 写 `audit_event`。归档对象删除复用 `OssBlobStore.delete(key)`；`BlobStore` 增加 `deleteObject(String)` 默认方法，`RoutingBlobStore` 转发。对象删失败则整笔回滚，行留着，下次还能按键重试。
-- **账号注销**：v56 的清理把 `app_user` 行去标识化而不是删除，所以 `ON DELETE CASCADE` 不会触发；`user_id` 继续指向 `deleted-<id>` 的账号，反馈内容按提交内容保留（密钥前缀已脱敏，ADR 0188 决定 4）。注销后无法再运行删除命令，隐私政策写明可发邮件申请删除。
+- **账号注销**：v56 的清理把 `app_user` 行去标识化而不是删除，所以 `ON DELETE CASCADE` 不会触发；`user_id` 继续指向 `deleted-<id>` 的账号，反馈内容按提交内容保留（密钥前缀已脱敏，ADR 0189 决定 4）。注销后无法再运行删除命令，隐私政策写明可发邮件申请删除。
 
 ## 接口
 
@@ -133,8 +133,8 @@ CREATE INDEX idx_user_feedback_pending_archive ON user_feedback(archived_at) WHE
 | # | 问题 | 结论 |
 |---|---|---|
 | 1 | 同意说明的版本跟谁走？ | 用 `LegalTextVersions.privacy()`，不另立版本；隐私政策改版时 `feedback_consent_stale` 把客户端推到新说明。本版把隐私政策升到 1.2（新增反馈一节） |
-| 2 | 归档对象与数据库谁是主？ | 数据库是主，OSS 是耐久副本；归档后不删行。撤回两边都删（ADR 0188） |
+| 2 | 归档对象与数据库谁是主？ | 数据库是主，OSS 是耐久副本；归档后不删行。撤回两边都删（ADR 0189） |
 | 3 | 手机号 / 身份证号 / 银行卡号要不要脱敏？ | 密钥前缀硬脱敏；其余三类只提示、保留原值（它们是报告的一部分），运营查看需单独的访问限制 |
-| 4 | 账号注销时反馈怎么处理？ | 账号行去标识化、反馈行保留、`user_id` 不变（ADR 0188 决定 4）；隐私政策写清与 30 天清理的边界 |
+| 4 | 账号注销时反馈怎么处理？ | 账号行去标识化、反馈行保留、`user_id` 不变（ADR 0189 决定 4）；隐私政策写清与 30 天清理的边界 |
 
 **已知残余**：预览与提交是两次独立运行，提交前 CLI 总会重新取当前同意说明并记录它的版本。若两次之间政策改版，用户看到的是上一版说明、记录的是提交时的版本——本版接受（撤销唯一发生在政策部署的瞬间）；要严格禁止，需要把预览时的版本带进提交（一次性令牌）。

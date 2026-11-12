@@ -81,7 +81,7 @@ public interface BlobStore {
     }
 
     /**
-     * Removes one object written by {@link #putObject} (v63's feedback withdrawal).
+     * Removes one object written by {@link #putObject} (v64's feedback withdrawal).
      *
      * <p>Named objects have no reference count to consult: the row that names the key is the
      * reference, and the caller deletes the object before it deletes the row. Idempotent where the

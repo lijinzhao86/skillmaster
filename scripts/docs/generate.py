@@ -249,7 +249,7 @@ def gen_limits() -> str:
             f"| `SkillFieldLimits.{name}` | `{expression.strip()}` | {value} |"
         )
 
-    # v63: the feedback document ceiling and its hourly budget. The CLI keeps a copy of the
+    # v64: the feedback document ceiling and its hourly budget. The CLI keeps a copy of the
     # ceiling to fail before the request travels; the server is still the gate.
     feedback = read(SERVER / "modules/feedback/FeedbackSafety.java")
     rate = read(SERVER / "usecase/SubmitFeedbackUseCase.java")

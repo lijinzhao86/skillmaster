@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The feedback plane (v63): the consent notice, one submission, one withdrawal.
+ * The feedback plane (v64): the consent notice, one submission, one withdrawal.
  *
  * <p>Thin, like the other controllers. The consent check, the scan, the throttle and the
  * notification all happen in the use cases; what is left here is the wire shape.

@@ -1,8 +1,8 @@
-# 0188 · 反馈长期保留，另存一份对象存储
+# 0189 · 反馈长期保留，另存一份对象存储
 
 - **状态**：已采纳
 - **日期**：2026-11-13
-- **所属版本**：[`v63-feedback`](../versions/v63-feedback/README.md)
+- **所属版本**：[`v64-feedback`](../versions/v64-feedback/README.md)
 - **依赖**：[0175](0175-account-deletion-is-immediate-with-a-fixed-retention.md)（注销与固定保留期）、[0130](0130-large-blobs-live-in-object-storage.md)（对象存储的接缝）
 - **相关**：[`v58-usage-history`](../versions/v58-usage-history/README.md)（同一套冷归档设施）
 
@@ -41,5 +41,5 @@
 
 - **对象存储成本随反馈量线性增长**；量很小，但需要一个能按前缀统计的查看方式（运营侧，将来）。
 - **撤回是一条真正的双删**：`deleteObject` + `DELETE`，顺序固定；`BlobStore` 因此新增 `deleteObject` 的默认方法。
-- **隐私政策的保留期表述**由 v63 写定为「至少 6 个月、不设自动删除期限」；#44 定整体口径时保持这一节不变。
+- **隐私政策的保留期表述**由 v64 写定为「至少 6 个月、不设自动删除期限」；#44 定整体口径时保持这一节不变。
 - **账号注销**：反馈行保留、账号行去标识化；如果将来把反馈纳入注销清理，需要再开一条 ADR 取代本条的第 4 点。

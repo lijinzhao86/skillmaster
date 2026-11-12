@@ -49,7 +49,7 @@ var codes = []Code{
 	{Name: "draft_name_is_frozen", Text: "这一版的名称不能再改", Exit: 1},
 	{Name: "note_too_long", Text: "说明太长", Exit: 1},
 
-	// v63: the feedback plane's own refusals.
+	// v64: the feedback plane's own refusals.
 	{Name: "feedback_sensitive", Text: "内容里可能有个人信息", Exit: 1},
 	{Name: "feedback_throttled", Text: "一小时内的反馈条数用完了", Exit: 1},
 	{Name: "feedback_consent_stale", Text: "同意说明已更新", Exit: 1},

@@ -1,14 +1,14 @@
-# 0187 · 反馈的同意在 agent 通道里记录，不放到浏览器
+# 0188 · 反馈的同意在 agent 通道里记录，不放到浏览器
 
 - **状态**：已采纳
 - **日期**：2026-11-13
-- **所属版本**：[`v63-feedback`](../versions/v63-feedback/README.md)
+- **所属版本**：[`v64-feedback`](../versions/v64-feedback/README.md)
 - **依赖**：[0181](0181-text-limits-use-unicode-code-points.md)（文本上限按码点）、[0175](0175-account-deletion-is-immediate-with-a-fixed-retention.md)（注销与去标识化）
 - **相关**：[`research/agent-feedback-legal-risk.md`](../research/agent-feedback-legal-risk.md)（条文与风险）
 
 ## 背景
 
-v63 让 agent 写一份反馈文档提交给平台。平台是个人信息处理者，处理前要有告知与同意；但提交发生在 CLI 里，agent 既能打印内容，也能自己按发送。摆上桌的选项：
+v64 让 agent 写一份反馈文档提交给平台。平台是个人信息处理者，处理前要有告知与同意；但提交发生在 CLI 里，agent 既能打印内容，也能自己按发送。摆上桌的选项：
 
 | | 做法 | 为什么被否 |
 |---|---|---|
@@ -19,7 +19,7 @@ v63 让 agent 写一份反馈文档提交给平台。平台是个人信息处理
 
 ## 决定
 
-1. **提交只在 CLI / agent 通道完成**；不做浏览器批准，也不做「严格模式」。浏览器批准留作将来的可选项（[`v63-feedback`](../versions/v63-feedback/prd.md) 不做 9）。
+1. **提交只在 CLI / agent 通道完成**；不做浏览器批准，也不做「严格模式」。浏览器批准留作将来的可选项（[`v64-feedback`](../versions/v64-feedback/prd.md) 不做 9）。
 2. **预览与发送分离**：不带 `--consent` 只打印将发送的完整文档（密钥前缀已替换）、同意说明与将发送的字段，不发送；带 `--consent` 才提交。这一步只防「顺手发」，不作为同意的证明。
 3. **服务端记录**：同意版本（当前隐私政策版本，不接受客户端指定）、内容哈希、时间、来源（CLI）。每次提交都按当前版本记录，政策改版不需要额外追认。
 4. **提交后给用户一条站内通知**（复用 `announcement` 形状），含回执号与 `skmr feedback delete <回执> --yes`；删除同时移除对象存储副本。

@@ -11,7 +11,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Wires M18 (v63). The staging directory is M17's {@link ArchiveSettings}: the same host-private
+ * Wires M18 (v64). The staging directory is M17's {@link ArchiveSettings}: the same host-private
  * place the activity export uses, for the same reason — a failed upload leaves a file an operator
  * can retry.
  */

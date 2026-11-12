@@ -402,9 +402,13 @@ check(
   '隐私政策：标题在',
   (await page.$eval('.legal h1', (el) => el.textContent?.trim())) === '隐私政策',
 )
+// The number's home is `legalText.ts`. Pinning a literal here is how this check stayed red from
+// the day the policy moved to 1.1; the demo owes a date and a version, not a specific number.
 check(
   '隐私政策：有生效日期与版本',
-  ((await page.$eval('.legal-meta', (el) => el.textContent ?? '')).includes('版本 1.0')),
+  /\d{4} 年 \d{1,2} 月 \d{1,2} 日.*版本 \d+\.\d+/.test(
+    await page.$eval('.legal-meta', (el) => el.textContent ?? ''),
+  ),
 )
 check('隐私政策：返回首页在', (await hrefOf('#legalBack')) === '?')
 check('隐私政策：页脚在', (await page.$('#footPrivacy')) !== null)
