@@ -22,5 +22,6 @@
 | M15 | metrics | `.metrics` | `skill_usage_day`、`skill_usage_total` | `SkillLoad`、`UsageQuery`、`UsageRecorder`、`UsageScope`、`UsageSnapshot` |
 | M16 | secret | `.secret` | `service_credential`、`credential_binding`、`credential_use`、`credential_share` | `SecretService`、`CredentialRef`、`CredentialBinding`、`CredentialLease`、`CredentialValue`、`IncomingBinding`、`SecretSettings`、`SecretNotFoundException`、`CredentialBindingNotFoundException`、`BindingConflictException`、`SecretValueTooLargeException`、`QuotaExceededException`、`NotShareableException`、`ShareNotFoundException`、`CredentialVaultUnavailableException` |
 | M17 | activity | `.activity` | `activity_event`、`skill_collaborator_day` | `ActivityEvent`、`ActivityKinds`、`ActivityRecorder`、`ArchiveSettings`、`InvokeActivity`、`SearchActivity`、`SearchHit`、`UsageHistory` |
+| M18 | feedback | `.feedback` | `user_feedback` | `Feedback`、`FeedbackConsent`、`FeedbackSafety`、`FeedbackService` |
 
 包结构、依赖规则与它们的强制强度见 [`rules.md`](rules.md)；每个模块为什么这样切见 [`modules/`](modules/)。

@@ -25,6 +25,7 @@ var dispatchFunctions = map[string]string{
 	"draftVerb":         "draft",
 	"notificationsVerb": "notifications",
 	"secretVerb":        "secret",
+	"feedbackVerb":      "feedback",
 	"authCmd":           "auth",
 	"myTagsCmd":         "skills my-tags",
 	"tagVerb":           "skill tag",

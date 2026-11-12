@@ -34,7 +34,7 @@ docs/current/
 ├── model.md       可选。资源与版本模型：从用户到字节的实体与身份
 ├── system.md      生成。模块表，源是 ModuleMap.java
 ├── schema.md      生成。表与列，源是 Flyway 迁移
-├── limits.md      生成。上传与对象存储的上限，源是 IngestLimits / BlobSettings
+├── limits.md      生成。上传、对象存储、文本与反馈的上限，源是 IngestLimits / BlobSettings / SkillFieldLimits / FeedbackSafety / SubmitFeedbackUseCase
 ├── errors.md      生成。错误码，源是 ErrorCode
 ├── cli.md         生成。命令语法，源是 help.Spec
 ├── config.md      生成。配置项与环境变量，源是 application.yml
@@ -53,7 +53,7 @@ docs/current/
 | [`model.md`](model.md) | 从用户到字节的实体、**四层粒度各自的身份**、关联、寻址、版本生命周期、与 git 的对照 | **已就位** |
 | [`system.md`](system.md) | 模块表：编号、包后缀、拥有的表、对外发布类型 | **生成**（v40） |
 | [`schema.md`](schema.md) | 表与列，按迁移顺序应用 | **生成**（v40） |
-| [`limits.md`](limits.md) | 上传与对象存储的上限、对象存储的分流阈值 | **生成**（v40） |
+| [`limits.md`](limits.md) | 上传与对象存储的上限、对象存储的分流阈值、技能文本与反馈的上限 | **生成**（v40） |
 | [`errors.md`](errors.md) | 错误码的线上值 | **生成**（v40） |
 | [`cli.md`](cli.md) | 命令路径、一句话与用法 | **生成**（v40） |
 | [`config.md`](config.md) | 配置键、默认值与可用环境变量 | **生成**（v40） |

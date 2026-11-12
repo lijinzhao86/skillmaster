@@ -337,6 +337,20 @@ public enum ErrorCode {
     /** The sentence is above 200 Unicode code points. Ships the actual count and the limit. */
     MY_WHEN_TO_USE_TOO_LONG("my_when_to_use_too_long"),
 
+    /* ---- v63: the feedback a person sends the platform ---- */
+    /** The document is empty after trimming. */
+    FEEDBACK_EMPTY("feedback_empty"),
+    /** The document is above {@code FeedbackSafety.MAX_CODE_POINTS}. Ships the actual count and the limit. */
+    FEEDBACK_TOO_LONG("feedback_too_long"),
+    /** The consent version the client showed is not the one this deployment serves. */
+    FEEDBACK_CONSENT_STALE("feedback_consent_stale"),
+    /** The document looks like it carries personal or secret data; the client must confirm. */
+    FEEDBACK_SENSITIVE("feedback_sensitive"),
+    /** More than {@code SubmitFeedbackUseCase.MAX_PER_HOUR} submissions in one hour. Ships the time after which the next one is allowed. */
+    FEEDBACK_THROTTLED("feedback_throttled"),
+    /** No such receipt, or it belongs to somebody else. */
+    FEEDBACK_NOT_FOUND("feedback_not_found"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

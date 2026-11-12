@@ -148,8 +148,8 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
      */
     public record Account(String phoneHmacKey, String phoneEncKey,
             @DefaultValue("10") int bcryptStrength,
-            @DefaultValue("1.0") String termsVersion,
-            @DefaultValue("1.1") String privacyVersion,
+            @DefaultValue("1.1") String termsVersion,
+            @DefaultValue("1.2") String privacyVersion,
             @DefaultValue("P30D") Duration deletionRetention) {
     }
 

@@ -12,6 +12,10 @@
 | `skmr doctor` | 自检；--fix 改配置 | `skmr doctor [--fix [--undo] [--dry-run]]` |
 | `skmr draft` | 草稿的动词 | — |
 | `skmr draft create` | 新建一份草稿 | `skmr draft create <命名空间>/<名字> [--from <版本\|版本码>] --name <名称> [--note <说明>]` |
+| `skmr feedback` | 把解决不了的问题交给平台 | — |
+| `skmr feedback delete` | 撤回并删除一条反馈 | `skmr feedback delete <回执> [--yes] [--json]` |
+| `skmr feedback send` | 预览或提交一份反馈 | `skmr feedback send [--file <路径>] [--skill <地址>] [--attach-diagnostics] [--command <命令>] [--error-code <码>] [--consent] [--allow-sensitive] [--json]` |
+| `skmr feedback template` | 打印反馈文档模板 | `skmr feedback template` |
 | `skmr login` | 在浏览器里登录这台机器 | `skmr login [--keyring]` |
 | `skmr logout` | 退出本机的凭据 | `skmr logout` |
 | `skmr notifications` | 通知：待处理与全部 | — |

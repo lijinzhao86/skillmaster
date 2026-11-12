@@ -46,6 +46,9 @@ TRUNCATE TABLE
     -- skill and app_user, so it must be emptied before either is considered.
     activity_event,
     skill_collaborator_day,
+    -- v63: feedback documents. Listed here because a test that submits one must not let a later
+    -- test count it — the throttle and the receipt are both length-sensitive.
+    user_feedback,
     blob_content,
     version_file,
     skill_version,

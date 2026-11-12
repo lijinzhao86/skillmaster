@@ -249,10 +249,18 @@ class ApiExceptionHandler {
            name is a well-formed value the server understood and refused on its own rules, which is
            what 422 names. Kept here rather than as a second exception type: the payload is the same
            code-and-details body, and a second type would exist only to choose a status. */
-        org.springframework.http.HttpStatus status = e.code()
-                == com.skillmasterai.common.ErrorCode.INVALID_NAME
-                        ? org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY
-                        : org.springframework.http.HttpStatus.BAD_REQUEST;
+        org.springframework.http.HttpStatus status = switch (e.code()) {
+            case com.skillmasterai.common.ErrorCode.INVALID_NAME
+                    -> org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY;
+            /* v63: a missing receipt is a 404, and a spent hourly budget is a 429 whose message
+               carries the time the next one is allowed. The generic 400 would tell the CLI the
+               wrong thing to do with either. */
+            case com.skillmasterai.common.ErrorCode.FEEDBACK_NOT_FOUND
+                    -> org.springframework.http.HttpStatus.NOT_FOUND;
+            case com.skillmasterai.common.ErrorCode.FEEDBACK_THROTTLED
+                    -> org.springframework.http.HttpStatus.TOO_MANY_REQUESTS;
+            default -> org.springframework.http.HttpStatus.BAD_REQUEST;
+        };
         return ResponseEntity.status(status)
                 .body(ApiError.of(e.code(), e.getMessage(), e.details()));
     }

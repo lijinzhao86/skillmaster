@@ -80,6 +80,19 @@ public interface BlobStore {
         throw new IllegalStateException("this store has no named-object sink");
     }
 
+    /**
+     * Removes one object written by {@link #putObject} (v63's feedback withdrawal).
+     *
+     * <p>Named objects have no reference count to consult: the row that names the key is the
+     * reference, and the caller deletes the object before it deletes the row. Idempotent where the
+     * backend is: deleting a key that is already gone is not an error.
+     *
+     * @throws IllegalStateException when this deployment has no object storage
+     */
+    default void deleteObject(String key) {
+        throw new IllegalStateException("this store has no named-object sink");
+    }
+
     boolean exists(String sha256Hex);
 
     /**

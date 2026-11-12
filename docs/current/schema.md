@@ -57,6 +57,7 @@
 | `skill_collaborator_day` | M17 |
 | `my_skill_when_to_use` | M12 |
 | `my_skill_when_to_use_embedding` | M13 |
+| `user_feedback` | M18 |
 
 ## `app_user`
 
@@ -567,3 +568,19 @@
 - `model` — TEXT NOT NULL
 - `embedding` — vector(1024) NOT NULL
 - `updated_at` — TEXT NOT NULL
+
+## `user_feedback`
+
+- `id` — TEXT PRIMARY KEY
+- `receipt` — TEXT NOT NULL UNIQUE
+- `user_id` — TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE
+- `skill_address` — TEXT
+- `content` — TEXT NOT NULL
+- `content_sha256` — TEXT NOT NULL
+- `consent_version` — TEXT NOT NULL
+- `consent_at` — TEXT NOT NULL
+- `source` — TEXT NOT NULL
+- `diagnostics` — JSONB
+- `archive_key` — TEXT
+- `archived_at` — TEXT
+- `created_at` — TEXT NOT NULL

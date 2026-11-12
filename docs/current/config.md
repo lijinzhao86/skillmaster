@@ -28,8 +28,8 @@
 | `skillmaster.account.phone-hmac-key` | `${SKILLMASTER_PHONE_HMAC_KEY:}` |
 | `skillmaster.account.phone-enc-key` | `${SKILLMASTER_PHONE_ENC_KEY:}` |
 | `skillmaster.account.bcrypt-strength` | `${SKILLMASTER_BCRYPT_STRENGTH:10}` |
-| `skillmaster.account.terms-version` | `${SKILLMASTER_TERMS_VERSION:1.0}` |
-| `skillmaster.account.privacy-version` | `${SKILLMASTER_PRIVACY_VERSION:1.1}` |
+| `skillmaster.account.terms-version` | `${SKILLMASTER_TERMS_VERSION:1.1}` |
+| `skillmaster.account.privacy-version` | `${SKILLMASTER_PRIVACY_VERSION:1.2}` |
 | `skillmaster.account.deletion-retention` | `${SKILLMASTER_DELETION_RETENTION:P30D}` |
 | `skillmaster.sessions.idle` | `${SKILLMASTER_SESSIONS_IDLE:24h}` |
 | `skillmaster.sessions.absolute` | `${SKILLMASTER_SESSIONS_ABSOLUTE:7d}` |

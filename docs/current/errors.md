@@ -81,4 +81,10 @@
 | `CREDENTIAL_VAULT_UNAVAILABLE` | `credential_vault_unavailable` |
 | `MY_WHEN_TO_USE_EMPTY` | `my_when_to_use_empty` |
 | `MY_WHEN_TO_USE_TOO_LONG` | `my_when_to_use_too_long` |
+| `FEEDBACK_EMPTY` | `feedback_empty` |
+| `FEEDBACK_TOO_LONG` | `feedback_too_long` |
+| `FEEDBACK_CONSENT_STALE` | `feedback_consent_stale` |
+| `FEEDBACK_SENSITIVE` | `feedback_sensitive` |
+| `FEEDBACK_THROTTLED` | `feedback_throttled` |
+| `FEEDBACK_NOT_FOUND` | `feedback_not_found` |
 | `INTERNAL_ERROR` | `internal_error` |

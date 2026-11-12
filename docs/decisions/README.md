@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 186 条。
+共 188 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -194,3 +194,5 @@
 | [0184](0184-taking-a-public-skill-down-is-a-service-lifecycle.md) | 公开 skill 的退场按服务生命周期 | 已采纳 | 2026-11-11 |
 | [0185](0185-credentials-default-to-a-file.md) | CLI 凭据默认存文件，钥匙串改为可选 | 已采纳 | 2026-11-11 |
 | [0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md) | CLI 在安装时改写客户端的沙箱配置，范围限定为 SkillMaster 自己的目录与域名 | 已采纳 | 2026-11-11 |
+| [0187](0187-feedback-consent-lives-on-the-agent-channel.md) | 反馈的同意在 agent 通道里记录，不放到浏览器 | 已采纳 | 2026-11-13 |
+| [0188](0188-feedback-is-kept-indefinitely-with-an-object-copy.md) | 反馈长期保留，另存一份对象存储 | 已采纳 | 2026-11-13 |

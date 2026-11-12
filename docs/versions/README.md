@@ -68,3 +68,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v60-usage-filters`](v60-usage-filters/README.md) | 进行中（已实现，循环审计收口；测试见 `test-plan.md` §结果；待合并） |
 | [`v61-skill-deletion`](v61-skill-deletion/README.md) | 进行中（已实现，待视觉验收与合并） |
 | [`v62-cli-sandbox`](v62-cli-sandbox/README.md) | 进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录）… |
+| [`v63-feedback`](v63-feedback/README.md) | 进行中（已实现；服务端与 CLI 自动化测试通过，隐私页视觉验收（T8）与无凭据指引（T11）未执行）… |

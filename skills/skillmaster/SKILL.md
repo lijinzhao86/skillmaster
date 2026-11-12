@@ -67,3 +67,13 @@ skmr skill read <地址> <相对路径> [--limit <行数>]
 **裸地址读 `SKILL.md` 会被拒绝**：正文就是 skill 本身，`read` / `cat` / `head` / `tail` 在地址没写版本、本机也没 `invoke` 过时一律退出 2，提示先 `skmr skill invoke <地址>`。`invoke` 之后或地址里写了 `@版本`，照常读。
 
 加载后照它说的做，包括它给的 `skmr` 命令。
+
+## 卡住了
+
+命令持续失败、或文档与 `--help` 都解决不了时，把问题交给平台：
+
+1. 运行 `skmr feedback template` 拿模板；
+2. 写一份反馈文档，**先把完整内容给用户看并得到同意**；不要写密钥、密码、私有代码、他人的个人信息或对话全文；
+3. 运行 `skmr feedback send --file <文件> --consent`，把回执号告诉用户。
+
+不带 `--consent` 只预览、不发送。用户要撤回时运行 `skmr feedback delete <回执> --yes`。
