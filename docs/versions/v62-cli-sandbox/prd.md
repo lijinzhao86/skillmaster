@@ -53,7 +53,7 @@
 | 6 | **登录输出说清落点与是否明文**，去掉重复词。 | CLI 输出 |
 | 7 | **`skmr doctor --fix`：把沙箱白名单写进客户端配置**。它必须在**沙箱外**跑：用户在终端跑一次，或 agent 按第 9 条请求「仅这一条命令出沙箱」。一次配好本机所有有权限键的客户端：**WorkBuddy、Claude Code、Codex、Gemini、Cursor、Devin Desktop、Zed、Copilot CLI**；每家的键与文件路径以调研文档为准。**WorkBuddy 是例外**：沙箱内也能跑（写时一次审批）。**Codex 旧式与 Gemini 没有域名键**：只能打开网络总开关，代价是放开该客户端的全部出站网络；**Codex 旧式还会打开工作区可写**（`workspace-write` 管的是工作区，`writable_roots` 只是把状态目录加进去），`--undo` 不还原这个开关；这些都在输出里如实说。**不新建会改变沙箱开关的配置**（Gemini 的 `tools.sandbox` 不存在时跳过；Codex 的 `config.toml` 不存在或为空时也跳过；Codex 已用新式 `[permissions.*]` 时不混写）；其余客户端允许创建不打开沙箱的父对象。 | CLI |
 | 8 | **幂等、可撤销、不硬写**：已存在的不重复加；`--undo` 移除与 SkillMaster 写入值完全一致的条目（同值无法区分是谁加的，如实写在输出里）；配置文件不是合法 JSON/TOML 时拒绝写入并打印片段，原文件字节不变；改前留一份备份（只建第一份，之后不覆盖；**原文件已存在时才有备份**，首次新建的文件没有；**零字节的失败备份例外**，下次重写）。 | CLI |
-| 9 | **安装/首次运行时的授权路径**：<br>· **人在终端装**（`install.sh`）：检测到客户端后，用一段人话问一次 `[Y/n]`（不出现 JSON/TOML 键名），回车默认 Y、选 Y 才写；选 n 不写。检测到的客户端都会被告知结果：能写的写，跳过的说明原因。<br>· **Agent 在沙箱里**：`startup` skill 让 agent 跑 `skmr doctor --fix`，并按客户端的「单条命令出沙箱」机制请求一次：Claude Code 用 Bash 的 `dangerouslyDisableSandbox`、Codex 用 `on-request` 升级、Copilot 用 bypass、Zed 用 `unsandboxed`；用户点一次同意即可。WorkBuddy 不需要出沙箱（沙箱内可写，一次审批）。<br>· **兜底**：客户端不支持单条出沙箱或被企业策略禁用时，打印一条可粘贴到终端的命令。 | 安装脚本 + CLI；skill 正文随平台发布（P1） |
+| 9 | **安装/首次运行时的授权路径**：<br>· **安装器**（`install.sh`）：检测到客户端后，只打印会改什么与两条命令（`--dry-run` / `--fix`），**不读终端、不写配置**；agent 在跑安装时先用 `AskUserQuestion` 问用户是否现在配置，同意后再运行 `doctor --fix`；人在终端运行这条命令即视为同意。检测到的客户端都会被告知结果：能写的写，跳过的说明原因。<br>· **Agent 在沙箱里**：`startup` skill 让 agent 跑 `skmr doctor --fix`，并按客户端的「单条命令出沙箱」机制请求一次：Claude Code 用 Bash 的 `dangerouslyDisableSandbox`、Codex 用 `on-request` 升级、Copilot 用 bypass、Zed 用 `unsandboxed`；用户点一次同意即可。WorkBuddy 不需要出沙箱（沙箱内可写，一次审批）。<br>· **兜底**：客户端不支持单条出沙箱或被企业策略禁用时，打印一条可粘贴到终端的命令。 | 安装脚本 + CLI；skill 正文随平台发布（P1） |
 | 9a | **出沙箱只用于管理命令**：`doctor --fix`、`login`、`logout`、`update` 这类。**`skmr run` 永远不出沙箱**——它执行 skill 代码。 | CLI + skill 约定 |
 | 10 | **对没有配置面的客户端只打印指引**，分两组：Cline / Roo Code / Aider / Amp / 旧 Windsurf **没有可写的权限键**，只能靠命令级审批；OpenHands（只有挂载）、GrokBot（只有企业面板）**没有本地配置面**，DSH **只有文件键 `additionalWritableRoots`、没有域名键**——分别给挂载卷、可写根或企业面板的替代做法。 | CLI 输出 |
 | 11 | **新增两条 ADR**：0185 修订 [ADR 0025](../../decisions/0025-cli-credential-storage.md) 的「钥匙串优先」；0186 修订 [ADR 0167](../../decisions/0167-sandbox-compatibility-is-capability-based.md) §5 的「只打印、不改配置」。交付物，由 `check_docs.py` 判定，不设运行时验收。 | 决策记录 |
@@ -92,7 +92,7 @@
 | 11 | 配置文件不是合法 JSON/TOML 时，`--fix` 拒绝写入并打印片段，原文件字节不变 | 造坏文件，比对校验和 |
 | 12 | 对 Cline / Aider 这类没有配置面的客户端，`--fix` 只打印指引，不写任何文件 | 临时 HOME 里只放 `.aider.conf.yml`，跑 `--fix`，确认文件未变 |
 | 13 | 在 Claude Code 沙箱里跑 `--fix` 失败并给出可粘贴的终端命令；在终端跑成功 | 沙箱内、终端各跑一次 |
-| 14 | **安装时问一次**：人在终端跑 `install.sh`，检测到客户端时出现一次 `[Y/n]`；回车或选 Y 后配置写入，选 n 后不写；提示里不出现 JSON/TOML 键名。 | 在装有 Claude Code/WorkBuddy 的机器上跑一次安装脚本，两种选择各试一次 |
+| 14 | **安装器不提问**：跑 `install.sh`，检测到客户端时只打印改动与命令，不读终端、不写配置；提示里不出现 JSON/TOML 键名；随后运行 `doctor --fix` 才写入。agent 场景由 agent 先用 `AskUserQuestion` 问一次。 | 在装有 Claude Code/WorkBuddy 的机器上跑一次安装脚本，确认配置未变；再运行 `doctor --fix`，确认写入 |
 | 15 | **单条命令出沙箱**：在 Claude Code 里，agent 执行 `doctor --fix` 时能请求「仅这一条命令出沙箱」，用户同意一次后配置写入；在 Codex 里走 `on-request` 升级。两者重启后不再弹。 | 两个客户端各一次，看审批与写入 |
 | 16 | **出沙箱被禁用时退回兜底**：企业策略禁止 bypass 时，CLI 不硬来，打印终端命令。 | 用禁用 bypass 的配置模拟 |
 | 17 | **`skmr run` 不出沙箱**：skill 的代码仍在沙箱内执行，不因为第 9 条被带出去。 | 在 Claude Code 里跑一次 `skmr run`，看审计里仍是沙箱内执行 |

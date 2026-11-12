@@ -119,14 +119,15 @@ say ""
 
 # --- 8. Offer to configure the agent sandboxes ------------------------------
 #
-# **Consent, then the CLI does the writing.** The question is one sentence in plain language; the
-# keys, paths and backups stay in `skmr doctor --fix` (ADR 0186). A run with no usable terminal
-# (`/dev/tty` cannot be opened — a CI job, an agent, a closed session) is told the command instead:
-# a prompt nobody can answer is worse than a sentence, and a failed read must never be taken as
-# "yes". A plain `curl | sh` inside a terminal still has a tty and does ask.
+# **The installer prints; it never reads a terminal.** A consent prompt on `/dev/tty` cannot be
+# answered by an agent, and a prompt nobody sees is worse than a sentence. The agent that runs this
+# asks the user through its own question UI (`AskUserQuestion`) and then runs `doctor --fix`; a
+# person running the command is giving consent by running it. The keys, paths and backups stay in
+# `skmr doctor --fix` (ADR 0186). No `/dev/tty`, no `[Y/n]`, and a failed read can never be taken
+# as "yes".
 #
-# **Only ask when there is something to configure.** A terminal-only user with none of these tools
-# installed should not be handed a security question about them.
+# **Only print this when there is something to configure.** A terminal-only user with none of these
+# tools installed should not be handed a security question about them.
 has_clients() {
   for dir in \
     "$HOME/.workbuddy" \
@@ -145,7 +146,7 @@ has_clients() {
   return 1
 }
 
-configure_sandboxes() {
+print_sandbox_step() {
   say ""
   say "还有一步：让 SkillMaster 在这些 AI 工具里正常干活，不用每次用都弹窗问你。"
   say ""
@@ -157,34 +158,15 @@ configure_sandboxes() {
   say "有两个例外要说清楚：如果已经有可用的 Codex 配置（旧式），它会被设成工作区可写——"
   say "不只是 SkillMaster 的文件夹（没有配置或配置为空时不动它）；"
   say "会写入的 Codex（旧式）与启用了整进程沙箱的 Gemini，网络侧只有总开关，会被打开，等于放开全部出站网络。"
-  say "以后想撤回条目：skmr doctor --fix --undo（这些开关不会还原，输出也会说明）。"
   say ""
-  # The question goes to the terminal too, not stdout: a redirected install must not block on a
-  # prompt nobody can see. If the tty disappears between the probe and here, skip rather than let
-  # `set -e` abort an install that already placed the binary.
-  printf '现在配置吗？[Y/n] ' > /dev/tty 2>/dev/null || {
-    say "终端不可用，跳过。以后可以运行：skmr doctor --fix"
-    return 0
-  }
-  answer=""
-  if ! read -r answer < /dev/tty; then
-    answer=n
-  fi
-  case "$answer" in
-    ""|y|Y|yes|YES) "$INSTALL_DIR/skmr" doctor --fix || say "没配上；以后可以运行：skmr doctor --fix" ;;
-    *) say "好，先不弄。以后想配置：skmr doctor --fix" ;;
-  esac
+  say "想先看会改什么：$INSTALL_DIR/skmr doctor --fix --dry-run"
+  say "同意就运行：$INSTALL_DIR/skmr doctor --fix"
+  say "如果是 agent 在跑安装：先问用户「是否现在配置」一次，得到同意后再运行上面这条。"
+  say "以后想撤回条目：$INSTALL_DIR/skmr doctor --fix --undo（为放行打开的开关不会还原，输出也会说明）。"
 }
 
 if has_clients; then
-  # **`-r /dev/tty` is not enough.** In a container or CI job the device can be listed as readable
-  # while opening it fails; `set -e` would then abort the install after the binary was placed.
-  if ( : >/dev/tty ) 2>/dev/null; then
-    configure_sandboxes
-  else
-    say ""
-    say "下一步：skmr doctor --fix（在终端里跑一次；它会直接写入。想先看会改什么：skmr doctor --fix --dry-run）"
-  fi
+  print_sandbox_step
 else
   say ""
   say "没有检测到带沙箱配置的 AI 工具（Claude Code、WorkBuddy、Codex 等）。"

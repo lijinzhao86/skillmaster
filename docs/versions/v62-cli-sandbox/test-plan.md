@@ -23,7 +23,7 @@
 | #11 坏文件拒绝写入、字节不变 | T13 |
 | #12 没有权限键的客户端只打印 | T14 |
 | #13 Claude Code 沙箱内失败并给终端命令 | T15 |
-| #14 安装器问一次 `[Y/n]` | T16 |
+| #14 安装器不提问，只打印命令 | T16 |
 | #15 单条命令出沙箱（Claude Code / Codex） | T17 |
 | #16 出沙箱被禁用时退回兜底 | T18 |
 | #17 `skmr run` 仍在沙箱内 | T19 |
@@ -138,11 +138,11 @@
 - **期望**：沙箱内失败，并打印「在你自己的终端里跑一次：`skmr doctor --fix`」；终端里成功。
 - **判定**：通过 / 失败
 
-### T16 · 安装器问一次
+### T16 · 安装器不提问
 
 - **前置**：装有 Claude Code / WorkBuddy 的机器；先备份配置。
-- **步骤**：跑 `install.sh`；分别选 Y 与 n。
-- **期望**：出现一次 `[Y/n]`；提示里没有 JSON/TOML 键名；选 Y 写入、选 n 不写。
+- **步骤**：跑 `install.sh`（pty 与无 tty 各一次）。
+- **期望**：不出现 `[Y/n]`、不读 `/dev/tty`；打印 `--dry-run` 与 `--fix` 命令；配置文件不变；提示里没有 JSON/TOML 键名。之后运行 `doctor --fix` 才写入。
 - **判定**：通过 / 失败
 
 ### T17 · 单条命令出沙箱
@@ -204,7 +204,7 @@
 | T13 | 部分 | `TestBadFileIsLeftAlone`（坏 JSON，sha256 不变）、`TestBadTOMLIsLeftAlone`（坏 TOML）；「打印片段」由 `printFragment` 实现，未单独断言 |
 | T14 | 部分 | `TestNothingInstalled`（不写任何文件）+ `TestNoConfigSurfaceLinesNameTheClients`（指引里点名各家）；文案未在真机跑 |
 | T15 | 通过（终端半用隔离配置） | 沙箱内（`sandbox.enabled=true`，`SANDBOX_RUNTIME=1`）跑 `doctor --fix`：写 Claude 配置时 `operation not permitted`，打印文件开头与「在你自己的终端里跑一次：skmr doctor --fix」，退出码 1；同一次里 WorkBuddy 写成功（沙箱实际放行了它），并顺带写入 Codex / Copilot 的真实配置（Codex 用 `config.toml.skillmaster.bak` 逐字节恢复，Copilot 删除新建的 `settings.json`）。终端半：非沙箱 shell 里用隔离的 `CLAUDE_CONFIG_DIR`（`CODEX_HOME`/`COPILOT_HOME` 指向不存在的路径）跑 `--fix`，退出码 0，隔离配置写入 `allowWrite`、`allowedDomains` 与 `allowLocalBinding`；真实 `~/.claude/settings.json` 的 sha256 未变（所以它是终端路径验证，不是 T10 的真机写入）。单元侧 `TestFixFailure` / `TestFailedChanges` / `TestDescribeChangeFailure` 覆盖失败聚合与描述 |
-| T16 | 通过 | 本地产物 + 临时 `HOME`，2026-11-11：pty 里选 `n` 只出现一次 `[Y/n]`、配置保持 `{}`；pty 里回车（默认 Y）调用 `doctor --fix`，WorkBuddy 配置写入路径与两条域名；无 tty（`/dev/tty` 打不开）时打印「下一步：skmr doctor --fix」且不写配置。提示文案只出现客户端名，没有 JSON/TOML 键名 |
+| T16 | 通过 | 2026-11-12，本地产物 + 临时 `HOME`：pty 与无 tty 各跑一次 `install.sh`，都不出现 `[Y/n]`、不读 `/dev/tty`，只打印 `--dry-run` 与 `--fix` 命令，配置保持 `{}`；提示只出现客户端名，没有 JSON/TOML 键名。之后手动运行 `doctor --fix` 才写入（写入行为由 T9 覆盖） |
 | T17 | 未执行 | 需要 Claude Code / Codex 真机 |
 | T18 | 未执行 | 需要禁用 bypass 的模拟配置 |
 | T19 | 未执行 | 需要带脚本的 skill 与 Claude Code 沙箱 |

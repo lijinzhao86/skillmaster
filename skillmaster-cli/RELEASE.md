@@ -134,7 +134,7 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **原地写没有原子性**：`cp` / `Copy-Item` 一开始写就截断目标，进程被杀、沙箱超时或磁盘满会留下半截二进制，且没有备份；`install.sh` 的 `INT`/`TERM` trap 会提示重跑安装（`install.ps1` 没有 trap）。staged 退路只在复制返回失败时触发，覆盖不了「复制进程被杀」。
 
-**第 8 步只有 macOS / Linux 的 `install.sh` 有**（v62，[ADR 0186](../docs/decisions/0186-the-cli-writes-a-narrow-sandbox-allowlist.md)）：检测到带沙箱配置的 AI 工具时，用一段人话问一次 `[Y/n]`，选 Y 才调用 `skmr doctor --fix` 把状态目录写进这些工具的配置、给其中有域名键的写 SkillMaster 的域名（Codex 旧式与 Gemini 的网络侧只有总开关）；无法打开 `/dev/tty`（CI、agent、真正无终端）时改为打印命令。Windows 的 `install.ps1` 暂不做这一步，装完手动跑 `skmr doctor --fix`。
+**第 8 步只有 macOS / Linux 的 `install.sh` 有**（v62，[ADR 0186](../docs/decisions/0186-the-cli-writes-a-narrow-sandbox-allowlist.md)）：检测到带沙箱配置的 AI 工具时，只打印会改什么与 `--dry-run` / `--fix` 命令，**不读终端、不写配置**；agent 在跑安装时先用 `AskUserQuestion` 问用户，同意后运行 `skmr doctor --fix`，人在终端运行这条命令即视为同意。Windows 的 `install.ps1` 暂不做这一步，装完手动跑 `skmr doctor --fix`。
 
 **用法**：
 
