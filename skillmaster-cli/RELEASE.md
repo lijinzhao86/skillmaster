@@ -125,12 +125,16 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **认不出来就拒绝，不猜**：32 位系统（`i686`、`armv7l`、真正的 32 位 Windows）跑不了 64 位程序，装上去只会得到一个起不来的命令，所以脚本报错并指向产物清单。Apple Silicon 在 Rosetta 下 `uname -m` 返回 `x86_64`，会装 amd64 版——那是它**认得出**的架构，不是兜底。
 
-两个脚本做同一串事：
+两个脚本共用第 1–4 段（判断平台 → 取包与 `checksums.txt` → 核对 SHA-256 → 解包并装成 **`skmr`**）；第 5 段各自收尾（PATH 与 `--version`）；`install.sh` 之后跳到第 8 步（只有它有）。包里可执行文件也叫 `skmr`，见 §4 与 ADR 0113。
 
-1. 判断平台 → 2. 取对应包与 `checksums.txt` → 3. **核对 SHA-256** → 4. 解包 →
-5. 装成 **`skmr`**（包里的可执行文件也叫 `skmr`；变的只有产物名之外的这一处——见 §4 与 ADR 0113）→
-6. 放进 PATH（unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `[Environment]::SetEnvironmentVariable('Path', …, 'User')` 写用户 PATH——**不用 `setx`**，它会把长 PATH 截到 1024 字符）→
-7. 打印 `skmr --version`（跑不起来就停在这里）
+- **PATH**：unix 用 `~/.local/bin`，不要求 sudo；Windows 用 `%LOCALAPPDATA%\SkillMaster\bin`，用 `[Environment]::SetEnvironmentVariable('Path', …, 'User')` 写用户 PATH——**不用 `setx`**，它会把长 PATH 截到 1024 字符。
+- **收尾**：打印 `skmr --version`（跑不起来就停在这里）。
+
+**替换二进制时优先原地写，`mv` / `Move-Item` / `File.Replace` 只是退路**：安装脚本经常由 agent 在沙箱里执行，而 WorkBuddy 5.8.6 实测（2026-11-11）允许写文件内容、拒绝 rename 覆盖已有文件；首次安装目标不存在时 rename 能过，升级覆盖已有二进制时不能。原地写失败（例如运行中的二进制在 Linux 上返回 `ETXTBSY`）才退回 staged + 改名，并在失败信息里告诉用户把这条安装命令放到沙箱外跑。`skmr update` 替换的是**正在运行**的二进制，仍用 rename；它在沙箱里失败时会提示放到沙箱外跑一次。
+
+**原地写没有原子性**：`cp` / `Copy-Item` 一开始写就截断目标，进程被杀、沙箱超时或磁盘满会留下半截二进制，且没有备份；`install.sh` 的 `INT`/`TERM` trap 会提示重跑安装（`install.ps1` 没有 trap）。staged 退路只在复制返回失败时触发，覆盖不了「复制进程被杀」。
+
+**第 8 步只有 macOS / Linux 的 `install.sh` 有**（v62，[ADR 0186](../docs/decisions/0186-the-cli-writes-a-narrow-sandbox-allowlist.md)）：检测到带沙箱配置的 AI 工具时，用一段人话问一次 `[Y/n]`，选 Y 才调用 `skmr doctor --fix` 把状态目录写进这些工具的配置、给其中有域名键的写 SkillMaster 的域名（Codex 旧式与 Gemini 的网络侧只有总开关）；无法打开 `/dev/tty`（CI、agent、真正无终端）时改为打印命令。Windows 的 `install.ps1` 暂不做这一步，装完手动跑 `skmr doctor --fix`。
 
 **用法**：
 

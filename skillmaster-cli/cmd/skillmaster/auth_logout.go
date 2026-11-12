@@ -122,11 +122,10 @@ func logoutWithServer(store credentials.EnvStore, server string, httpClient *htt
 		// between a command that works and a command that lies.** Folding it into `hadStored = false`
 		// — which this did — printed「本机没有凭据，没什么可清的」and exited 0 on a machine whose
 		// keychain was merely locked, while the credential sat there and every later command went on
-		// authenticating with it. The clear below cannot be believed either: the responsive keychain
-		// returns success on its own timeout *by design* (`responsiveKeychain.Clear`), so nothing
-		// downstream reports the thing this one just concealed. Refusing is what the v1 command did
-		// with the same failure, and it is the honest answer: this machine's state is unknown, so it
-		// cannot be reported as clean.
+		// authenticating with it. Refusing is what the v1 command did with the same failure, and it
+		// is the honest answer: this machine's state is unknown, so it cannot be reported as clean.
+		// (`responsiveKeychain.Clear` no longer hides a timeout; it reports it — this read can still
+		// fail first, on a locked keychain, before any clear is attempted.)
 		return fmt.Errorf("读不到本机凭据，所以没有清除任何东西（钥匙串可能锁着）：%w", err)
 	}
 	inUse := stored
@@ -160,7 +159,7 @@ func logoutWithServer(store credentials.EnvStore, server string, httpClient *htt
 	}
 
 	if err := store.Clear(); err != nil {
-		return fmt.Errorf("清除本地凭据：%w", err)
+		return fmt.Errorf("清除本地凭据：%w（如果是在 agent 沙箱里，在你自己的终端再跑一次 skmr logout）", err)
 	}
 	if hadStored {
 		fmt.Printf("已清除本地凭据（%s）。\n", store.Where())

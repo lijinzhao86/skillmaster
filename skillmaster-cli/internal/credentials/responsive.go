@@ -71,6 +71,10 @@ type responsiveKeychain struct {
 	// anybody having to clear a marker.
 	switched bool
 	reason   string
+	// served is which copy answered the last Load, for `auth status` (ADR 0185). A keychain-first
+	// store can still serve the file when the file was written later; Where() would name the
+	// keychain and be wrong about what the command actually used.
+	served string
 }
 
 func newResponsiveKeychain(keychain Store, fallback *fileStore) *responsiveKeychain {
@@ -85,9 +89,26 @@ func (s *responsiveKeychain) Where() string {
 	return fmt.Sprintf("%s（%s）", s.fallback.Where(), s.reason)
 }
 
+// Source is the copy that answered, not the place a write would land (ADR 0185).
+func (s *responsiveKeychain) Source() string {
+	if s.served != "" {
+		return s.served
+	}
+	return s.Where()
+}
+
+// loadFallback reads the file and records it as what served, when it did.
+func (s *responsiveKeychain) loadFallback() (Credentials, bool, error) {
+	creds, found, err := s.fallback.Load()
+	if found {
+		s.served = s.fallback.Source()
+	}
+	return creds, found, err
+}
+
 func (s *responsiveKeychain) Load() (Credentials, bool, error) {
 	if s.switched {
-		return s.fallback.Load()
+		return s.loadFallback()
 	}
 
 	// Buffered, so the goroutine cannot be left blocked on a send nobody will receive.
@@ -109,14 +130,14 @@ func (s *responsiveKeychain) Load() (Credentials, bool, error) {
 			// `login` leaves behind: a credential in the file, and a keychain that answers this one
 			// question fast. Without this line that credential is invisible and the next command
 			// says "not signed in" while the file sits there.
-			return s.fallback.Load()
+			return s.loadFallback()
 		}
 		return s.newerCredential(result.creds)
 	case <-time.After(s.deadline):
 		s.switchToFile("读超时")
 		// The file is tried before giving up, because a credential put there by an earlier
 		// timed-out run is a real credential and the person is signed in either way.
-		creds, found, err := s.fallback.Load()
+		creds, found, err := s.loadFallback()
 		if err != nil || found {
 			return creds, found, err
 		}
@@ -169,17 +190,27 @@ func (s *responsiveKeychain) newerCredential(fromKeychain Credentials) (Credenti
 	if err != nil || !found {
 		// An unreadable file is not a reason to refuse to be signed in: the keychain answered, and it
 		// is the copy the person would expect. Reported by the fallback's own Load if it matters.
+		s.served = sourceOf(s.keychain)
 		return fromKeychain, true, nil
 	}
 	if writtenLater(inFile, fromKeychain) {
+		s.served = s.fallback.Source()
 		return inFile, true, nil
 	}
+	s.served = sourceOf(s.keychain)
 	return fromKeychain, true, nil
 }
 
 func (s *responsiveKeychain) Save(creds Credentials) error {
 	if s.switched {
-		return s.fallback.Save(creds)
+		// **`Where` after the write, not before.** Before the write the file store may still point
+		// at a read-only copy in the ordinary directory; the message must name the file this run
+		// actually wrote.
+		if err := s.fallback.Save(creds); err != nil {
+			return err
+		}
+		s.served = s.fallback.Where()
+		return nil
 	}
 
 	done := make(chan error, 1)
@@ -193,21 +224,38 @@ func (s *responsiveKeychain) Save(creds Credentials) error {
 			// to answer it — and the only visible outcome of returning that error is a login that
 			// fails where the file store would have worked (ADR 0025's fallback, ADR 0164 §3). The
 			// switch is per process, so every later call in this run goes straight to the file.
-			s.switchToFile("钥匙串写不进去")
-			return s.fallback.Save(creds)
+			s.switchToFile("写不进去")
+			if err := s.fallback.Save(creds); err != nil {
+				return err
+			}
+			s.served = s.fallback.Where()
+			return nil
 		}
-		// The keychain has taken the current credential, so any copy in the file is now the older
-		// one — and leaving it there is how the two-copies problem outlives the run that caused it
-		// (see newerCredential). Absent already is success. `Clear` truncates rather than deletes
-		// (ADR 0101); `Load` reads the zero-byte file as "nothing stored", so it is the same fact.
-		return s.fallback.Clear()
+		// The keychain has taken the current credential, so any copy in the write path is now the
+		// older one — and leaving it there is how the two-copies problem outlives the run that
+		// caused it (see newerCredential). **Only the write path**: `older` may be read-only by
+		// design, and a login that succeeded must not be reported as failed because that copy
+		// cannot be truncated. `ClearPath` truncates rather than deletes (ADR 0101).
+		s.served = sourceOf(s.keychain)
+		if err := s.fallback.ClearPath(); err != nil {
+			// The credential is in the keychain; what failed is the tombstone that stops the default
+			// read path from serving an older file. The typed error lets the caller avoid wrapping
+			// this as "saving failed" and recommending an API key for a credential already saved.
+			return &KeychainTombstoneError{Err: err}
+		}
+		return nil
 	case <-time.After(s.deadline):
 		s.switchToFile("写超时")
-		return s.fallback.Save(creds)
+		if err := s.fallback.Save(creds); err != nil {
+			return err
+		}
+		s.served = s.fallback.Where()
+		return nil
 	}
 }
 
 func (s *responsiveKeychain) Clear() error {
+	s.served = ""
 	if s.switched {
 		return s.fallback.Clear()
 	}
@@ -217,12 +265,13 @@ func (s *responsiveKeychain) Clear() error {
 
 	select {
 	case err := <-done:
-		if err != nil {
-			return err
+		// Both places, even when one fails, so that a logout cannot clear one copy and report the
+		// other as done. This is the shape the whole command exists to avoid.
+		fileErr := s.fallback.Clear()
+		if err != nil || fileErr != nil {
+			return errors.Join(err, fileErr)
 		}
-		// Both places, so that a logout cannot clear one copy and leave the other. This is the shape
-		// the whole command exists to avoid.
-		return s.fallback.Clear()
+		return nil
 	case <-time.After(s.deadline):
 		s.switchToFile("清理超时")
 		// The file copy goes, because it is the one this run was using and leaving *it* behind is the
@@ -244,8 +293,28 @@ func (s *responsiveKeychain) Clear() error {
 
 func (s *responsiveKeychain) switchToFile(reason string) {
 	s.switched = true
-	s.reason = fmt.Sprintf("系统钥匙串%s，本次改用这里", reason)
+	s.reason = fmt.Sprintf("系统钥匙串%s，本次改用这里的明文文件", reason)
 }
+
+// KeychainTombstoneError means the credential reached the keychain; only truncating the file copy
+// failed. **It is a half success, not a failed save**: calling it "保存凭据失败" would suggest the
+// person is not signed in, and recommending an API key would be advice for a different problem.
+type KeychainTombstoneError struct{ Err error }
+
+func (e *KeychainTombstoneError) Error() string {
+	return "凭据已写入系统钥匙串，但没法清掉文件里的旧副本：" + e.Err.Error()
+}
+
+func (e *KeychainTombstoneError) Unwrap() error { return e.Err }
+
+// FellBackToFile reports whether this run asked the keychain and ended up on the file. The login
+// uses it to say "the keychain refused" instead of the default "the default is a file" sentence:
+// the latter recommends `--keyring`, which is the flag that just failed.
+func (s *responsiveKeychain) FellBackToFile() bool { return s.switched }
+
+// FallbackReason says why the keychain was left. A refusal and a timeout have different next
+// steps: one is fixed outside the sandbox, the other is fixed by unlocking the keychain.
+func (s *responsiveKeychain) FallbackReason() string { return s.reason }
 
 type loadResult struct {
 	creds Credentials

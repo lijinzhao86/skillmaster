@@ -147,15 +147,21 @@ var topSpecs = []*help.Spec{
 	{
 		Path:    "login",
 		Summary: "在浏览器里登录这台机器",
-		Usage:   "skmr login",
+		Usage:   "skmr login [--keyring]",
 		Output: "登录成功后在 stdout 打印这份凭据是谁的、到什么时候；诊断走 stderr。\n" +
+			"凭据默认写状态目录里的 0600 明文文件（仅本人可读）；--keyring 写系统钥匙串。" +
+			"在沙箱里它可能被直接拒绝（不弹窗，本次回退明文文件），也可能弹一次审批后只写进会话副本" +
+			"（重启后可能丢失）；输出会说明落在系统钥匙串还是明文文件。\n" +
 			keyLine,
+		Flags: []help.Flag{
+			{Name: "--keyring", Summary: "这一次写系统钥匙串；写不进就回退明文文件"},
+		},
 		Failures: []help.Failure{
 			{Code: "network", Summary: "打开或连不上服务端", Next: "检查网络与地址后重试"},
 			{Code: "login_failed", Summary: "浏览器里没有同意", Next: "重新运行 skmr login"},
 			{Code: "too_many_requests", Summary: "登录试得太频繁", Next: "等一会儿再试"},
 		},
-		Examples: []string{"skmr login"},
+		Examples: []string{"skmr login", "skmr login --keyring"},
 		Parent:   "",
 		Exits:    exitsLocal,
 	},
@@ -224,14 +230,21 @@ var topSpecs = []*help.Spec{
 	},
 	{
 		Path:    "doctor",
-		Summary: "自检本机环境",
-		Usage:   "skmr doctor",
-		Output: "六行状态，加一段按客户端区分的可复制配置。" +
-			"**只打印，不改你的设置**——放宽沙箱是人的决定。",
-		Failures: []help.Failure{
-			{Code: "usage", Summary: "多给了参数", Next: "doctor 不带参数"},
+		Summary: "自检；--fix 改配置",
+		Usage:   "skmr doctor [--fix [--undo] [--dry-run]]",
+		Output: "不带参数：只打印六行状态，必要时另加一段按客户端区分的可复制配置，不写任何设置。\n" +
+			"--fix：把状态目录与 SkillMaster 的平台/更新域名写进检测到的客户端；没有域名键的打开网络总开关，" +
+			"Codex 旧式还会打开工作区可写（不只是状态目录）。" +
+			"--undo 移除与写入值完全一致的条目（同值无法区分来源），不还原这些开关；--dry-run 只打印变更。写入失败时退出码非 0。",
+		Flags: []help.Flag{
+			{Name: "--fix", Summary: "把白名单写进客户端配置"},
+			{Name: "--undo", Summary: "撤掉写入的条目（同值也会撤）"},
+			{Name: "--dry-run", Summary: "只打印会改什么，不落盘（配合 --fix）"},
 		},
-		Examples: []string{"skmr doctor"},
+		Failures: []help.Failure{
+			{Code: "usage", Summary: "参数组合不对", Next: "skmr doctor 或 skmr doctor --fix"},
+		},
+		Examples: []string{"skmr doctor", "skmr doctor --fix"},
 		Parent:   "",
 		Exits:    exitsLocal,
 	},
@@ -272,6 +285,7 @@ var topSpecs = []*help.Spec{
 			{Name: "--check", Summary: "只看有没有新版，不下载"},
 		},
 		Output: "默认下载本通道的新版本、核对 SHA-256 并换位，下一条命令生效。\n" +
+			"它替换的是正在运行的二进制；沙箱里改不了名时，需要放到沙箱外跑一次。\n" +
 			"平时不需要它：每次命令启动时最多每 24 小时自动检查一次。",
 		Failures: []help.Failure{
 			{Code: "network", Summary: "连不上发布地址", Next: "检查网络后重试"},

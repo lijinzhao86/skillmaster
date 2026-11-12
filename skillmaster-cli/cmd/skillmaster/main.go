@@ -155,5 +155,9 @@ func namedArgument(arg string) string {
 // to say which of two possible credentials it is about.
 func credentialSource() string {
 	store, _ := openStore(config.Server())
+	// **Read before asking.** `Source` names the copy that served a run, and the file-first store
+	// only learns that from a `Load`; without this, a machine whose credential is still in the
+	// keychain would be told it came from a file that does not exist (ADR 0185 §4).
+	_, _, _ = store.Load()
 	return store.Source()
 }

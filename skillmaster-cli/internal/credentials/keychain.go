@@ -25,6 +25,8 @@ func (s *keychainStore) Where() string {
 	return fmt.Sprintf("系统钥匙串（%s / %s）", keychainService, s.server)
 }
 
+func (s *keychainStore) Source() string { return s.Where() }
+
 func (s *keychainStore) Load() (Credentials, bool, error) {
 	blob, err := keyring.Get(keychainService, s.server)
 	if errors.Is(err, keyring.ErrNotFound) {
@@ -63,7 +65,8 @@ func (s *keychainStore) Clear() error {
 	return fmt.Errorf("removing the keychain entry: %w", err)
 }
 
-// openWith is Open's decision on its own, so it can be tested on any machine.
+// openWith is the keychain-first choice on its own — `OpenKeyring` since ADR 0185 made the file the
+// default — so it can be tested on any machine.
 //
 // The platform probe that feeds it lives in keychain_linux.go and keychain_other.go, because the
 // question it answers — "is there a session D-Bus?" — only exists on Linux and cannot be asked by

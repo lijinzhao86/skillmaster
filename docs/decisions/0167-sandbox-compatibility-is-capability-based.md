@@ -3,6 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-11-08
 - **依赖**：[ADR 0025](0025-cli-credential-storage.md)（CLI 凭据存储）、[ADR 0101](0101-the-cli-never-deletes-files.md)（CLI 不删文件）
+- **被修订**：[ADR 0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md)（§5「只打印、不改配置」改为按范围自动写）
 
 ## 背景
 

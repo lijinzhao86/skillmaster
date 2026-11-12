@@ -4,6 +4,7 @@
 - **日期**：2026-10-02
 - **依赖**：[ADR 0002](0002-gateway-skill-and-cli.md)（令牌不进模型上下文、不进命令历史）、[ADR 0011](0011-server-and-cli-stack.md)（Go，keychain 可用且无 CGO）、[ADR 0024](0024-refresh-replay-grace-window.md)（每次刷新都回写）
 - **被扩展**：[ADR 0030](0030-the-fallback-credential-is-per-server.md)（正文不变；兜底文件从 `credentials` 改成 `credentials-<server 的哈希>`，与本来就是按 server 分键的钥匙串对齐）
+- **被修订**：[ADR 0185](0185-credentials-default-to-a-file.md)（默认从「钥匙串优先」改为「文件优先、钥匙串可选」；§后果的「写入必须原子」也由 0185 的原地覆写取代，代价见 0185 §后果）
 
 ## 背景
 

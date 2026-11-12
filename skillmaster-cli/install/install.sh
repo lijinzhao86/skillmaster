@@ -45,7 +45,12 @@ artifact="skillmaster_${os}_${arch}.tar.gz"
 command -v curl >/dev/null 2>&1 || die "需要 curl（没有它下不了包）"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT INT TERM
+# Best effort: a sandbox may refuse deletion. Cleanup is not worth failing an install that has
+# already placed the binary, and the temp directory is the installer's own.
+trap 'rm -rf "$tmp" 2>/dev/null || true' EXIT
+# **In-place copy is not atomic.** If the process is killed while `cp` is writing, the installed
+# binary can be half a file with no backup. Say that instead of leaving a silent broken command.
+trap 'say "安装被中断；如果 $INSTALL_DIR/skmr 已存在，它可能不完整，请重跑安装。" >&2; exit 130' INT TERM
 
 say "下载 $BASE_URL/$artifact"
 # No `--retry-all-errors`: it needs curl 7.71, and the machines most likely to run this are the
@@ -76,11 +81,23 @@ say "校验和正确"
 tar -xzf "$tmp/$artifact" -C "$tmp" || die "解包失败：$artifact"
 
 mkdir -p "$INSTALL_DIR" || die "建不了安装目录：$INSTALL_DIR"
-# Replace the executable atomically, so a running copy is never half-written.
-# The archive's entry is `skmr` (ADR 0113 决定 2), so this is a plain copy: nothing is renamed here.
-cp "$tmp/skmr" "$INSTALL_DIR/skmr.new" || die "复制失败：$INSTALL_DIR"
-chmod 755 "$INSTALL_DIR/skmr.new"
-mv -f "$INSTALL_DIR/skmr.new" "$INSTALL_DIR/skmr"
+# **Write the executable in place first.** A sandbox can allow writing a file and still refuse to
+# rename over an existing one: replacing a name needs the delete the allowlist deliberately omits
+# (WorkBuddy 5.8.6, measured 2026-11-11) — and this installer is often run by an agent. The
+# `--version` probe below runs after this, and no skmr process is running while it runs.
+# The staged + rename form stays as a fallback for the case where writing over a busy executable is
+# refused (Linux `ETXTBSY`); outside a sandbox it is the more atomic of the two.
+if ! cp "$tmp/skmr" "$INSTALL_DIR/skmr" 2>/dev/null; then
+  cp "$tmp/skmr" "$INSTALL_DIR/skmr.new" ||
+    die "复制失败：$INSTALL_DIR（如果是在 agent 沙箱里，请让 agent 把这条安装命令放到沙箱外跑，或在你自己的终端安装）"
+  chmod 755 "$INSTALL_DIR/skmr.new" ||
+    die "改不了 $INSTALL_DIR/skmr.new 的权限：如果是在 agent 沙箱里，请把这条安装命令放到沙箱外跑"
+  mv -f "$INSTALL_DIR/skmr.new" "$INSTALL_DIR/skmr" ||
+    die "写不进 $INSTALL_DIR/skmr，也改不了名：如果是在 agent 沙箱里，请让 agent 把这条安装命令放到沙箱外跑，或在你自己的终端安装"
+else
+  chmod 755 "$INSTALL_DIR/skmr" ||
+    die "改不了 $INSTALL_DIR/skmr 的权限：如果是在 agent 沙箱里，请把这条安装命令放到沙箱外跑"
+fi
 
 # --- 5. Say what to do next ---------------------------------------------------
 
@@ -99,6 +116,80 @@ esac
 
 say ""
 "$INSTALL_DIR/skmr" --version || die "装好了但跑不起来：$INSTALL_DIR/skmr --version"
+
+# --- 8. Offer to configure the agent sandboxes ------------------------------
+#
+# **Consent, then the CLI does the writing.** The question is one sentence in plain language; the
+# keys, paths and backups stay in `skmr doctor --fix` (ADR 0186). A run with no usable terminal
+# (`/dev/tty` cannot be opened — a CI job, an agent, a closed session) is told the command instead:
+# a prompt nobody can answer is worse than a sentence, and a failed read must never be taken as
+# "yes". A plain `curl | sh` inside a terminal still has a tty and does ask.
+#
+# **Only ask when there is something to configure.** A terminal-only user with none of these tools
+# installed should not be handed a security question about them.
+has_clients() {
+  for dir in \
+    "$HOME/.workbuddy" \
+    "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" \
+    "${CODEX_HOME:-$HOME/.codex}" \
+    "$HOME/.gemini" \
+    "$HOME/.cursor" \
+    "$HOME/.config/devin" \
+    "$HOME/.config/zed" \
+    "${COPILOT_HOME:-$HOME/.copilot}"
+  do
+    if [ -d "$dir" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+configure_sandboxes() {
+  say ""
+  say "还有一步：让 SkillMaster 在这些 AI 工具里正常干活，不用每次用都弹窗问你。"
+  say ""
+  say "它需要两样东西："
+  say "  · 一个只属于你的文件夹，用来存登录凭证"
+  say "  · 能连上 SkillMaster 的服务器"
+  say ""
+  say "这一步会改这些工具的安全设置：把文件夹和 SkillMaster 的域名写进它们的白名单。"
+  say "有两个例外要说清楚：如果已经有可用的 Codex 配置（旧式），它会被设成工作区可写——"
+  say "不只是 SkillMaster 的文件夹（没有配置或配置为空时不动它）；"
+  say "会写入的 Codex（旧式）与启用了整进程沙箱的 Gemini，网络侧只有总开关，会被打开，等于放开全部出站网络。"
+  say "以后想撤回条目：skmr doctor --fix --undo（这些开关不会还原，输出也会说明）。"
+  say ""
+  # The question goes to the terminal too, not stdout: a redirected install must not block on a
+  # prompt nobody can see. If the tty disappears between the probe and here, skip rather than let
+  # `set -e` abort an install that already placed the binary.
+  printf '现在配置吗？[Y/n] ' > /dev/tty 2>/dev/null || {
+    say "终端不可用，跳过。以后可以运行：skmr doctor --fix"
+    return 0
+  }
+  answer=""
+  if ! read -r answer < /dev/tty; then
+    answer=n
+  fi
+  case "$answer" in
+    ""|y|Y|yes|YES) "$INSTALL_DIR/skmr" doctor --fix || say "没配上；以后可以运行：skmr doctor --fix" ;;
+    *) say "好，先不弄。以后想配置：skmr doctor --fix" ;;
+  esac
+}
+
+if has_clients; then
+  # **`-r /dev/tty` is not enough.** In a container or CI job the device can be listed as readable
+  # while opening it fails; `set -e` would then abort the install after the binary was placed.
+  if ( : >/dev/tty ) 2>/dev/null; then
+    configure_sandboxes
+  else
+    say ""
+    say "下一步：skmr doctor --fix（在终端里跑一次；它会直接写入。想先看会改什么：skmr doctor --fix --dry-run）"
+  fi
+else
+  say ""
+  say "没有检测到带沙箱配置的 AI 工具（Claude Code、WorkBuddy、Codex 等）。"
+  say "如果你用的是 Cline、Aider 这类，运行 skmr doctor --fix 会打印替代做法。"
+fi
 
 say ""
 say "下一步：skmr startup"
