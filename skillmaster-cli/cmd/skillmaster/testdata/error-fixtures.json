@@ -123,15 +123,15 @@
       "body": "{\"error\":{\"code\":\"skill_not_found\",\"message\":\"no\"}}"
     },
     {
-      "code": "skill_deleted",
+      "code": "skill_gone",
       "argv": [
         "version",
         "list",
         "dev/x",
         "--json"
       ],
-      "status": 409,
-      "body": "{\"error\":{\"code\":\"skill_deleted\",\"message\":\"deleted\"}}"
+      "status": 410,
+      "body": "{\"error\":{\"code\":\"skill_gone\",\"message\":\"deleted\"}}"
     },
     {
       "code": "skill_offline",
@@ -316,6 +316,17 @@
       ],
       "status": 409,
       "body": "{\"error\":{\"code\":\"skill_not_joinable\",\"message\":\"no\"}}"
+    },
+    {
+      "code": "skill_offline_pending",
+      "argv": [
+        "skill",
+        "join",
+        "dev/x",
+        "--yes"
+      ],
+      "status": 409,
+      "body": "{\"error\":{\"code\":\"skill_offline_pending\",\"message\":\"pending\",\"details\":[{\"field\":\"pending_until\",\"issue\":\"2026-12-11T00:00:00Z\"}]}}"
     },
     {
       "code": "library_reference_missing",

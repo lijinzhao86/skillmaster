@@ -97,7 +97,15 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
     return asked && rungIndex(asked) > rungIndex(tier) ? { role: asked } : null
   })
   const [askedRung, setAskedRung] = useState<string | null>(null)
-  const [offline, setOfflineState] = useState(() => params.get('offline') === '1')
+  /* **下线有三态（v61）**：在线、下线中、已下线。地址只带一个：`pending=1` / `offline=1`，
+     都不带就是在线。 */
+  const [phase, setPhaseState] = useState<'online' | 'pending' | 'offline'>(() => (
+    params.get('pending') === '1' ? 'pending' : params.get('offline') === '1' ? 'offline' : 'online'
+  ))
+  const offline = phase === 'offline'
+  const pending = phase === 'pending'
+  /* 演示件的到期日；产品里由服务端按开始时刻 + 30 天算出。 */
+  const pendingUntil = '2026/12/11'
 
   /* ------------------------------------------------------- 库与两套标签 (v14) */
 
@@ -180,10 +188,12 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
 
   /* 可见但当前不可加入时说原因；休眠的条目也要说一句它为什么不在列表里。 */
   const membershipNote = membership === 'blocked'
-    ? (offline ? '已下线，暂时不能入库。' : '还没有上线的版本，暂时不能入库。')
-    : membership === 'dormant'
-      ? '暂时不可见，恢复后会回到你的库。'
-      : ''
+    ? (offline ? '已下线，暂时不能入库。' : pending ? '下线中，暂时不能入库。' : '还没有上线的版本，暂时不能入库。')
+    : membership === 'visible' && (pending || offline)
+      ? (pending ? '下线中，暂时不能入库。' : '已下线，暂时不能入库。')
+      : membership === 'dormant'
+        ? '暂时不可见，恢复后会回到你的库。'
+        : ''
 
   /* **移除的那一问也能由地址打开**：它有一屏可以发出去。两套标签不再有弹窗，`?edit=`
      只负责「进来就展开那一组」（由 `InfoPane` 的初始态读走）。 */
@@ -204,6 +214,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
      一级；复制不是，所以收进更多。两颗菜单各自独立，别把同一个 open 状态借来借去。 */
   const [copyMenuOpen, setCopyMenuOpen] = useState(false)
   const [copyMenuTrigger, setCopyMenuTrigger] = useState<HTMLElement | null>(null)
+  const joinButton = useRef<HTMLButtonElement>(null)
 
   /* 地址里带 `new=open` 时把当前这一页的「新建」菜单打开：点得出来的状态也要能单独发出去。 */
   useEffect(() => {
@@ -486,15 +497,17 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
     replace('?' + query.toString())
   }
 
-  /* 技能级下线：改 `skill.offline_at`，不改任何版本. */
-  const setOffline = (next: boolean) => {
-    setOfflineState(next)
+  /* 技能级下线（v61）：公开且有入库者先进「下线中」30 天；其余即时下线。 */
+  const setPhase = (next: 'online' | 'pending' | 'offline') => {
+    setPhaseState(next)
     const query = new URLSearchParams(params)
     query.set('page', 'skill')
     query.set('tab', 'settings')
     query.set('sub', 'general')
-    if (next) query.set('offline', '1')
-    else query.delete('offline')
+    query.delete('offline')
+    query.delete('pending')
+    if (next === 'pending') query.set('pending', '1')
+    if (next === 'offline') query.set('offline', '1')
     if (visibility === 'private') query.delete('vis')
     else query.set('vis', visibility)
     replace('?' + query.toString())
@@ -561,6 +574,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
                 >
                   {atLeast('browse') && publicRung !== null ? '公开' : '私有'}
                 </a>
+                <span className="chip is-soon" id="skillPendingBadge" hidden={!pending}>下线中 · {pendingUntil} 下线</span>
                 <span className="chip is-offline" id="skillOfflineBadge" hidden={!offline}>已下线</span>
               </div>
               <p className="skill-title" hidden={state === 'no-title'}>把 PDF 拆页、合并与压缩。</p>
@@ -576,7 +590,7 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
               {/* **按数据画，不按关系画**（2026-11-06 用户定）：公开且有线上版本才有这份使用数据，
                   所以自己创建的公开 skill 也看得到。私有 skill 没有数（ADR 0149 只记公开的非作者读），
                   未上线或已下线也没有可说的。 */}
-              {publicRung !== null && live !== null && !offline && (
+              {publicRung !== null && live !== null && phase === 'online' && (
                 <p className="skill-evidence" id="skillEvidence">
                   <span>{DEMO_USAGE.calls} 次调用</span>
                   <span className="skill-evidence-dot">·</span>
@@ -593,13 +607,26 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
                   <span className="visually-hidden">收藏（功能暂未开放）</span>
                 </span>
               )}
-              {membership === 'visible' && (
+              {membership === 'visible' && phase === 'online' && (
                 <button
                   type="button"
                   className="button skill-join"
                   id="joinSkill"
+                  ref={joinButton}
                   disabled={joining}
-                  onClick={joinLibrary}
+                  onClick={() => {
+                    /* **入库是一次依赖声明，不是收藏。** 先说明它是引用、不复制，再让人确认；
+                       要长期独立运行的人在这一刻就知道该用「复制」。 */
+                    dialogs.openDanger({
+                      title: '入库这个 skill？',
+                      body: '入库是把它收进你的库，不是复制一份内容。作者下线时会提前 30 天通知你，删除时也会通知你；要长期独立运行，请用「复制」留一份自己的。',
+                      confirmLabel: '确认入库',
+                      pendingLabel: '正在入库…',
+                      danger: false,
+                      onConfirm: joinLibrary,
+                      returnFocus: joinButton.current,
+                    })
+                  }}
                   aria-label={joining ? '入库中' : '入库'}
                 >
                   {joining ? (
@@ -908,12 +935,15 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           versions={versions}
           visibility={visibility}
           publicRung={publicRung}
-          offline={offline}
+          phase={phase}
+          pendingUntil={pendingUntil}
+          joins={visibility === 'private' || params.get('no-joins') === '1' ? 0 : DEMO_USAGE.joins}
+          grantees={grants.length}
           grants={grants}
           requests={requests}
           invitations={invitations}
           onVisibility={setVisibility}
-          onOffline={setOffline}
+          onOffline={setPhase}
           /* **共享 = 发邀请（v45）。** 它不写授权行：对方在通知中心接受之后才进名单。 */
           onAdd={(who, role) => setInvitations((list) => (
             list.some((invitation) => invitation.who === who)

@@ -15,7 +15,14 @@
  * 「消息型通知长什么样」在设计件里有一处可指的地方。产品里它只会由测试夹具造出来。
  */
 
-export type NoticeKind = 'invitation' | 'request' | 'result' | 'announcement' | 'skill_unavailable'
+export type NoticeKind =
+  | 'invitation'
+  | 'request'
+  | 'result'
+  | 'announcement'
+  | 'skill_unavailable'
+  /* v61: 公开 skill 进入下线中，给入库与授权的人一条预告与迁移出路。 */
+  | 'skill_offline_scheduled'
 
 /** 一条邀请或一条申请的结果。`pending` 是唯一还在等人处理的那一个。 */
 export type NoticeState =
@@ -44,12 +51,29 @@ export interface Notice {
   at: string
   /** 产品里的 `resolved_at`：收口时刻。没有它时，过期行用 `expiresAt`。 */
   resolvedAt?: string
-  /** 产品里的 `expires_at`：只有邀请有。 */
+  /** 产品里的 `expires_at`：邀请的过期时刻，以及 v61 下线中通知的到期日。 */
   expiresAt?: string
   unread: boolean
   /** 公告的标题与正文；其余三类的正文由 `kind + actor + skill + role` 拼出来。 */
   title?: string
   body?: string
+  /** 服务端的 `viewable`：那个地址现在还能不能打开。缺省按能打开画。 */
+  viewable?: boolean
+}
+
+/**
+ * v61 的下线预告样张。**它不在 `NOTICES` 里**：900px 的通知页只放得下这些行，多一行就多一条
+ * 滚动条。演示件用 `?page=notifications&status=all&notice=offline` 把公告那一行换成它。
+ */
+export const OFFLINE_NOTICE: Notice = {
+  id: 'n-6b',
+  kind: 'skill_offline_scheduled',
+  actor: 'yuhan',
+  skill: { namespace: 'yuhan', name: 'api-client' },
+  state: 'info',
+  at: '2026/11/11 09:00',
+  expiresAt: '2026/12/11 00:00',
+  unread: true,
 }
 
 /* **「我」是 dev**，与设计件其余各屏同一个账号。时刻按新到旧排。 */

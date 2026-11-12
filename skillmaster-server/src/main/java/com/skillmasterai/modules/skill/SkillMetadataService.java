@@ -121,6 +121,8 @@ public final class SkillMetadataService {
                     permitted.source(),
                     row.currentVersionId(),
                     row.offlineAt(),
+                    row.offlinePendingAt(),
+                    row.offlineDueAt(),
                     permitted.owns(),
                     permitted.rung(),
                     caller.userId(),
@@ -139,12 +141,55 @@ public final class SkillMetadataService {
      * @return the skill's id, or empty when the name belongs to a soft-deleted skill
      */
     /**
-     * Stops serving the skill, or resumes it. Nothing about versions changes.
+     * Stops serving the skill. Nothing about versions changes.
      *
-     * @param at the moment it went offline, or null to serve again
+     * @return false when it was already off or in a ramp — the caller must not notify then
      */
-    public void setOffline(String skillId, String at) {
-        skills.setOffline(skillId, at);
+    public boolean setOffline(String skillId, String at) {
+        return skills.setOffline(skillId, at);
+    }
+
+    /** Withdraws an unfinished ramp; false when the ramp already completed. */
+    public boolean cancelRamp(String skillId) {
+        return skills.cancelRamp(skillId);
+    }
+
+    /** Back to serving from 已下线; false when it was already serving. */
+    public boolean resume(String skillId) {
+        return skills.resume(skillId);
+    }
+
+    public boolean setPendingOffline(String skillId, String pendingAt, String dueAt) {
+        return skills.setPendingOffline(skillId, pendingAt, dueAt);
+    }
+
+    public java.util.List<String> dueOfflineIds(String now) {
+        return skills.dueOfflineIds(now);
+    }
+
+    public Optional<DueOffline> claimDueOffline(String skillId, String now) {
+        return skills.claimDueOffline(skillId, now).map(row -> new DueOffline(
+                row.id(), row.namespaceId(), row.name(), row.offlineAt()));
+    }
+
+    /**
+     * A ramp that has just been materialised: the skill, the address its notice names, and the
+     * moment it stopped serving. Returned only to the one caller that won the conditional update.
+     */
+    public record DueOffline(String skillId, String namespaceId, String name, String offlineAt) {
+    }
+
+    public int libraryJoins(String skillId) {
+        return skills.libraryJoins(skillId);
+    }
+
+    /** How many people hold a grant; the author page's delete sentence names it (v61). */
+    public int grantees(String skillId) {
+        return skills.grantees(skillId);
+    }
+
+    public java.util.List<String> lifecycleRecipients(String skillId, String ownerUserId) {
+        return skills.lifecycleRecipients(skillId, ownerUserId);
     }
 
     /**
@@ -171,27 +216,18 @@ public final class SkillMetadataService {
      * The two would answer differently on the same input, so they are two methods rather than a
      * flag.
      *
-     * <p>The conflict is re-read to say which one it is: a live skill is 409
-     * {@code skill_already_exists}, a soft-deleted one is 409 {@code skill_deleted} — the latter's
-     * only way out is restoring, which happens in the browser (ADR 0050, ADR 0071).
+     * <p>Since v61 the partial unique index covers live rows only: a soft-deleted skill no longer
+     * holds its name (ADR 0183). A failed insert therefore means a live skill owns the name — a
+     * soft-deleted row is not a reason to refuse.
      *
      * @return the new skill's id
-     * @throws com.skillmasterai.common.ConflictException with one of those two codes
+     * @throws com.skillmasterai.common.ConflictException with {@code skill_already_exists}
      */
     public String createOwned(String namespaceId, SkillMetadata metadata, String createdBy,
             String at) {
         Optional<String> inserted = skills.insertNew(namespaceId, metadata, createdBy, at);
         if (inserted.isPresent()) {
             return inserted.get();
-        }
-        SkillRepository.AnyRow existing = skills.findAnyByName(namespaceId, metadata.name())
-                .orElseThrow(() -> new IllegalStateException("skill '" + metadata.name()
-                        + "' refused the insert but has no row"));
-        if (existing.deletedAt() != null) {
-            throw new com.skillmasterai.common.ConflictException(
-                    com.skillmasterai.common.ErrorCode.SKILL_DELETED,
-                    "the name '" + metadata.name() + "' belongs to a deleted skill; restore it"
-                            + " before creating a skill with this name");
         }
         throw new com.skillmasterai.common.ConflictException(
                 com.skillmasterai.common.ErrorCode.SKILL_ALREADY_EXISTS,
@@ -299,6 +335,20 @@ public final class SkillMetadataService {
                     + "the skill away from everyone reading it, and only the owner can answer for "
                     + "that");
         }
+        // v61: a public skill with people using it leaves through the ramp first. The state is
+        // read from the due date, not from the job, so a ramp that has reached its date already
+        // counts as offline (ADR 0184).
+        boolean publicSkill = "public".equals(access.get().visibility());
+        boolean due = access.get().offlineDueAt() != null
+                && !com.skillmasterai.common.Timestamps.parse(access.get().offlineDueAt())
+                        .isAfter(com.skillmasterai.common.Timestamps.parse(at));
+        if (publicSkill && access.get().offlineAt() == null && !due
+                && skills.libraryJoins(access.get().skillId()) > 0) {
+            throw new com.skillmasterai.common.ConflictException(
+                    com.skillmasterai.common.ErrorCode.OFFLINE_REQUIRED,
+                    "'" + name + "' is public and people are using it; finish the 30-day offline"
+                            + " ramp before deleting it");
+        }
         return skills.softDelete(access.get().skillId(), at);
     }
 
@@ -345,7 +395,25 @@ public final class SkillMetadataService {
      *
      * @return the restored skill's id, or empty when no deleted skill of this name the caller owns
      */
-    public Optional<String> restore(String namespaceId, String name, Caller caller, String at) {
-        return skills.restore(namespaceId, name, caller, at);
+    public Optional<Restored> restore(String namespaceId, String name, String id, Caller caller,
+            String at) {
+        return skills.restore(namespaceId, name, id, caller, at);
+    }
+
+    /**
+     * A restored tombstone: its id, the address name it came back under, and whether that name
+     * differs from the original because a live skill had taken it (v61, ADR 0183).
+     */
+    public record Restored(String id, String name, boolean renamed) {
+    }
+
+    /**
+     * Whether this address names a public skill that was published and is now deleted — the one
+     * case the consumption plane answers 410 instead of 404 (v61, ADR 0184). A private deleted
+     * skill, or a public one that never had a live version, stays indistinguishable from one that
+     * never existed.
+     */
+    public boolean deletedPublicEverPublished(String namespaceId, String name) {
+        return skills.deletedPublicEverPublished(namespaceId, name);
     }
 }

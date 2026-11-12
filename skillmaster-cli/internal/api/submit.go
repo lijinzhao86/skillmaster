@@ -255,8 +255,8 @@ func (c Client) upload(ctx context.Context, path string, archive []byte, name, n
 			}
 		}
 	}
-	// A 409 carries a code the command layer translates (`skill_deleted`, and the content conflicts
-	// that were already there). Before this branch it fell through to the generic line below,
+	// A 409 carries a code the command layer translates (the name and content conflicts that were
+	// already there). Before this branch it fell through to the generic line below,
 	// which meant `classifyFailure` never saw a `ServerError` and the Chinese sentences could never
 	// match — the code was on the wire and lost here.
 	if resp.StatusCode == http.StatusConflict {

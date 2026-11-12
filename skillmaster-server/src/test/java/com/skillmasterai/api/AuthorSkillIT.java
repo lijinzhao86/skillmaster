@@ -175,7 +175,8 @@ class AuthorSkillIT extends AbstractAccountIT {
 
     /**
      * v37 (ADR 0127): the one delete a credential may perform — a skill that never had a version go
-     * live. The name stays taken, which is ADR 0050 and the reason the page's restore exists.
+     * live. v61 (ADR 0183) releases the name the moment it returns; the row stays behind, and the
+     * page's restore is still the way back.
      */
     @Test
     void aSkillThatWasNeverPublishedCanBeDeletedByItsOwner() {
@@ -324,7 +325,8 @@ class AuthorSkillIT extends AbstractAccountIT {
                         rs.getString("title"), rs.getString("description"),
                         rs.getString("frontmatter"), rs.getString("visibility"),
                         rs.getString("public_rung"), null, rs.getString("current_version_id"),
-                        rs.getString("offline_at"), true, null, rs.getString("created_by"),
+                        rs.getString("offline_at"), null, null, true, null,
+                        rs.getString("created_by"),
                         rs.getString("ever_published_at") != null)).single();
         send(request(path("/delete"), token).POST(HttpRequest.BodyPublishers.noBody()).build());
 

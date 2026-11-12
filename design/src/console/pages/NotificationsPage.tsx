@@ -17,9 +17,10 @@
 
 import { useSyncExternalStore } from 'react'
 import { replace } from '../address'
+import { dialogs } from '../components/dialogs/store'
 import Pager from '../components/Pager'
 import NoticeRow from '../components/notifications/NoticeRow'
-import { badgeText, isPending } from '../fixtures/notifications'
+import { OFFLINE_NOTICE, badgeText, isPending } from '../fixtures/notifications'
 import type { Notice } from '../fixtures/notifications'
 import { accept, decline, markAllRead, markRead, snapshot, subscribe, unread } from '../notificationsStore'
 import type { DemoPageProps } from './types'
@@ -37,9 +38,12 @@ export default function NotificationsPage({ active, state, params }: DemoPagePro
   /* **空态由地址定，不由夹具定**：`empty-pending` 与 `empty-all` 是演示条上的两态，
      它们把行滤掉，好让「空」这一屏能被拍到、被链接到。 */
   const forcedEmpty = state === 'empty-pending' ? 'pending' : state === 'empty-all' ? 'all' : null
+  const source = params.get('notice') === 'offline'
+    ? rows.map((row) => (row.id === 'n-6' ? OFFLINE_NOTICE : row))
+    : rows
   const visible = forcedEmpty !== null || !settled
     ? []
-    : rows.filter((row) => (tab === 'pending' ? isPending(row) : true))
+    : source.filter((row) => (tab === 'pending' ? isPending(row) : true))
 
   let page = Number.isNaN(askedPage) || askedPage < 1 ? 1 : askedPage
   const pages = Math.max(1, Math.ceil(visible.length / PER_PAGE))
@@ -146,6 +150,16 @@ export default function NotificationsPage({ active, state, params }: DemoPagePro
                 markRead(display.id)
                 replace('?page=skill&tab=settings&sub=collaborators')
                 window.scrollTo(0, 0)
+              }}
+              onCopy={() => {
+                markRead(display.id)
+                dialogs.openCopy({
+                  mode: 'open',
+                  skillName: display.skill?.name ?? '',
+                  versions: [{ value: 'latest', label: '线上版本' }],
+                  initialVersion: 'latest',
+                  trigger: null,
+                })
               }}
             />
           )

@@ -89,7 +89,25 @@ public final class SkillPredicates {
             s.deleted_at IS NULL
               AND s.current_version_id IS NOT NULL
               AND s.offline_at IS NULL
+              AND (s.offline_due_at IS NULL OR s.offline_due_at::timestamptz > now())
               AND s.visibility = 'public'
+            """;
+
+    /**
+     * Already offline, by the derived state: either the owner switched it off, or the 30-day ramp
+     * has reached its due date even if the daily job has not materialised {@code offline_at} yet
+     * (v61, ADR 0184). Read-time derivation is the same rule the invitation expiry uses.
+     */
+    public static final String OFFLINE = """
+            (s.offline_at IS NOT NULL
+              OR (s.offline_due_at IS NOT NULL AND s.offline_due_at::timestamptz <= now()))
+            """;
+
+    /** Still inside the ramp: served, with a warning, and not joinable (v61). */
+    public static final String PENDING = """
+            (s.offline_at IS NULL
+              AND s.offline_due_at IS NOT NULL
+              AND s.offline_due_at::timestamptz > now())
             """;
 
     /**
@@ -125,8 +143,39 @@ public final class SkillPredicates {
                   ELSE s.deleted_at IS NULL
                        AND s.current_version_id IS NOT NULL
                        AND s.offline_at IS NULL
+                       AND (s.offline_due_at IS NULL OR s.offline_due_at::timestamptz > now())
                        AND (s.visibility = 'public' OR s.grant_role IS NOT NULL)
              END)
+            """;
+
+    /**
+     * The display state every card carries. Derived from columns the query already has, never
+     * stored, so it cannot drift (v14's rule, extended in v61).
+     *
+     * <p><strong>{@code pending} comes before {@code offline} and reads the date, not a job.</strong>
+     * A ramp inside its 30 days is 下线中 — still served, not joinable. Once the due date passes the
+     * row is offline even before the daily job writes {@code offline_at}, which is the same
+     * read-time derivation {@link #OFFLINE} uses (ADR 0184).
+     */
+    public static final String STATE = """
+            CASE WHEN s.deleted_at IS NOT NULL THEN 'deleted'
+                 WHEN s.current_version_id IS NULL THEN 'draft'
+                 WHEN s.offline_at IS NOT NULL THEN 'offline'
+                 WHEN s.offline_due_at IS NOT NULL
+                      AND s.offline_due_at::timestamptz <= now() THEN 'offline'
+                 WHEN s.offline_due_at IS NOT NULL
+                      AND s.offline_due_at::timestamptz > now() THEN 'pending'
+                 ELSE 'live' END
+            """;
+
+    /**
+     * The 下线中 ramp's due date while it is still ahead, or NULL (v61). A card that shows
+     * 下线中 reads the date from it; a past date is offline, not pending.
+     */
+    public static final String PENDING_UNTIL = """
+            CASE WHEN s.offline_at IS NULL AND s.offline_due_at IS NOT NULL
+                      AND s.offline_due_at::timestamptz > now()
+                 THEN s.offline_due_at END
             """;
 
     /**

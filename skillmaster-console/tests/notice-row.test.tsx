@@ -124,4 +124,35 @@ describe('NoticeRow', () => {
     })
     expect(queryByText('通知')).toBeNull()
   })
+
+  // v61 (ADR 0184): a 下线中 skill still serves, and the row's job is the way out — a copy.
+  it('says when a ramping skill goes offline, and offers the copy (v61)', () => {
+    const onCopy = vi.fn()
+    const row: Notification = {
+      ...accepted,
+      kind: 'skill_offline_scheduled',
+      state: 'info',
+      role: null,
+      read: false,
+      expires_at: '2026-12-11T00:00:00Z',
+    }
+    const { container, queryByText } = render(
+      <NoticeRow
+        row={row}
+        onAccept={vi.fn()}
+        onDecline={vi.fn()}
+        onView={vi.fn()}
+        onHandle={vi.fn()}
+        onCopy={onCopy}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('2026/12/11')
+    expect(text).toContain('下线')
+    expect(queryByText('查看')).toBeNull()
+    const copy = queryByText('复制到我的库') as HTMLButtonElement | null
+    expect(copy).not.toBeNull()
+    copy?.click()
+    expect(onCopy).toHaveBeenCalledWith(row)
+  })
 })

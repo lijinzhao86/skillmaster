@@ -46,7 +46,7 @@ class PublishNeverRefreshesSourceTest {
         when(namespaces.bySlug("skillmaster")).thenReturn(Optional.of(official));
         when(namespaces.personalNamespaceOf("01M3HTG7GDZGTDME9B136ZVAW4")).thenReturn(official);
         Access access = new Access("skill-1", "01M3HTGC79XSQK3TS3ZF0BG05F", "x", "X", "", "{}", "public", null, null,
-                null, null, true, null, "01M3HTG7GDZGTDME9B136ZVAW4", true);
+                null, null, null, null, true, null, "01M3HTG7GDZGTDME9B136ZVAW4", true);
         when(metadata.accessFor(eq("01M3HTGC79XSQK3TS3ZF0BG05F"), eq("x"), any(Caller.class)))
                 .thenReturn(Optional.of(access));
         when(versions.publishVersion(eq(access), any(), any())).thenReturn(Optional.of(

@@ -597,7 +597,7 @@ class SkillSubmitIT extends AbstractAccountIT {
     }
 
     @Test
-    void submittingOverADeletedNameIsRefusedRatherThanResurrectingIt() {
+    void submittingOverADeletedNameCreatesANewSkillAndLeavesTheTombstoneAlone() {
         byte[] zip = skill("pdf-tools", Map.of());
         String id = submitAndReadId(zip);
         assertThat(delete("demo", "pdf-tools"))
@@ -606,14 +606,16 @@ class SkillSubmitIT extends AbstractAccountIT {
 
         HttpResponse<String> response = submit(zip);
 
-        assertThat(response.statusCode()).isEqualTo(409);
-        JsonNode error = JSON.readTree(response.body()).get("error");
-        assertThat(error.get("code").asText()).isEqualTo("skill_deleted");
-        assertThat(error.get("message").asText()).contains("deleted");
+        // v61 (ADR 0183): the name is free, so this is a new skill — not a resurrection.
+        assertThat(response.statusCode()).as("resubmit: %s", response.body()).isEqualTo(201);
+        JsonNode answer = JSON.readTree(response.body());
+        assertThat(answer.get("skill_created").asBoolean()).isTrue();
         assertThat(count("SELECT count(*) FROM skill WHERE id = :id AND deleted_at IS NULL",
                 Map.of("id", id)))
-                .as("§4.3 gives restoring its own endpoint; a submit must not be a back door to it")
+                .as("the tombstone stays deleted; restore is still its own endpoint")
                 .isZero();
+        assertThat(count("SELECT count(*) FROM skill WHERE name = 'pdf-tools' AND deleted_at IS NULL"))
+                .isEqualTo(1);
     }
 
     /**

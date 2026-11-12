@@ -47,6 +47,9 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
      *                  resolves has no "last updated", and the row is there to be restored
      */
     public record Skill(
+            /* v61: the row's identity, so the deleted list can restore one of several
+               same-name tombstones rather than whichever happens to be newest. */
+            String id,
             String namespace,
             String name,
             String title,
@@ -57,7 +60,10 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
             Version draft,
             String updatedAt,
             String deletedAt,
-            String offlineAt) {
+            String offlineAt,
+            @com.fasterxml.jackson.annotation.JsonInclude(
+                    com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+            String offlinePendingUntil) {
     }
 
     /** @param name the version's name, or null when its author declared none (ADR 0033) */
@@ -67,6 +73,7 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
     public static AuthoredSkillsResponse of(List<AuthoredSkillSummary> summaries) {
         return new AuthoredSkillsResponse(summaries.stream()
                 .map(summary -> new Skill(
+                        summary.id(),
                         summary.namespaceSlug(),
                         summary.name(),
                         summary.title(),
@@ -84,7 +91,8 @@ public record AuthoredSkillsResponse(List<Skill> skills) {
                                         "sha256:" + summary.draftDigest()),
                         summary.updatedAt(),
                         summary.deletedAt(),
-                        summary.offlineAt()))
+                        summary.offlineAt(),
+                        summary.offlinePendingUntil()))
                 .toList());
     }
 }

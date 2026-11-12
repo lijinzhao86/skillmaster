@@ -179,7 +179,7 @@ export const SOURCE_LABEL: Record<Source, string> = {
 }
 
 /** 行上的状态：我创建的与 `write` 及以上共享的，下线仍留在「在用」并显示已下线。 */
-export type RowState = 'live' | 'draft' | 'offline'
+export type RowState = 'live' | 'draft' | 'pending' | 'offline'
 
 export interface LibrarySkill {
   name: string
@@ -197,6 +197,8 @@ export interface LibrarySkill {
    */
   standing?: Rung['name']
   state: RowState
+  /** 下线中的到期日（v61）：只在 `state === 'pending'` 时有。 */
+  pendingUntil?: string
   /** 当前上线的版本号；草稿为 null（从来没有上线过）。 */
   version: string | null
   updated: string
@@ -315,7 +317,7 @@ export const LIBRARY: LibrarySkill[] = [
   { name: 'migration-check', namespace: 'hexu', description: '上线前检查这条迁移会不会锁表。', whenToUse: '一条迁移要在业务高峰上线之前', source: 'joined', standing: 'invoke', state: 'live', version: '0.5.0', updated: '2026/08/22 18:26', category: 'data', publicTags: ['data', 'ops'], myTags: [] },
   { name: 'prompt-lint', namespace: 'zhao', description: '检查提示词里的歧义与自相矛盾。', whenToUse: '一段提示词效果不稳，想找原因的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.2.0', updated: '2026/10/03 07:44', category: 'writing', publicTags: ['writing'], myTags: ['evaluate'] },
   { name: 'sdk-snippet', namespace: 'zhao', description: '从接口定义生成各语言的最小调用示例。', whenToUse: '文档里要放一段能直接跑的示例的时候', source: 'joined', standing: 'invoke', state: 'live', version: '0.1.0', updated: '2026/04/30 14:11', category: 'doc', publicTags: ['doc-gen'], myTags: [] },
-  { name: 'dead-code', namespace: 'qian', description: '找出没人再引用的模块和导出。', whenToUse: '一个仓库越背越重、想删点什么的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.0.0', updated: '2026/06/06 11:37', category: 'dev', publicTags: ['efficiency'], myTags: [] },
+  { name: 'dead-code', namespace: 'qian', description: '找出没人再引用的模块和导出。', whenToUse: '一个仓库越背越重、想删点什么的时候', source: 'joined', standing: 'invoke', state: 'pending', version: '1.0.0', pendingUntil: '2026/12/11', updated: '2026/06/06 11:37', category: 'dev', publicTags: ['efficiency'], myTags: [] },
   { name: 'release-notes', namespace: 'qian', description: '把一版里的变更写给用户看，不是写给提交者看。', whenToUse: '要对外发一版的时候', source: 'joined', standing: 'browse', state: 'live', version: '2.1.0', updated: '2026/09/14 16:20', category: 'writing', publicTags: ['writing', 'docs'], myTags: ['client', 'team', 'evaluate', 'this-week', 'archive', 'design-group'] },
   { name: 'proto-review', namespace: 'qian', description: '审一遍 .proto 的改动，看有没有破坏兼容性。', whenToUse: '接口定义要改，还在兼容期的时候', source: 'joined', state: 'offline', version: '0.6.0', updated: '2026/07/27 13:05', category: 'dev', publicTags: ['review'], myTags: ['archive'] },
   /* **地址最长的那一条**：命名空间 18 字、名字 57 字（服务端上限 64）。行里放不下会截，预览里折行、不截——
@@ -443,6 +445,10 @@ export interface DiscoverSkill {
   /** v49：平台标识，画在行的右下角；没有就是不画。本版最多一枚（origin），镜像留给同步那版。 */
   sources?: SourceRef[]
   joins?: number
+  /** v61：`pending` = 下线中——仍可调用，已不接受新入库；缺省是 `live`。 */
+  state?: 'live' | 'pending'
+  /** v61：下线中的到期日，画在分类章后面；只有 `pending` 有。 */
+  pendingUntil?: string
 }
 
 /**
@@ -479,7 +485,7 @@ export const DISCOVER: DiscoverSkill[] = [
   { name: 'pdf-tools', namespace: 'dev', description: '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。', whenToUse: '手里有 PDF，要拆页、合并或压缩的时候', version: '@1.2.3', updated: '2026/10/07', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: 'created', callsBucket: '1k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 45 },
   { name: 'pdf-splitter', namespace: 'yuhan', description: '按页、按书签或按分隔符把一份 PDF 切开。', whenToUse: '一份几百页的 PDF 只需要其中几段的时候', version: '@0.4.0', updated: '2026/09/21', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: null, callsBucket: '10k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 12 },
   { name: 'slide-maker', namespace: 'hexu', description: '把一段 Markdown 排成 16:9 的演示文稿。', whenToUse: '有一份写好的文档，要拿去讲的时候', version: '@2.1.0', updated: '2026/10/02', category: 'doc', publicTags: ['presentation', 'writing'], inLibrary: 'joined', sources: [{ kind: 'official', label: '官方' }], joins: 31 },
-  { name: 'doc-translate', namespace: 'zhao', description: '把一份技术文档翻成另一种语言，术语表优先。', whenToUse: '文档要给另一种语言的读者看的时候', version: '@1.0.2', updated: '2026/08/15', category: 'writing', publicTags: ['translation', 'docs'], inLibrary: null, callsBucket: '2k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 120 },
+  { name: 'doc-translate', namespace: 'zhao', description: '把一份技术文档翻成另一种语言，术语表优先。', whenToUse: '文档要给另一种语言的读者看的时候', version: '@1.0.2', updated: '2026/08/15', category: 'writing', publicTags: ['translation', 'docs'], inLibrary: null, callsBucket: '2k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 120, state: 'pending', pendingUntil: '2026/12/11' },
   { name: 'csv-cleaner', namespace: 'qian', description: '找出 CSV 里的空列、重复行与格式不一致的日期。', whenToUse: '拿到一份来路不明的表格，先要看它干不干净的时候', version: '@0.9.1', updated: '2026/07/30', category: 'data', publicTags: ['data', 'table'], inLibrary: 'shared' },
   { name: 'report-builder', namespace: 'sun', description: '把一组查询结果排成一份周报。', whenToUse: '每周要交一份数字的时候', version: '@1.3.0', updated: '2026/09/05', category: 'data', publicTags: ['data', 'report'], inLibrary: null },
   { name: 'screenshot-annotator', namespace: 'li', description: '在截图上圈出要说的那几处，并配上说明。', whenToUse: '提 bug 或写说明，需要指给人看的时候', version: '@0.2.0', updated: '2026/06/18', category: 'media', publicTags: ['screenshot', 'design'], inLibrary: null },

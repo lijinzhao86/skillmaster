@@ -42,6 +42,15 @@ export default function LibraryRow({
         </span>
       )
     }
+    /* v61: still serving, so it is not 已下线 — the chip says where it is in the ramp. */
+    if (skill.state === 'pending') {
+      return (
+        <span className="chip is-soon">
+          <i className="dot" />
+          <span className="chip-text">下线中</span>
+        </span>
+      )
+    }
     if (skill.state === 'offline') {
       return (
         <span className="chip is-offline">

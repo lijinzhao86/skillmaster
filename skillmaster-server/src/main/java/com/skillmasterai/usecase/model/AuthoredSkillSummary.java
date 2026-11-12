@@ -28,6 +28,7 @@ package com.skillmasterai.usecase.model;
  *                  "删除于 …" instead (ADR 0050)
  */
 public record AuthoredSkillSummary(
+        String id,
         String namespaceSlug,
         String name,
         String title,
@@ -40,5 +41,6 @@ public record AuthoredSkillSummary(
         String draftDigest,
         String updatedAt,
         String deletedAt,
-        String offlineAt) {
+        String offlineAt,
+        String offlinePendingUntil) {
 }

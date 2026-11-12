@@ -158,9 +158,6 @@ const CODE_MESSAGES: Record<string, string> = {
   last_file_cannot_be_deleted: '一版至少要有一个文件。',
   invalid_path: '这个路径不合法：不能与已有的文件或文件夹同名。',
   invalid_upload: '这份内容超出了这一版允许的大小，或 frontmatter 不合法。',
-  // v9: a name that still belongs to a deleted skill. Its only way out is restoring it in the
-  // browser, so the sentence says where (ADR 0071); the dialog draws the link beside it.
-  skill_deleted: '这个名字属于一个已删除的 skill；要先恢复它，才能继续用这个名字。',
   skill_already_exists: '这个名字已经有了；去那一页继续，别再建一个。',
   // v54 复制。`invalid_name` here is a top-level code, not the tag rule's issue code in
   // ISSUE_MESSAGES above — the two share a spelling and answer different actions, which is why
@@ -174,6 +171,11 @@ const CODE_MESSAGES: Record<string, string> = {
   version_is_not_draft: '这一版已经不是草稿，文件不能再改。',
   version_revoked: '这一版已下架，调用会失败；要恢复读取，先重新上架。',
   skill_offline: '这个 skill 已下线，暂时不提供服务。',
+  // v61: the three lifecycle refusals. Without these the dialog and the join button would show
+  // the server's English operator sentence.
+  skill_gone: '这个 skill 已被作者删除，不再提供服务。',
+  offline_required: '这个 skill 已公开、有人在用，先走完下线才能删除。',
+  skill_offline_pending: '这个 skill 正在下线中，暂时不能入库。',
   network_error: '网络请求失败，请检查网络后重试。',
   timeout: '服务响应太慢，请稍后重试。',
   internal_error: '服务暂时不可用，请稍后重试。',

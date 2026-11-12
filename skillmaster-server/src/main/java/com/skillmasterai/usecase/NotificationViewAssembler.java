@@ -90,10 +90,12 @@ class NotificationViewAssembler {
         if (row.outcome() != null) {
             return row.outcome();
         }
-        // **Announcement-shaped kinds are information, never work** (v56 adds the second one): a
-        // deleted author leaves nothing to accept, decline or answer.
+        // **Announcement-shaped kinds are information, never work** (v56 adds the second one, v61
+        // the third): a deleted author and a scheduled departure both leave nothing to accept,
+        // decline or answer — the date is on `expires_at`, not a piece of work.
         if (NotificationKinds.ANNOUNCEMENT.equals(row.kind())
-                || NotificationKinds.SKILL_UNAVAILABLE.equals(row.kind())) {
+                || NotificationKinds.SKILL_UNAVAILABLE.equals(row.kind())
+                || NotificationKinds.SKILL_OFFLINE_SCHEDULED.equals(row.kind())) {
             return "info";
         }
         if (NotificationKinds.SHARE_INVITATION.equals(row.kind())

@@ -106,6 +106,8 @@ export interface AuthoredSkillSummary {
   visibility: string
   /** When the whole skill stopped serving (`skill.offline_at`), or null while it is online. */
   offline_at: string | null
+  /** v61: the 下线中 ramp's due date while it is ahead, or null. */
+  offline_pending_until: string | null
   current: VersionRef | null
   /** Versions waiting to be published or discarded — the one thing no other listing says. */
   drafts: number
@@ -282,6 +284,14 @@ export interface AuthoredSkill {
   can_publish_public?: boolean
   /** When the whole skill stopped serving (`skill.offline_at`), or null while it is online. */
   offline_at: string | null
+  /**
+   * v61: the 下线中 ramp's due date while the skill still serves; absent when it is not in a ramp
+   * (an older server never sends it). The page derives its three-way service state from this and
+   * `offline_at`.
+   */
+  offline_pending_until?: string | null
+  /** v61: how many people outside the owner hold a grant; absent on an older server. */
+  grantees?: number
   /**
    * The caller's own standing — `owner`, or one of the five rungs. The page draws only the sections
    * this can reach (ADR 0051), which is why the server says it rather than leaving the page to probe.
@@ -562,8 +572,11 @@ export interface SubmitResponse {
 /** Where a library entry came from, in the display's own precedence. Null means "not in my library". */
 export type SkillSource = 'created' | 'shared' | 'joined'
 
-/** The state a row shows: a live version, a draft, an offline skill, or a soft-deleted one. */
-export type SkillDisplayState = 'live' | 'draft' | 'offline' | 'deleted'
+/**
+ * The state a row shows: a live version, a draft, a skill inside its 下线中 ramp (still serving),
+ * an offline skill, or a soft-deleted one (v61).
+ */
+export type SkillDisplayState = 'live' | 'draft' | 'pending' | 'offline' | 'deleted'
 
 /** The one shelf a skill sits on. */
 export interface CategoryRef {
@@ -639,6 +652,8 @@ export interface SkillCard {
    */
   standing?: Rung | null
   state: SkillDisplayState
+  /** v61: the 下线中 ramp's due date, present only while `state` is `pending`. */
+  offline_pending_until?: string | null
   version: string | null
   updated_at: string | null
   deleted_at: string | null

@@ -9,7 +9,7 @@
 ## 边界
 
 - **不读任何业务表**：邀请、申请、skill 的状态由 M12 回答；收件人 id、skill id、档位由用例传进来。
-- **不解释 kind 的业务含义**：`kind` 是 TEXT，已知五个值在 `NotificationKinds`（v56 加 `skill_unavailable`，公告形态、状态映射为 `info`）；feed 的「哪些 kind 算待处理 / 受管理权过滤」目前写在查询里，新增请求型 kind 要同步改这一处（[v45 TD](../../versions/v45-notifications/technical-design.md) §架构）。
+- **不解释 kind 的业务含义**：`kind` 是 TEXT，已知值在 `NotificationKinds`（v56 加 `skill_unavailable`，v61 加 `skill_offline_scheduled`，两者都是公告形态、状态映射为 `info`）；feed 的「哪些 kind 算待处理 / 受管理权过滤」目前写在查询里，新增请求型 kind 要同步改这一处（[v45 TD](../../versions/v45-notifications/technical-design.md) §架构）。
 - **不做外部投递**：没有 outbox、队列、SSE / WebSocket；写入与业务写在同一个事务里。邮件 / 推送到来时才在表旁加 outbox。
 
 ## 不变量

@@ -533,3 +533,45 @@ func TestInvokeByRowIdAtTheInvokeRungKeepsTheRungError(t *testing.T) {
 		t.Fatalf("invoke error = %v, want the rung message", err)
 	}
 }
+
+// At the command boundary the warning is on stderr and the skill still loads: that is the whole
+// point of the ramp (ADR 0184).
+func TestInvokeOnARampLoadsAndWarns(t *testing.T) {
+	withTempHome(t)
+	pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/metadata"):
+			_, _ = w.Write([]byte(`{"name":"pdf-tools","namespace":{"slug":"demo"},
+				"version":{"name":"1.2.3","digest":"sha256:abc"},
+				"offline_pending_until":"2026-12-11T00:00:00Z"}`))
+		case strings.HasSuffix(r.URL.Path, "/body"):
+			_, _ = w.Write([]byte("正文\n"))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+
+	stdout, stderr, status := runCaptured(t, "skill", "invoke", "demo/pdf-tools", "--yes")
+
+	if status != 0 || !strings.Contains(stdout, "正文") {
+		t.Fatalf("status=%d stdout=%q", status, stdout)
+	}
+	if !strings.Contains(stderr, "正在下线中") || !strings.Contains(stderr, "2026-12-11") ||
+		!strings.Contains(stderr, "skmr skill copy demo/pdf-tools") {
+		t.Errorf("the ramp warning is missing or incomplete:\n%s", stderr)
+	}
+}
+
+// v61 (ADR 0184): a ramp still loads, and every load says when it ends and how to keep a copy.
+// The note names a whole command — the reader is as likely to be an agent with nobody to ask.
+func TestOfflinePendingNoteNamesTheDateAndTheCopy(t *testing.T) {
+	meta := api.Metadata{OfflinePendingUntil: "2026-12-11T00:00:00Z"}
+	want := "demo/pdf-tools 正在下线中，将于 2026-12-11 正式下线。要保留它，复制到自己的库：" +
+		"skmr skill copy demo/pdf-tools --name <新名字>"
+	if got := offlinePendingNote(meta, "demo/pdf-tools@01JKMNPQRSTVWXYZ0123456789"); got != want {
+		t.Errorf("note = %q, want %q", got, want)
+	}
+	if got := offlinePendingNote(api.Metadata{}, "demo/pdf-tools"); got != "" {
+		t.Errorf("a live skill printed %q", got)
+	}
+}

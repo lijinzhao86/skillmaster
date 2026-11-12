@@ -208,6 +208,17 @@ export default function NotificationsBell() {
                   }}
                   onView={(value) => void openSkill(value)}
                   onHandle={(value) => void openCollaborators(value)}
+                  onCopy={(value) => {
+                    // The bell's other actions mark the row read; this one navigates away, so it
+                    // does not wait for the answer.
+                    void markRead(value.id)
+                    if (value.skill !== null) {
+                      go(
+                        `/skills/${encodeURIComponent(value.skill.namespace)}/` +
+                          `${encodeURIComponent(value.skill.name)}?copy=1`,
+                      )
+                    }
+                  }}
                 />
               ))}
             </ul>

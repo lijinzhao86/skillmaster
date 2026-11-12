@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { go, replace } from '../address'
+import { dialogs } from '../components/dialogs/store'
 import NoticeRow from '../components/notifications/NoticeRow'
 import { badgeText, isPending } from '../fixtures/notifications'
 import { accept, decline, markAllRead, markRead, snapshot, subscribe, unread } from '../notificationsStore'
@@ -125,6 +126,17 @@ export default function NotificationsBell({ page, params }: { page: string; para
                   setOpen(false)
                   replace('?page=skill&tab=settings&sub=collaborators')
                   window.scrollTo(0, 0)
+                }}
+                onCopy={() => {
+                  markRead(row.id)
+                  setOpen(false)
+                  dialogs.openCopy({
+                    mode: 'open',
+                    skillName: row.skill?.name ?? '',
+                    versions: [{ value: 'latest', label: '线上版本' }],
+                    initialVersion: 'latest',
+                    trigger: null,
+                  })
                 }}
               />
             ))}

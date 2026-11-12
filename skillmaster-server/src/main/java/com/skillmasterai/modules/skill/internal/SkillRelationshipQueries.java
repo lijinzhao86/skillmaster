@@ -38,7 +38,7 @@ public final class SkillRelationshipQueries {
         return jdbc.sql(SkillPredicates.IDENTIFIED + """
                 SELECT s.id, s.namespace_id, s.name, s.title, s.description, s.frontmatter,
                        s.visibility, s.public_rung, s.source, s.current_version_id, s.offline_at,
-                       s.ever_published_at,
+                       s.offline_pending_at, s.offline_due_at, s.ever_published_at,
                        (s.namespace_id = :ownNamespaceId) AS owns,
                        s.grant_role AS granted_role
                 FROM identified s
@@ -59,6 +59,8 @@ public final class SkillRelationshipQueries {
                                 rs.getString("public_rung"),
                                 rs.getString("current_version_id"),
                                 rs.getString("offline_at"),
+                                rs.getString("offline_pending_at"),
+                                rs.getString("offline_due_at"),
                                 rs.getString("ever_published_at")),
                         rs.getBoolean("owns"),
                         GrantRole.higher(rs.getString("granted_role"),

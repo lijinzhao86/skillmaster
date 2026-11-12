@@ -243,9 +243,18 @@ describe('one skill: 加入与失败横幅', () => {
     )
     fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
     await settle()
+    // v61: 入库 is confirmed once; the refusal lands on the page banner after that.
+    fireEvent.click(
+      [...container.querySelectorAll('.confirm:not([hidden]) .confirm-acts:not([hidden]) .button')].at(-1) as HTMLButtonElement,
+    )
+    await settle()
     expect(text(container.querySelector('.page > .banner'))).toContain('入库不了')
 
     fireEvent.click(container.querySelector('#joinSkill') as HTMLButtonElement)
+    await settle()
+    fireEvent.click(
+      [...container.querySelectorAll('.confirm:not([hidden]) .confirm-acts:not([hidden]) .button')].at(-1) as HTMLButtonElement,
+    )
     await settle()
     expect(container.querySelector('.page > .banner')).toBeNull()
     expect(text(container.querySelector('#removeSkill'))).toBe('移出库')

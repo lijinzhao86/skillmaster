@@ -43,6 +43,9 @@
 | `RELEASE_TYPE_NEEDS_EXPLICIT_NAME` | `release_type_needs_explicit_name` |
 | `DUPLICATE_TARGET` | `duplicate_target` |
 | `SKILL_OFFLINE` | `skill_offline` |
+| `SKILL_GONE` | `skill_gone` |
+| `OFFLINE_REQUIRED` | `offline_required` |
+| `SKILL_OFFLINE_PENDING` | `skill_offline_pending` |
 | `IF_MATCH_REQUIRED` | `if_match_required` |
 | `DIGEST_MISMATCH` | `digest_mismatch` |
 | `CONTENT_ALREADY_EXISTS` | `content_already_exists` |
@@ -52,7 +55,6 @@
 | `VERSION_IS_NOT_DRAFT` | `version_is_not_draft` |
 | `GREP_REQUIRES_DRAFT` | `grep_requires_draft` |
 | `INVALID_PATH` | `invalid_path` |
-| `SKILL_DELETED` | `skill_deleted` |
 | `SKILL_ALREADY_EXISTS` | `skill_already_exists` |
 | `INVALID_NAME` | `invalid_name` |
 | `NAME_NOT_REWRITABLE` | `name_not_rewritable` |

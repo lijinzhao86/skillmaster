@@ -370,11 +370,16 @@ export default function SkillsPage() {
   async function restore(skill: SkillCard): Promise<void> {
     setBanner(null)
     setRestoring(`${skill.namespace}/${skill.name}`)
-    const result = await restoreSkill(skill.namespace, skill.name)
+    const result = await restoreSkill(skill.namespace, skill.name, skill.id)
     setRestoring(null)
     if (!result.ok) {
       setBanner(failureMessage(result))
       return
+    }
+    // v61: if a live skill took the name while this one was deleted, the restore answers under a
+    // suffixed address. Saying nothing would leave the person looking for the old one.
+    if (result.data.renamed) {
+      setBanner(`已恢复。原名已被占用，这个 skill 现在叫 ${result.data.address}。`)
     }
     // **Stay on the list.** The design's restore moves the row out of 已删除 in place; following
     // the skill's own page would throw away the search, filters and page the person was in — and

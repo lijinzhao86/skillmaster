@@ -254,12 +254,15 @@ func parseSkillPageArgs(spec pageSpec, args []string) (pageArgs, error) {
 // only source of a version's state, of `owned`, and of `offline`; the consumer plane answers a rung
 // at every tier (ADR 0051), which is why it is the fallback.
 type pageFacts struct {
-	known         bool // a rung is known
-	fromAuthor    bool
-	rung          string
-	owned         bool
-	status        string
-	offline       bool
+	known      bool // a rung is known
+	fromAuthor bool
+	rung       string
+	owned      bool
+	status     string
+	offline    bool
+	// pending is the 下线中 ramp: still serving, but `skill offline` and `skill online` are both
+	// meaningful there — the page switches it back on.
+	pending       bool
 	everPublished bool
 	// pinMissing is the author plane's 404 for a caller who *can* read the skill: the version is not
 	// in this caller's visible rows (or does not exist), so its page would say 「没有这一版」.
@@ -286,6 +289,7 @@ func readPageFacts(ctx context.Context, spec pageSpec, parsed pageArgs) pageFact
 				known: true, fromAuthor: true,
 				rung: envelope.Skill.Access, owned: envelope.Skill.Owned,
 				status: envelope.Version.Status, offline: envelope.Skill.Offline,
+				pending:       envelope.Skill.OfflinePendingUntil != "",
 				everPublished: envelope.Skill.EverPublished,
 			}
 		}
@@ -313,7 +317,9 @@ func skillFacts(ctx context.Context, address string) pageFacts {
 		return pageFacts{
 			known: true, fromAuthor: true,
 			rung: listed.Skill.Access, owned: listed.Skill.Owned,
-			offline: listed.Skill.Offline, everPublished: listed.Skill.EverPublished,
+			offline:       listed.Skill.Offline,
+			pending:       listed.Skill.OfflinePendingUntil != "",
+			everPublished: listed.Skill.EverPublished,
 		}
 	}
 	return consumerFacts(ctx, address)
@@ -356,7 +362,7 @@ func httpStatus(err error) int {
 
 // pageReason says why the page is not being opened, or returns "" when it should be. The code is
 // the machine half: a rung refusal and a state refusal are different things to act on.
-func pageReason(spec pageSpec, facts pageFacts) (string, string) {
+func pageReason(spec pageSpec, facts pageFacts, address string) (string, string) {
 	// **The rung is answered before the version's visibility.** A `browse` caller publishing a draft
 	// gets 404 from the author plane (drafts are `write`), which is the same shape as "no such
 	// version"; what they actually need is told by the rung they do hold.
@@ -397,11 +403,23 @@ func pageReason(spec pageSpec, facts pageFacts) (string, string) {
 		return "wrong_version_state", fmt.Sprintf("这一版现在是%s，%s。",
 			statusNames[facts.status], spec.stateHint)
 	}
-	if spec.offline != nil && facts.offline != *spec.offline {
-		if *spec.offline {
-			return "wrong_version_state", "这个 skill 没有下线，恢复服务没有可做的。"
+	// A ramp is a state of its own: `online` opens the page that cancels it, and that is the
+	// command a reader types for 「取消下线」. `offline` must not open a page whose only button
+	// does the opposite of the command.
+	if spec.offline != nil {
+		if !*spec.offline && facts.pending {
+			return "wrong_version_state",
+				"这个 skill 正在下线中，要取消用：skmr skill online " + address + "。"
 		}
-		return "wrong_version_state", "这个 skill 已经下线了，下线没有可做的。"
+		if *spec.offline && facts.pending {
+			return "", ""
+		}
+		if facts.offline != *spec.offline {
+			if *spec.offline {
+				return "wrong_version_state", "这个 skill 没有下线，恢复服务没有可做的。"
+			}
+			return "wrong_version_state", "这个 skill 已经下线了，下线没有可做的。"
+		}
 	}
 	return "", ""
 }
@@ -453,7 +471,7 @@ func executePageAction(ctx context.Context, spec pageSpec, parsed pageArgs) erro
 	facts := readPageFacts(ctx, spec, parsed)
 	code, reason := "", ""
 	if facts.known {
-		code, reason = pageReason(spec, facts)
+		code, reason = pageReason(spec, facts, parsed.address)
 	}
 	if reason != "" {
 		return pageRefusal(parsed.jsonMode, code, reason, target)

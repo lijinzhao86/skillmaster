@@ -198,6 +198,20 @@ func (e *ServerError) Error() string {
 		return "这一版已被下架：它曾经可读，现在消费面不再服务它。"
 	case "skill_offline":
 		return "这个 skill 已下线，暂时不提供服务。"
+	case "skill_gone":
+		// v61 (ADR 0184): the address was public and had a live version; it is deleted, not a typo.
+		return "这个 skill 已被作者删除，不再提供服务。"
+	case "skill_offline_pending":
+		// v61 (ADR 0184): still serving, but the ramp is not accepting new dependencies. The date
+		// comes from the envelope's details. **No command with a placeholder here** — `skill join`
+		// knows the address and prints the runnable copy command; this is the plain fallback.
+		if until := e.Details["pending_until"]; until != "" {
+			if len(until) >= 10 {
+				until = until[:10]
+			}
+			return fmt.Sprintf("这个 skill 正在下线中，将于 %s 正式下线，不能再入库。", until)
+		}
+		return "这个 skill 正在下线中，不能再入库。"
 	}
 	if e.Message != "" {
 		return e.Message

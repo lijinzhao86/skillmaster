@@ -59,6 +59,13 @@ public record AuthoredSkillResponse(
         List<File> files,
         Resources resources,
         String offlineAt,
+        /* v61 (ADR 0184): the 下线中 ramp's due date, or null. A separate field from offlineAt
+           because the two are different states — one still serves, the other does not. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String offlinePendingUntil,
+        /* v61 (ADR 0184): how many people outside the owner hold a grant. The delete confirmation
+           lists it beside the join count, which already travels as `usage.joins`. */
+        int grantees,
         /* v49: the same three blocks the consumption plane carries. The author's information page
            is where the source and license are read back, and the page must not learn them through a
            second endpoint the CLI does not share. */
@@ -161,6 +168,8 @@ public record AuthoredSkillResponse(
                                 authored.name(), authored.selected().addressSuffix()))
                         : null,
                 authored.offlineAt(),
+                authored.offlinePendingUntil(),
+                authored.grantees(),
                 SkillMetaResponse.originOf(sources, authored.skillId(), selectedVersionId),
                 SkillMetaResponse.licenseOf(sources, selectedVersionId, objectMapper),
                 SkillMetaResponse.usageOf(sources, metrics, authored.skillId()),

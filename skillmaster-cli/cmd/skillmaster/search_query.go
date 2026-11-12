@@ -225,8 +225,9 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			if err != nil {
 				return queryArgs{}, err
 			}
-			if !slices.Contains([]string{"live", "draft", "offline", "deleted", "all"}, item) {
-				return queryArgs{}, usagef("--show 只接受 live、draft、offline、deleted 或 all，收到 %q。%s",
+			if !slices.Contains([]string{"live", "draft", "offline", "pending", "deleted", "all"}, item) {
+				return queryArgs{}, usagef(
+					"--show 只接受 live、draft、offline、pending、deleted 或 all，收到 %q。%s",
 					item, usageAt(path))
 			}
 			options.show = item

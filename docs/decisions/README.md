@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 184 条。
+共 186 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -57,7 +57,7 @@
 | [0047](0047-permissions-are-a-ladder.md) | 对一个 skill 的权限是一条梯子，不是一个开关 | 已采纳 | 2026-10-17 |
 | [0048](0048-visibility-hands-out-a-rung.md) | 「公开」是把梯子的某一档交给所有人 | 已采纳 | 2026-10-17 |
 | [0049](0049-an-edited-description-outranks-the-version.md) | 作者改过的那句描述压着版本，直到他自己清掉 | 已采纳 | 2026-10-17 |
-| [0050](0050-deleting-a-skill-can-be-undone.md) | 删除是可以撤销的，而名字不释放 | 已采纳 | 2026-10-17 |
+| [0050](0050-deleting-a-skill-can-be-undone.md) | 删除是可以撤销的，而名字不释放 | 部分被取代（§决定 3 由 0183 取代） | 2026-10-17 |
 | [0051](0051-the-author-plane-serves-by-tier.md) | 作者面按档位分，不按面分 | 已采纳 | 2026-10-17 |
 | [0052](0052-a-request-is-not-a-grant.md) | 申请不是授权：申请一档，由管理与所有者批准 | 已采纳 | 2026-10-17 |
 | [0053](0053-skill-metadata-is-its-own-module.md) | skill 元数据是它自己的模块，列表要的事实落在 `skill` 行上 | 已采纳 | 2026-10-18 |
@@ -78,7 +78,7 @@
 | [0068](0068-export-is-a-one-shot-snapshot.md) | 一版 skill 的整包导出是一次性快照，不是工作区 | 已采纳 | 2026-10-21 |
 | [0069](0069-metadata-is-a-sidecar-not-content.md) | `.skillmaster/metadata.json` 是传输旁路，不是内容 | 已采纳 | 2026-10-21 |
 | [0070](0070-creating-a-skill-creates-its-first-draft.md) | 新建 skill 与它的第一份草稿是一个动作 | 已采纳 | 2026-10-21 |
-| [0071](0071-a-deleted-name-answers-with-its-own-code.md) | 提交到已删除的名字答 409 `skill_deleted`，不是泛泛的 400 | 已采纳 | 2026-10-21 |
+| [0071](0071-a-deleted-name-answers-with-its-own-code.md) | 提交到已删除的名字答 409 `skill_deleted`，不是泛泛的 400 | 被 0183 取代 | 2026-10-21 |
 | [0072](0072-the-handoff-points-at-the-page-that-owns-the-action.md) | 页面专属动作的交接落点指向动作所在的那一页 | 已采纳 | 2026-10-21 |
 | [0073](0073-asking-for-access-splits-by-plane.md) | 申请访问按平面分：申请、撤回、读自己的走 API；批准与拒绝留在网页 | 已采纳（§决定 2 被 0140 取代；§决定 1、3 不变） | 2026-10-21 |
 | [0074](0074-a-handoff-may-carry-a-preselection.md) | 交接可以携带预选，不能携带执行 | 已采纳 | 2026-10-21 |
@@ -190,5 +190,7 @@
 | [0180](0180-personal-scenario-ranks-by-evidence-library-only.md) | 个人适用场景按证据分级排序，只在库内生效，v1 不训练 | 已采纳 | 2026-11-11 |
 | [0181](0181-text-limits-use-unicode-code-points.md) | 文本上限统一用 Unicode 码点，写入与发布同契约 | 已采纳 | 2026-11-11 |
 | [0182](0182-owner-usage-is-a-period-view.md) | 所有者的「使用」页签是区间视图，平台信号不跟着变 | 已采纳 | 2026-11-11 |
+| [0183](0183-deleting-a-skill-releases-its-name.md) | 删除释放名字，数据仍然保留 | 已采纳 | 2026-11-11 |
+| [0184](0184-taking-a-public-skill-down-is-a-service-lifecycle.md) | 公开 skill 的退场按服务生命周期 | 已采纳 | 2026-11-11 |
 | [0185](0185-credentials-default-to-a-file.md) | CLI 凭据默认存文件，钥匙串改为可选 | 已采纳 | 2026-11-11 |
 | [0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md) | CLI 在安装时改写客户端的沙箱配置，范围限定为 SkillMaster 自己的目录与域名 | 已采纳 | 2026-11-11 |

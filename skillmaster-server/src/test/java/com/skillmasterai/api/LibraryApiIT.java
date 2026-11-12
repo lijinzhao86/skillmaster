@@ -337,10 +337,85 @@ class LibraryApiIT extends AbstractOrganizeIT {
         assertThat(live.statusCode()).isEqualTo(409);
         assertThat(json(live).get("error").get("code").asText()).isEqualTo("skill_not_deleted");
 
+        // v61 (ADR 0183): the answer names the address, because a restore that lost its name to a
+        // new skill comes back under 原名-restored-<id>.
         HttpResponse<String> restored = post("/api/v1/skills/demo/gone/restore", bearer);
-        assertThat(restored.statusCode()).as(restored.body()).isEqualTo(204);
+        assertThat(restored.statusCode()).as(restored.body()).isEqualTo(200);
+        assertThat(json(restored).get("address").asText()).isEqualTo("demo/gone");
+        assertThat(json(restored).get("renamed").asBoolean()).isFalse();
         assertThat(count("SELECT count(*) FROM skill WHERE name = 'gone' AND deleted_at IS NULL"))
                 .isEqualTo(1);
+    }
+
+    @Test
+    void restoringATombstoneByIdRenamesTheOneAskedFor() {
+        // Two tombstones share the name: the id, not the address, says which one comes back.
+        String older = skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "gone", "private",
+                UlidHolder.NEXT, null, AT, null);
+        skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "gone", "private",
+                UlidHolder.NEXT, null, "2026-10-21T00:00:00Z", null);
+        publicSkill("gone");
+        String bearer = token();
+
+        HttpResponse<String> restored = postJson(
+                "/api/v1/skills/demo/gone/restore", bearer, "{\"id\":\"" + older + "\"}");
+        assertThat(restored.statusCode()).as(restored.body()).isEqualTo(200);
+        assertThat(json(restored).get("renamed").asBoolean()).isTrue();
+        assertThat(json(restored).get("address").asText())
+                .as("the freed name carries the asked-for row's id, lowercased")
+                .isEqualTo("demo/gone-restored-" + older.toLowerCase(java.util.Locale.ROOT));
+        assertThat(count("SELECT count(*) FROM skill WHERE name = 'gone' AND deleted_at IS NULL"))
+                .as("the live skill keeps the name")
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM skill WHERE deleted_at IS NOT NULL"))
+                .as("the other tombstone is untouched")
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM skill WHERE deleted_at IS NULL AND id = :id",
+                java.util.Map.of("id", older)))
+                .as("the asked-for row is the one that came back")
+                .isEqualTo(1);
+    }
+
+    @Test
+    void aRestoredLongNameDoesNotEndASegmentWithAHyphen() {
+        // The 64-code-point cut lands right after a hyphen when the name is 29 code points long;
+        // `--restored` would be a name the grammar refuses (ADR 0160).
+        String longName = "a".repeat(27) + "-b";
+        String tombstone = skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, longName, "private",
+                UlidHolder.NEXT, null, AT, null);
+        publicSkill(longName);
+
+        HttpResponse<String> restored = postJson("/api/v1/skills/demo/" + longName + "/restore",
+                token(), "{\"id\":\"" + tombstone + "\"}");
+        assertThat(restored.statusCode()).as(restored.body()).isEqualTo(200);
+        String address = json(restored).get("address").asText();
+        String restoredName = address.substring("demo/".length());
+        assertThat(address).doesNotContain("--");
+        assertThat(restoredName.codePointCount(0, restoredName.length()))
+                .isLessThanOrEqualTo(64);
+    }
+
+    @Test
+    void deletingANeverPublishedSkillTellsThePeopleItWasSharedWith() {
+        String shared = draftSkill("never-live");
+        grant(shared, OTHER_USER_ID, "browse");
+        String bearer = token();
+
+        assertThat(post("/api/v1/author/skills/demo/never-live/delete", bearer).statusCode())
+                .isEqualTo(204);
+
+        // v61 (ADR 0183): deleting is not silent for the people who were using the skill — here a
+        // grantee, since a never-published skill has no joiners.
+        assertThat(count("SELECT count(*) FROM notification WHERE kind = 'announcement'"))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM notification_recipient r JOIN notification n"
+                + " ON n.id = r.notification_id WHERE n.body LIKE '%demo/never-live%'"))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM notification_recipient r JOIN notification n"
+                + " ON n.id = r.notification_id WHERE r.user_id = :owner",
+                java.util.Map.of("owner", DEMO_USER_ID)))
+                .as("the owner deleted it; they are not notified of their own action")
+                .isZero();
     }
 
     @Test

@@ -99,10 +99,9 @@ func TestCopyLeavesTheVersionOutWhenTheAddressDoesNotPinOne(t *testing.T) {
 	}
 }
 
-func TestCopySaysTheNextStepForATakenNameAndADeletedOne(t *testing.T) {
+func TestCopySaysTheNextStepForATakenName(t *testing.T) {
 	for code, want := range map[string]string{
 		"skill_already_exists": "这个名字已经被一个 skill 占着。",
-		"skill_deleted":        "这个名字属于一个已删除的 skill；要到网页上恢复它，才能继续用这个名字。",
 	} {
 		t.Run(code, func(t *testing.T) {
 			pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {

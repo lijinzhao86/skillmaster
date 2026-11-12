@@ -49,6 +49,12 @@ import java.util.Map;
  *                      on the wire because a list of ULIDs is a list the page cannot show — the
  *                      same reason the grant list resolves handles
  * @param filesVisible  whether the selected version's file manifest and body address may be shown
+ * @param offlinePendingUntil when a public skill leaves through the 30-day ramp, the date it goes
+ *                      offline; null otherwise (v61, ADR 0184). The page draws 下线中 from it and
+ *                      still keeps every read and write it offers an online skill
+ * @param grantees      how many people outside the owner hold a grant (v61). Carried because the
+ *                      delete confirmation lists it beside the join count, and a page that asked
+ *                      for it separately would be one more request on every skill it opens
  * @param skillId       the skill row's id, for the v49 source and usage lookups. The author plane
  *                      reads the skill, not a version, so this is the only stable identity for a
  *                      skill that may have no version at all
@@ -56,7 +62,8 @@ import java.util.Map;
 public record AuthoredSkill(String namespaceSlug, String name, String title, String description,
         String visibility, String publicRung, boolean canPublishPublic, String rung, String pendingRung,
         String frontmatterJson, SkillSnapshot selected, List<VersionSummary> versions,
-        Map<String, String> submitters, boolean filesVisible, String offlineAt, String skillId) {
+        Map<String, String> submitters, boolean filesVisible, String offlineAt,
+        String offlinePendingUntil, int grantees, String skillId) {
 
     public AuthoredSkill {
         versions = List.copyOf(versions);

@@ -5,6 +5,7 @@
 - **部分取代**：[0046](0046-deleting-a-skill-happens-in-the-browser.md) §决定（撤掉 API 平面的删除路由）——对「从未发布过任何版本」的 skill 不再成立；[0126](0126-page-only-actions-open-the-page.md) §决定 4 里「API 平面仍然没有这九个动作的路由」对删除不再成立。两份 ADR 的正文按原样保留。
 - **实现注**：作者面实际新增三个字段（`owned`、`offline`、`ever_published`）——预检要判「是不是所有者」「有没有下线」「有没有上线过」，三个都读同一次作者页。正文 §决定 4 说的「一个增量字段」是 `owned` 这个起点，其余两个是同一次读的补充；§后果说的「服务端新增两处」实际是三处（作者页三字段、窄删除入口、V31 投影与发布侧并发保护）。删除语句读的是投影列 `skill.ever_published_at`（`recordPublish` 写、V31 从 `first_published_at` 回填），不是直接读 `skill_version`。§决定 5 的「`browse` 以下照常打开」按实现细化：作者面读不到时改读消费者面，**档位不够才拒绝**；档位够或不涉及档位时照常打开，并仍会说明「没能预检」（作者面没答，版本状态等事实未知）。两处都答不出时同样打开并说明。**正文按原样保留**。
 - **依赖**：[0061](0061-what-a-credential-may-do-to-versions.md)（判据：改变调用者读到什么才只在浏览器面）、[0046](0046-deleting-a-skill-happens-in-the-browser.md)、[0050](0050-deleting-a-skill-can-be-undone.md)（所有者）、[0047](0047-permissions-are-a-ladder.md)（档位）、[0040](0040-api-key-in-the-cli-now-the-browser-path-later.md)（凭据签发）、[0126](0126-page-only-actions-open-the-page.md)（页面动作打开那一页）、[0087](0087-cli-exit-codes-are-a-public-contract.md)
+- **被 [0183](0183-deleting-a-skill-releases-its-name.md) 修订**：这条窄删除现在也立即释放名字，回执不再说「名字不会释放」；删除前会通知共享给它的人——**正文按原样保留**。
 
 ## 背景
 

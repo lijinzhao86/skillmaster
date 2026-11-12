@@ -41,6 +41,8 @@ export type NotificationKind =
   | 'announcement'
   /* v56: a skill stopped working because its author deleted their account (ADR 0175). */
   | 'skill_unavailable'
+  /* v61: a public skill entered its 下线中 ramp; the deadline is in `expires_at` (ADR 0184). */
+  | 'skill_offline_scheduled'
 
 /** A notification's displayed state: the result snapshot, or `pending` / `info`. */
 export type NotificationState =

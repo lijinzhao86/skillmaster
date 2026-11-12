@@ -120,10 +120,11 @@ public class PublishBatchUseCase {
         } catch (NotPermittedException e) {
             return failure(target, ErrorCode.FORBIDDEN, e.getMessage());
         } catch (SkillDeletedException e) {
-            // v37: the publish lost the skill row to a delete that committed first. It is this row's
-            // answer — the single route maps the same exception to the same 409 — and letting it end
-            // the stream would truncate the NDJSON body and skip every later target.
-            return failure(target, ErrorCode.SKILL_DELETED, e.getMessage());
+            // v37: the publish lost the skill row to a delete that committed first. v61 makes that
+            // answer the same 404 the single route gives — the address no longer names a live skill.
+            // It is this row's answer, and letting it end the stream would truncate the NDJSON body
+            // and skip every later target.
+            return failure(target, ErrorCode.SKILL_NOT_FOUND, e.getMessage());
         } catch (com.skillmasterai.modules.retrieval.EmbeddingUnavailable e) {
             // A named, expected failure since v19: the semantic index could not be written, so this
             // row's publish rolled back. It is this row's answer like any other — letting it end the

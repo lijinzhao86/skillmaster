@@ -5,8 +5,9 @@
  * name, all at once. The skill and its first draft are one transaction; what lands is a draft,
  * because publishing stays on the version page (ADR 0031).
  *
- * The two refusals — the name is taken, the name belongs to a deleted skill — are addresses here,
- * because with no server there is nothing to click that would produce them.
+ * The one refusal — the name is taken — is an address here, because with no server there is
+ * nothing to click that would produce it. A deleted name is free since v61 (ADR 0183), so the
+ * state this sheet used to draw no longer exists.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -39,9 +40,7 @@ export default function NewSkillDialog() {
     setVersionName('第一版')
     setBusy(false)
     setError(
-      mode === 'deleted' ? (
-        <>这个名字属于一个已删除的 skill。 <a href="?page=skills&show=deleted">去恢复</a></>
-      ) : mode === 'error' ? (
+      mode === 'error' ? (
         <>这个名字已经有了。 <a href="?page=skill">查看 pdf-tools</a></>
       ) : null,
     )

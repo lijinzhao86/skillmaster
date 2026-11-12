@@ -3,6 +3,7 @@
 - **状态**：已采纳
 - **日期**：2026-10-21
 - **依赖**：[0005](0005-content-addressing.md)、[0031](0031-submitting-and-publishing-are-two-actions.md)、[0050](0050-deleting-a-skill-can-be-undone.md)（删除留名、恢复在网页）、[0055](0055-drafts-have-a-required-name.md)（草稿有必填名称）
+- **被 [0183](0183-deleting-a-skill-releases-its-name.md) 修订**：新建 skill 不再被同名的已删行挡住——删除立即释放名字，创建与提交直接建新行；**正文按原样保留**。
 
 ## 背景
 

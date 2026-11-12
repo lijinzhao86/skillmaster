@@ -258,6 +258,10 @@ type Metadata struct {
 	// published versions only, so a copy that is still a draft answers 404 here — this field
 	// becomes readable once its first version is published.
 	CopiedFrom *CopiedFrom `json:"copied_from"`
+	// OfflinePendingUntil is the 下线中 ramp's due date while the skill still serves (v61, ADR
+	// 0184). A skill in the ramp answers every read; the CLI warns on `invoke` and `run` and points
+	// at `skill copy`. Absent on an older server and on every skill that is not in a ramp.
+	OfflinePendingUntil string `json:"offline_pending_until"`
 }
 
 // CopiedFrom is the source snapshot a copy recorded: the address as it read at copy time and the
@@ -411,14 +415,16 @@ type Card struct {
 	// public result the caller has no relation to. State is the display state (live / draft / offline
 	// / deleted), derived by the server rather than stored. Version is the current version's author
 	// given name; DeletedAt is the soft-delete time and only appears on the deleted view.
-	Source     string    `json:"source"`
-	State      string    `json:"state"`
-	Version    string    `json:"version"`
-	UpdatedAt  string    `json:"updated_at"`
-	DeletedAt  *string   `json:"deleted_at"`
-	Category   *Category `json:"category"`
-	PublicTags []Tag     `json:"public_tags"`
-	MyTags     []Tag     `json:"my_tags"`
+	Source    string  `json:"source"`
+	State     string  `json:"state"`
+	Version   string  `json:"version"`
+	UpdatedAt string  `json:"updated_at"`
+	DeletedAt *string `json:"deleted_at"`
+	// OfflinePendingUntil is the 下线中 ramp's date on a row whose state is `pending` (v61).
+	OfflinePendingUntil string    `json:"offline_pending_until"`
+	Category            *Category `json:"category"`
+	PublicTags          []Tag     `json:"public_tags"`
+	MyTags              []Tag     `json:"my_tags"`
 	// Score is the cosine similarity a semantic search ranked this row by (v19), or nil on the
 	// keyword path. A pointer because zero is a real similarity and "no score" is a different fact.
 	Score *float64 `json:"score"`
