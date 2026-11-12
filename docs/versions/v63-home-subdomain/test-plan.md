@@ -104,21 +104,23 @@
 
 ## 结果
 
-P0 完成后填 P0 用例；P1/P2 用例在对应期执行后填写。
+P0 完成后填 P0 用例；P1/P2 用例在对应期执行后填写。P0 于 2026-11-13 在生产执行：
 
 | 用例 | 期 | 结果 | 证据 |
 |---|---|---|---|
-| T1 | P0 | 未执行 | — |
-| T2 | P0 | 未执行 | — |
-| T3 | P0 | 未执行 | — |
+| T1 | P0 | 通过 | `dig +short home.skillmasterai.com` → `47.117.36.14` |
+| T2 | P0 | 通过 | 主机上从 `home` 与 `www` 各取 `/index.html`，均与 `/srv/skillmaster/site/index.html` 逐字节相同（`cmp` 无输出） |
+| T3 | P0 | 通过 | 主证书 SAN 含 `DNS:home.skillmasterai.com`；`certbot renew --cert-name skillmasterai.com --dry-run --no-random-sleep-on-renew` → all simulated renewals succeeded |
 | T4 | P1 | 未执行（P1） | — |
 | T5 | P1 | 未执行（P1） | — |
 | T6 | P1 | 未执行（P1） | — |
 | T7 | P2 | 未执行（P2） | — |
 | T8 | P2 | 未执行（P2） | — |
-| T9 | P0/P1/P2 | 未执行 | — |
-| T10 | P0/P1/P2 | 未执行 | — |
-| T11 | P0 | 未执行 | — |
+| T9 | P0/P1/P2 | P0 通过 | Ops check run `43282973137` success：五个名字解析、主证书 SAN、配置哈希与证书天数 |
+| T10 | P0/P1/P2 | P0 通过 | Site Deploy run `43282740310` success；探针按内容比对通过，未触发回滚 |
+| T11 | P0 | 通过 | 站点构建含「各子域与」与「版本 1.2」；部署 jar 的 `application.yml` `privacy-version` 为 `1.2`；CI 的 Site check 通过 |
+
+第一次 Site Deploy（run `43281709582`）在主机侧 P0 之前被触发：`home` 还没有解析、证书也没有它的 SAN，探针按设计失败并回滚到上一版。补齐 DNS、证书与 nginx 之后重发成功；这次先后顺序反过来是操作问题，不是代码问题，运行手册已写明顺序。
 
 **失败或跳过的用例要单列说明**，不要埋在表格里。
 
