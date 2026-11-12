@@ -545,6 +545,30 @@
       ],
       "status": 400,
       "body": "{\"error\": {\"code\": \"my_when_to_use_too_long\", \"message\": \"too long\", \"details\": [{\"field\": \"when_to_use\", \"issue\": \"too_long\"}]}}"
+    },
+    {
+      "code": "feedback_sensitive",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_sensitive\", \"message\": \"sensitive\"}}"
+    },
+    {
+      "code": "feedback_throttled",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--consent", "--json"],
+      "status": 429,
+      "body": "{\"error\": {\"code\": \"feedback_throttled\", \"message\": \"retry later\"}}"
+    },
+    {
+      "code": "feedback_consent_stale",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_consent_stale\", \"message\": \"stale\"}}"
+    },
+    {
+      "code": "feedback_not_found",
+      "argv": ["feedback", "delete", "FB-20260101-AAAAAA", "--yes", "--json"],
+      "status": 404,
+      "body": "{\"error\": {\"code\": \"feedback_not_found\", \"message\": \"missing\"}}"
     }
   ]
 }

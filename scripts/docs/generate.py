@@ -180,9 +180,11 @@ def gen_limits() -> str:
             source="skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/"
             "IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/"
             "modules/blob/BlobSettings.java；skillmaster-server/src/main/java/"
-            "com/skillmasterai/common/SkillFieldLimits.java"
+            "com/skillmasterai/common/SkillFieldLimits.java；skillmaster-server/src/main/java/"
+            "com/skillmasterai/modules/feedback/FeedbackSafety.java；skillmaster-server/src/main/"
+            "java/com/skillmasterai/usecase/SubmitFeedbackUseCase.java"
         ),
-        "# 上传与对象存储的上限（生成）\n",
+        "# 上限（生成）\n",
         "**服务端**以这些常量为准。CLI 与网页各自保留了一份同值或接近的常量（不由这里读取，"
         "控制台还有一句面向用户的文案）；改这里的值时，要一起检查客户端，否则它会先于服务端"
         "拦下或放过。其余常量与下面的分流阈值只有服务端有。\n",
@@ -246,6 +248,33 @@ def gen_limits() -> str:
         lines.append(
             f"| `SkillFieldLimits.{name}` | `{expression.strip()}` | {value} |"
         )
+
+    # v64: the feedback document ceiling and its hourly budget. The CLI keeps a copy of the
+    # ceiling to fail before the request travels; the server is still the gate.
+    feedback = read(SERVER / "modules/feedback/FeedbackSafety.java")
+    rate = read(SERVER / "usecase/SubmitFeedbackUseCase.java")
+    code_points = re.search(r"MAX_CODE_POINTS\s*=\s*([\d_]+)", feedback)
+    per_hour = re.search(r"MAX_PER_HOUR\s*=\s*([\d_]+)", rate)
+    if not code_points or not per_hour:
+        fail(
+            "反馈的两个上限解析不到：FeedbackSafety.MAX_CODE_POINTS / SubmitFeedbackUseCase.MAX_PER_HOUR"
+        )
+    lines.append("")
+    lines.append("## 反馈的上限\n")
+    lines.append(
+        "`skmr feedback send` 的文档上限（码点，ADR 0181）与每个账号每小时可提交的条数。"
+        "CLI 保留一份同值常量用于发送前失败，服务端仍是闸。\n"
+    )
+    lines.append("| 常量 | 原始表达式 | 值 |")
+    lines.append("|---|---|---|")
+    lines.append(
+        f"| `FeedbackSafety.MAX_CODE_POINTS` | `{code_points.group(1)}` | "
+        f"{evaluate(code_points.group(1))} 码点 |"
+    )
+    lines.append(
+        f"| `SubmitFeedbackUseCase.MAX_PER_HOUR` | `{per_hour.group(1)}` | "
+        f"{evaluate(per_hour.group(1))} 条/小时 |"
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -323,6 +352,13 @@ def gen_decisions() -> str:
         fail(f"只找到 {len(files)} 条 ADR")
 
     rows = [parse_adr(p) for p in files]
+    numbers = [row[0] for row in rows]
+    repeated = sorted({number for number in numbers if numbers.count(number) > 1})
+    if repeated:
+        # **The index looks one slug up per number**, so a repeated number silently points half
+        # its rows at the other decision with that number — and every other check still passes.
+        # A number is never reused (docs-architecture §2.2), so a repeat is always an error.
+        fail(f"决策编号重复：{'、'.join(repeated)}；编号四位递增、永不复用")
     lines = [
         HEADER.format(source="docs/decisions/NNNN-*.md 的文件头"),
         "# 决策记录（ADR）\n",

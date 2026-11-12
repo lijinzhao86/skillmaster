@@ -67,6 +67,15 @@ func loginForACommand(ctx context.Context, server string, store credentials.EnvS
 // whether its own stub is still in place.
 var startLogin = loginForACommand
 
+// loginFailure marks a login that a command started for itself and that did not finish. It keeps
+// the sentence (Error is the cause's own text) and only adds the fact that this was the login step,
+// which is what a command that offers a mailbox fallback needs to know.
+type loginFailure struct{ cause error }
+
+func (e *loginFailure) Error() string { return e.cause.Error() }
+
+func (e *loginFailure) Unwrap() error { return e.cause }
+
 // clientFor builds a client from the credential this machine presents — **starting the login itself
 // when there is none**.
 //
@@ -110,7 +119,7 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		// second one.
 		fmt.Fprintf(os.Stderr, "本机没有凭据，先登录 %s。\n", server)
 		if loginErr := startLogin(ctx, server, store, notice); loginErr != nil {
-			return api.Client{}, loginErr
+			return api.Client{}, &loginFailure{cause: loginErr}
 		}
 		stored, err = auth.AccessToken(store)
 	}

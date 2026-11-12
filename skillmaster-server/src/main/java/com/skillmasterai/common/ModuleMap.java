@@ -141,7 +141,11 @@ public final class ModuleMap {
             // daily rollup. Nothing reads its tables across the boundary: the read models go
             // through UsageHistory, and the write path goes through RecordActivityUseCase.
             new Module("M17", "activity", MODULES_PACKAGE + ".activity",
-                    Set.of("activity_event", "skill_collaborator_day")));
+                    Set.of("activity_event", "skill_collaborator_day")),
+            // M18 is v64's feedback inbox: one document a person sends the platform. It owns the
+            // row and its archive pointer; the notification is M14's, the object is M12's.
+            new Module("M18", "feedback", MODULES_PACKAGE + ".feedback",
+                    Set.of("user_feedback")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -186,7 +190,9 @@ public final class ModuleMap {
                     "CredentialVaultUnavailableException")),
             Map.entry("M17", Set.of("ActivityEvent", "ActivityKinds", "ActivityRecorder",
                     "ArchiveSettings", "InvokeActivity", "SearchActivity", "SearchHit",
-                    "UsageHistory")));
+                    "UsageHistory")),
+            Map.entry("M18", Set.of("Feedback", "FeedbackConsent", "FeedbackSafety",
+                    "FeedbackService")));
 
     /**
      * The shared kernel (ADR 0123): cross-cutting domain words that every module may use. It is

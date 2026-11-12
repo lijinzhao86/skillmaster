@@ -102,6 +102,8 @@ func run(ctx context.Context, args []string) (err error) {
 		return usageVerb(ctx, args[1:])
 	case "secret":
 		return secretVerb(ctx, args[1:])
+	case "feedback":
+		return feedbackVerb(ctx, args[1:])
 	default:
 		return unknownName("", args[0], childNames(""))
 	}

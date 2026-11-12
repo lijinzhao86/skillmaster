@@ -89,6 +89,15 @@ public final class RoutingBlobStore implements BlobStore {
     }
 
     @Override
+    public void deleteObject(String key) {
+        if (oss == null) {
+            throw new IllegalStateException(
+                    "object storage is off; there is no named object to delete");
+        }
+        oss.delete(key);
+    }
+
+    @Override
     public BlobRef put(byte[] bytes) {
         // The same backstop the streaming entries have. A byte array is already in the heap, so
         // this is not about memory: it is the last place that can refuse an oversized body before

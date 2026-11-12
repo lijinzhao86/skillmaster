@@ -84,7 +84,15 @@ func TestEveryRegisteredCodeIsReallyTriggered(t *testing.T) {
 				t.Setenv(config.ApiKeyEnv, "skm_test")
 			} else {
 				status, body := fixture.Status, fixture.Body
-				pointAtServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				pointAtServer(t, func(w http.ResponseWriter, r *http.Request) {
+					// `feedback send` reads the consent notice first; answering that read with
+					// the fixture's failure would stop the command before the request the fixture
+					// is about. The read is not the failure under test.
+					if strings.HasSuffix(r.URL.Path, "/feedback/consent") {
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = w.Write([]byte(`{"version":"1.0","notice":"同意说明"}`))
+						return
+					}
 					if status != 0 {
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(status)

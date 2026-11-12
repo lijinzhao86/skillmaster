@@ -1,6 +1,6 @@
-<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；skillmaster-server/src/main/java/com/skillmasterai/common/SkillFieldLimits.java；重新生成：python3 scripts/docs/generate.py -->
+<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；skillmaster-server/src/main/java/com/skillmasterai/common/SkillFieldLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/feedback/FeedbackSafety.java；skillmaster-server/src/main/java/com/skillmasterai/usecase/SubmitFeedbackUseCase.java；重新生成：python3 scripts/docs/generate.py -->
 
-# 上传与对象存储的上限（生成）
+# 上限（生成）
 
 **服务端**以这些常量为准。CLI 与网页各自保留了一份同值或接近的常量（不由这里读取，控制台还有一句面向用户的文案）；改这里的值时，要一起检查客户端，否则它会先于服务端拦下或放过。其余常量与下面的分流阈值只有服务端有。
 
@@ -31,3 +31,12 @@
 | `SkillFieldLimits.DESCRIPTION_MAX_CODE_POINTS` | `1024` | 1024 |
 | `SkillFieldLimits.AUTHOR_WHEN_TO_USE_MAX_CODE_POINTS` | `200` | 200 |
 | `SkillFieldLimits.MY_WHEN_TO_USE_MAX_CODE_POINTS` | `200` | 200 |
+
+## 反馈的上限
+
+`skmr feedback send` 的文档上限（码点，ADR 0181）与每个账号每小时可提交的条数。CLI 保留一份同值常量用于发送前失败，服务端仍是闸。
+
+| 常量 | 原始表达式 | 值 |
+|---|---|---|
+| `FeedbackSafety.MAX_CODE_POINTS` | `20_000` | 20000 码点 |
+| `SubmitFeedbackUseCase.MAX_PER_HOUR` | `10` | 10 条/小时 |

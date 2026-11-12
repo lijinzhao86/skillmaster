@@ -70,6 +70,7 @@ when_to_use: 要用 skmr 操作 skill，或搞不清草稿与线上、可见性�
 | 上传不上去 | [上传不上去](trouble/upload.md) |
 | 加载不了、读不到 | [加载不了、读不到](trouble/invoke.md) |
 | 上线不了 | [上线不了](trouble/release.md) |
+| 都试过了还是不行 | [提交一份反馈](trouble/feedback.md) |
 
 ## 上限与写法
 

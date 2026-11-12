@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 187 条。
+共 189 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -195,3 +195,5 @@
 | [0185](0185-credentials-default-to-a-file.md) | CLI 凭据默认存文件，钥匙串改为可选 | 已采纳 | 2026-11-11 |
 | [0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md) | CLI 在安装时改写客户端的沙箱配置，范围限定为 SkillMaster 自己的目录与域名 | 已采纳 | 2026-11-11 |
 | [0187](0187-the-marketing-home-can-run-on-a-subdomain.md) | 营销首页可以临时挂在同一注册域的子域上，切回用 301 | 已采纳 | 2026-11-13 |
+| [0188](0188-feedback-consent-lives-on-the-agent-channel.md) | 反馈的同意在 agent 通道里记录，不放到浏览器 | 已采纳 | 2026-11-13 |
+| [0189](0189-feedback-is-kept-indefinitely-with-an-object-copy.md) | 反馈长期保留，另存一份对象存储 | 已采纳 | 2026-11-13 |

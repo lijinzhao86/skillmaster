@@ -48,6 +48,12 @@ var codes = []Code{
 	{Name: "draft_name_too_long", Text: "名称太长", Exit: 1},
 	{Name: "draft_name_is_frozen", Text: "这一版的名称不能再改", Exit: 1},
 	{Name: "note_too_long", Text: "说明太长", Exit: 1},
+
+	// v64: the feedback plane's own refusals.
+	{Name: "feedback_sensitive", Text: "内容里可能有个人信息", Exit: 1},
+	{Name: "feedback_throttled", Text: "一小时内的反馈条数用完了", Exit: 1},
+	{Name: "feedback_consent_stale", Text: "同意说明已更新", Exit: 1},
+	{Name: "feedback_not_found", Text: "没有这条反馈，或它不属于你", Exit: 1},
 	{Name: "note_is_frozen", Text: "这一版的说明不能再改", Exit: 1},
 	{Name: "release_type_is_frozen", Text: "这一版的类型不能再改", Exit: 1},
 	{Name: "content_already_exists", Text: "同样的内容已经有一版了", Exit: 1},
