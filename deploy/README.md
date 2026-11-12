@@ -5,7 +5,7 @@ the ADRs this directory cites; this file is the runbook.
 
 ## The machine
 
-One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, four names.
+One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, five names.
 
 ```
                      nginx (host, :80 -> :443)
@@ -13,6 +13,7 @@ One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, fou
                              └─ /web, /api/v1, /oauth,
                                 /.well-known, /gateway  ──► 127.0.0.1:8080
   www.skillmasterai.com     ─── /srv/skillmaster/site      the marketing page
+  home.skillmasterai.com    ─── /srv/skillmaster/site      the same page, temporary entry (v63)
   skillmasterai.com         ─── 301 to www
   dl.skillmasterai.com      ─── proxy   ──► skillmaster-dl.oss-cn-hangzhou.aliyuncs.com
                                             (the CLI packages, uploaded by cli-release.yml)
@@ -288,8 +289,8 @@ sticking:
 /srv/skillmaster/site             -> site-releases/<sha>/
 ```
 
-Each deploy lands in its own directory, moves one symlink, probes the name and switches
-back if it does not answer. The five most recent are kept.
+Each deploy lands in its own directory, moves one symlink, probes the name's content and
+switches back if it does not match. The five most recent are kept.
 
 **The probe runs on the host, not on the runner** (2026-10-25): it asks nginx through
 `--resolve …:127.0.0.1` for the real name, so nginx, the certificate and the files are all
@@ -329,14 +330,15 @@ ssh root@<host> 'ln -sfn /srv/skillmaster/console-releases/manual /srv/skillmast
 ```bash
 curl -fsS https://console.skillmasterai.com/.well-known/oauth-authorization-server | head
 curl -fsS -o /dev/null -w '%{http_code}\n' https://www.skillmasterai.com/    # 200
+curl -fsS -o /dev/null -w '%{http_code}\n' https://home.skillmasterai.com/   # 200（P0/P1；P2 起 301）
 curl -fsS -o /dev/null -w '%{http_code}\n' https://skillmasterai.com/        # 301
 curl -fsS -o /dev/null -w '%{http_code}\n' https://dl.skillmasterai.com/install.sh   # 200
 ```
 
-The first three answer different questions: the server started and its issuer matches
-`SKILLMASTER_PUBLIC_BASE_URL`, the site's files are in place, and the apex redirect
-survived. The fourth that the download front answers — that is the address the install
-scripts and the CLI's self-update use; the bucket behind it stays the origin.
+The first four answer different questions: the server started and its issuer matches
+`SKILLMASTER_PUBLIC_BASE_URL`; `www` and `home` both deliver the site's files; the apex
+redirect survived. The fifth is the download front — the address the install scripts and
+the CLI's self-update use; the bucket behind it stays the origin.
 
 ## 自愈与监控
 
@@ -371,8 +373,8 @@ ClientHello 与 ServerHello 之间被重置（`curl 35`，`console.yml` 的公�
 
 ## TLS 与备案
 
-**All four names complete TLS 1.2, and port 80 belongs to nginx.** Measured 2026-11-04 from
-this machine, after the ICP filing was approved (`粤ICP备2026172880号`, 2026-11-04):
+**The probes below complete TLS 1.2, and port 80 belongs to nginx.** Measured 2026-11-04
+from this machine, after the ICP filing was approved (`粤ICP备2026172880号`, 2026-11-04):
 
 | Probe | Result |
 |---|---|
@@ -380,6 +382,9 @@ this machine, after the ICP filing was approved (`粤ICP备2026172880号`, 2026-
 | TLS 1.2 + SNI `dl.skillmasterai.com` | handshake completes, `200` on `/beta/checksums.txt` |
 | `http://www.skillmasterai.com/` | `301` to `https://www.skillmasterai.com/`, `Server: nginx` |
 | `http://47.117.36.14/` (no Host) | `301` — our nginx |
+
+`home.skillmasterai.com` was added later (v63) and is not part of that measurement; its probe
+belongs to that version's test plan.
 
 Before the filing the same probes were a reset for TLS 1.2 clients and a `403` with
 `Server: Beaver` (the ICP compliance appliance) on port 80. Both are gone, so every download —
@@ -398,10 +403,91 @@ read back from it, and binaries built before v43 keep updating from it. It is no
 not change that arrangement; whether port 80 would now complete an HTTP-01 challenge has not
 been tested, and switching the challenge method is a separate operation.
 
+## 首页入口的临时切换（v63）
+
+`home.skillmasterai.com` 是首页的临时入口，用来让 `www` 腾出手办经营性 ICP 许可证。
+形状、取舍与验收在 [`docs/versions/v63-home-subdomain/`](../docs/versions/v63-home-subdomain/README.md)，
+这里只写怎么落地。**P0 不切换入口**：`www`、`SKILLMASTER_SITE_ORIGIN` 与控制台的 `VITE_SITE_URL`
+都不动。P0 唯一的用户可见变化是隐私政策文本与版本号（v63 A7），它随站点与服务端各一次 Deploy 生效。
+
+### P0 · 准备（先主机、后合并）
+
+顺序不能反：仓库改动合并之后每日巡检就会开始检查 `home`，而它还解析不了就会先红一天。
+步骤 3 与 4 要放在同一个维护窗口里并避开巡检时刻：主机先换配置、仓库后合并，两步之间
+每日巡检会因配置哈希不一致红一次（合并后恢复，再手动跑一次确认）。
+
+1. **加解析记录。** 在**本机**跑，需要 `gh` 与有效的 `aliyun` OAuth profile `domain`
+   （过期时先 `aliyun configure --mode OAuth --profile domain --oauth-site-type CN` 重新登录）：
+
+   ```bash
+   aliyun --profile domain alidns AddDomainRecord --DomainName skillmasterai.com \
+     --RR home --Type A --Value "$(gh variable get DEPLOY_HOST)" --region cn-hangzhou
+   dig +short home.skillmasterai.com     # 应返回同一地址
+   ```
+
+   主机上没有 `gh`，而且 `acme.env` 的变量名是 `ALIYUN_ACCESS_KEY_ID/SECRET`，不是 Aliyun CLI
+   读的 `ALIBABA_CLOUD_*`（`auth.sh` 自己做了那三行 export）。在主机上跑就把 IP 写成字面值，
+   并按 `auth.sh` 的方式先导出三个变量。
+
+2. **重签证书加 SAN**（命令见 [Certificates](#certificates)，本版多了 `-d home.skillmasterai.com`），
+   再跑一次 `certbot renew --cert-name skillmasterai.com --dry-run --no-random-sleep-on-renew`。
+
+3. **拷 nginx 配置并重载。** 校验不能只看状态码：443 的默认 server 是 `console`，`home` 块缺失时
+   未知 Host 会拿到控制台首页的 200。要比内容：
+
+   ```bash
+   scp deploy/nginx/skillmaster.conf root@<host>:/etc/nginx/conf.d/skillmaster.conf
+   ssh root@<host> 'nginx -t && systemctl reload nginx'
+   ssh root@<host> 'curl -fsS --resolve home.skillmasterai.com:443:127.0.0.1 \
+     https://home.skillmasterai.com/index.html | cmp - /srv/skillmaster/site/index.html'
+   ```
+
+4. **再合并仓库改动**（nginx 配置、`ops-check.yml` 的域名清单与 SAN 断言、`site.yml` 的部署探针、
+   两处 `legalText.ts`、`application.yml`、文档）。合并后手动跑一次 `ops-check`，确认五个名字、
+   证书 SAN 与配置哈希都一致。
+
+5. **发布站点与服务端各一次。** 合并只跑构建与测试，不改线上。按
+   [`.dev-sop/release/site.md`](../.dev-sop/release/site.md) 与
+   [`server.md`](../.dev-sop/release/server.md) 各 `workflow_dispatch` 一次 Deploy：站点那次带上
+   隐私政策 `1.2` 与新探针；服务端那次让新 jar 的 `application.yml` 默认值生效——`server.yml`
+   不渲染 `SKILLMASTER_PRIVACY_VERSION`，生产值就来自这个默认值。**先站点、再服务端**：两次之间
+   记录版本不能领先于页面版本（否则会把用户没看过的文本记成已同意）。发布后跑 T10 与 T11。
+
+### P1 · 切换（所有者发话后再做）
+
+1. 定 `www` 的处置：301 到 `home`，或换成一张静态说明页（见 v63 技术设计 §开放问题）。
+2. 改控制台出口：`skillmaster-console/.env.production` 的 `VITE_SITE_URL` 指向
+   `https://home.skillmasterai.com`，合并后重新部署控制台。
+3. 改服务端来源：
+
+   ```bash
+   gh variable set SKILLMASTER_SITE_ORIGIN --body https://home.skillmasterai.com
+   # 再手动 dispatch 一次服务端 Deploy；它把变量渲染进 server.env
+   ```
+
+4. 最后改 nginx：`www` 的 443 块按第 1 步改，裸域的 301 目标改成 `home`。改仓库里的
+   `deploy/nginx/skillmaster.conf` 并合并，再拷配置、`nginx -t`、reload——两步放在同一维护窗口
+   （否则巡检会因配置哈希与 main 不一致而红）。**顺序理由**：先让控制台与服务端指向已经能用的
+   `home`，再动 `www`，中间没有死链。
+5. 在云监控补一条 `https://home.skillmasterai.com/` 的 200 探测（现有三个任务见 §自愈与监控）；
+   否则切过去之后，真正承担入口的名字没有 HTTP 告警。
+
+### P2 · 切回（许可证下来后）
+
+1. nginx：`home` 的 443 块改成 `return 301 https://www.skillmasterai.com$request_uri`；`www` 恢复
+   静态服务；裸域 301 指回 `www`。改仓库里的 `deploy/nginx/skillmaster.conf` 并合并，再拷配置、
+   `nginx -t`、reload——两步放在同一维护窗口。
+2. `gh variable set SKILLMASTER_SITE_ORIGIN --body https://www.skillmasterai.com`，dispatch 服务端 Deploy。
+3. `skillmaster-console/.env.production` 的 `VITE_SITE_URL` 改回 `www`，重新部署控制台。
+
+**站点发布探针不用改**：它跟随跳转，`home` 的 301 会落到 `www` 的同一份构建上。
+
+**`home` 不拆**：DNS 记录与证书 SAN 都保留，以后 `www` 维护时还能用。
+
 ## Certificates
 
-Let's Encrypt, one certificate covering the three names, plus a second one for `dl.`,
-renewed by certbot's timer. The deploy hook
+Let's Encrypt, one certificate covering `skillmasterai.com`, `www`, `console` and (since v63)
+`home`, plus a second one for `dl.`, renewed by certbot's timer. The deploy hook
 `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` reloads nginx after a renewal,
 which is what keeps the running server from serving a stale certificate.
 
@@ -456,9 +542,13 @@ certbot certonly --manual --preferred-challenges dns \
   --manual-auth-hook /etc/skillmaster/acme/auth.sh \
   --manual-cleanup-hook /etc/skillmaster/acme/cleanup.sh \
   -d skillmasterai.com -d www.skillmasterai.com -d console.skillmasterai.com \
-  --cert-name skillmasterai.com --force-renewal
+  -d home.skillmasterai.com --cert-name skillmasterai.com --expand --force-renewal
 certbot renew --cert-name skillmasterai.com --dry-run    # proves the hooks still work
 ```
 
-The three-name certificate was converted this way on 2026-10-26; before that it renewed
-with `standalone` and would have expired on 2027-01-22 without ever being able to renew.
+`--force-renewal` already implies `--expand` in certbot 2.9; `--expand` is written out so the
+intent to grow the name set is visible.
+
+The three-name certificate was converted this way on 2026-10-26; v63 added `home` the same
+way. Before 2026-10-26 it renewed with `standalone` and would have expired on 2027-01-22
+without ever being able to renew.

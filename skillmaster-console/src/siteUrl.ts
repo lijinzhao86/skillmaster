@@ -1,9 +1,9 @@
 /**
  * Where the marketing site is: the console's one door out (ADR 0086).
  *
- * **Two places use it, and they must agree** — the top bar's brand, which is a home link, and
- * `/logout`, which sends the person back to the site after signing out. Both read this value, so a
- * wrong address is wrong in one place instead of two.
+ * **Three places use it, and they must agree** — the top bar's brand, `/logout`, and the
+ * register page's two legal links. All read this value, so a wrong address is wrong in one place
+ * instead of three.
  *
  * A build without `VITE_SITE_URL` is refused (see `vite.config.ts`): the fallback below is the dev
  * server's site port, which is right for `npm run dev` and for the tests and wrong for everything
