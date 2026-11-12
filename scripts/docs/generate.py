@@ -256,7 +256,9 @@ def gen_limits() -> str:
     code_points = re.search(r"MAX_CODE_POINTS\s*=\s*([\d_]+)", feedback)
     per_hour = re.search(r"MAX_PER_HOUR\s*=\s*([\d_]+)", rate)
     if not code_points or not per_hour:
-        fail("反馈的两个上限解析不到：FeedbackSafety.MAX_CODE_POINTS / SubmitFeedbackUseCase.MAX_PER_HOUR")
+        fail(
+            "反馈的两个上限解析不到：FeedbackSafety.MAX_CODE_POINTS / SubmitFeedbackUseCase.MAX_PER_HOUR"
+        )
     lines.append("")
     lines.append("## 反馈的上限\n")
     lines.append(
