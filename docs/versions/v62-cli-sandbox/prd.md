@@ -53,7 +53,7 @@
 | 6 | **登录输出说清落点与是否明文**，去掉重复词。 | CLI 输出 |
 | 7 | **`skmr doctor --fix`：把沙箱白名单写进客户端配置**。它必须在**沙箱外**跑：用户在终端跑一次，或 agent 按第 9 条请求「仅这一条命令出沙箱」。一次配好本机所有有权限键的客户端：**WorkBuddy、Claude Code、Codex、Gemini、Cursor、Devin Desktop、Zed、Copilot CLI**；每家的键与文件路径以调研文档为准。**WorkBuddy 是例外**：沙箱内也能跑（写时一次审批）。**Codex 旧式与 Gemini 没有域名键**：只能打开网络总开关，代价是放开该客户端的全部出站网络；**Codex 旧式还会打开工作区可写**（`workspace-write` 管的是工作区，`writable_roots` 只是把状态目录加进去），`--undo` 不还原这个开关；这些都在输出里如实说。**不新建会改变沙箱开关的配置**（Gemini 的 `tools.sandbox` 不存在时跳过；Codex 的 `config.toml` 不存在或为空时也跳过；Codex 已用新式 `[permissions.*]` 时不混写）；其余客户端允许创建不打开沙箱的父对象。 | CLI |
 | 8 | **幂等、可撤销、不硬写**：已存在的不重复加；`--undo` 移除与 SkillMaster 写入值完全一致的条目（同值无法区分是谁加的，如实写在输出里）；配置文件不是合法 JSON/TOML 时拒绝写入并打印片段，原文件字节不变；改前留一份备份（只建第一份，之后不覆盖；**原文件已存在时才有备份**，首次新建的文件没有；**零字节的失败备份例外**，下次重写）。 | CLI |
-| 9 | **安装/首次运行时的授权路径**：<br>· **安装器**（`install.sh`）：检测到客户端后，只打印会改什么与两条命令（`--dry-run` / `--fix`），**不读终端、不写配置**；agent 在跑安装时先用 `AskUserQuestion` 问用户是否现在配置，同意后再运行 `doctor --fix`；人在终端运行这条命令即视为同意。检测到的客户端都会被告知结果：能写的写，跳过的说明原因。<br>· **Agent 在沙箱里**：`startup` skill 让 agent 跑 `skmr doctor --fix`，并按客户端的「单条命令出沙箱」机制请求一次：Claude Code 用 Bash 的 `dangerouslyDisableSandbox`、Codex 用 `on-request` 升级、Copilot 用 bypass、Zed 用 `unsandboxed`；用户点一次同意即可。WorkBuddy 不需要出沙箱（沙箱内可写，一次审批）。<br>· **兜底**：客户端不支持单条出沙箱或被企业策略禁用时，打印一条可粘贴到终端的命令。 | 安装脚本 + CLI；skill 正文随平台发布（P1） |
+| 9 | **安装/首次运行时的授权路径**：<br>· **安装器**（`install.sh`）：检测到客户端后，只打印会改什么与命令（`--dry-run` / `--fix`，以及 `--undo` 撤回），**不读终端、不写配置**；agent 在跑安装时先用 `AskUserQuestion` 问用户是否现在配置，同意后用安装器打印的绝对路径运行 `doctor --fix`；人在终端运行这条命令即视为同意。收尾先打印 `auth status`，已登录再 `startup`。`doctor --fix` 对检测到的客户端逐个报告：能写的写，跳过的说明原因。<br>· **Agent 在沙箱里**：`startup` skill 先跑只读的 `skmr doctor --fix --dry-run`，看哪些客户端还缺配置；都齐了就跳过。有缺口且用户同意后才跑 `skmr doctor --fix`（不覆盖安装 4.5 的拒绝），并按客户端的「单条命令出沙箱」机制请求一次：Claude Code 用 Bash 的 `dangerouslyDisableSandbox`、Codex 用 `on-request` 升级、Copilot 用 bypass、Zed 用 `unsandboxed`；用户点一次同意即可。WorkBuddy 不需要出沙箱（沙箱内可写，一次审批）。<br>· **兜底**：客户端不支持单条出沙箱或被企业策略禁用时，打印一条可粘贴到终端的命令。 | 安装脚本 + CLI；skill 正文随平台发布（P1） |
 | 9a | **出沙箱只用于管理命令**：`doctor --fix`、`login`、`logout`、`update` 这类。**`skmr run` 永远不出沙箱**——它执行 skill 代码。 | CLI + skill 约定 |
 | 10 | **对没有配置面的客户端只打印指引**，分两组：Cline / Roo Code / Aider / Amp / 旧 Windsurf **没有可写的权限键**，只能靠命令级审批；OpenHands（只有挂载）、GrokBot（只有企业面板）**没有本地配置面**，DSH **只有文件键 `additionalWritableRoots`、没有域名键**——分别给挂载卷、可写根或企业面板的替代做法。 | CLI 输出 |
 | 11 | **新增两条 ADR**：0185 修订 [ADR 0025](../../decisions/0025-cli-credential-storage.md) 的「钥匙串优先」；0186 修订 [ADR 0167](../../decisions/0167-sandbox-compatibility-is-capability-based.md) §5 的「只打印、不改配置」。交付物，由 `check_docs.py` 判定，不设运行时验收。 | 决策记录 |
@@ -114,7 +114,7 @@
   - [ADR 0185](../../decisions/0185-credentials-default-to-a-file.md)（凭据）与 [ADR 0186](../../decisions/0186-the-cli-writes-a-narrow-sandbox-allowlist.md)（自动写配置）已采纳（2026-11-11）。
   - 钥匙串入口是 `skmr login --keyring`，命令声明里加 flag；`help env` 页已接近字节上限（权威是 `TestHelpEnvPage`），**不放新环境变量**。
   - 客户端配置的键名与形状以 [`docs/research/agent-sandboxes.md`](../../research/agent-sandboxes.md) 为准。
-  - `skillmaster/skillmaster-startup` 的正文在平台上，不在本仓库；本版交付 CLI、安装脚本与 `doctor --fix`，skill 里「先跑 `doctor --fix`」那一步随下次 skill 发布（剩余项记在 [`docs/current/TODO.md`](../../current/TODO.md) §版本里的技术欠账的 v62 行）。
+  - `skillmaster/skillmaster-startup` 的正文在平台上，不在本仓库；本版交付 CLI、安装脚本与 `doctor --fix`，skill 里的沙箱配置步骤（先跑只读的 `doctor --fix --dry-run`，未配置且用户同意才跑 `--fix`）随下次 skill 发布（剩余项记在 [`docs/current/TODO.md`](../../current/TODO.md) §版本里的技术欠账的 v62 行）。
 - **排除了什么前置**：
   - 不需要「能检测到自己在沙箱里」。凭据默认文件，读写都不依赖这个判断。
   - 不需要服务端配合：凭据格式、过期、轮换都不变。

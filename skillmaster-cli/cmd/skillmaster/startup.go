@@ -10,6 +10,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 	"os"
 	"strings"
 	"time"
@@ -37,6 +38,13 @@ func startup(ctx context.Context, args []string) error {
 	}
 	client, err := clientFor(ctx, false)
 	if errors.Is(err, auth.ErrNotSignedIn) || errors.Is(err, errNoBrowserNoCredential) {
+		// **A detectable sandbox says where to log in.** `skmr login` inside it reaches a blocked
+		// `open` and waits out the callback timeout; 「有浏览器就…」 would point straight back there.
+		if sandbox.Detect().Sandboxed {
+			return &credentialError{message: fmt.Sprintf(
+				"本机没有凭据，startup 不会假装成功。在沙箱外的终端运行 skmr login 登录或注册；"+
+					"无人值守时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
+		}
 		return &credentialError{message: fmt.Sprintf(
 			"本机没有凭据，startup 不会假装成功。有浏览器就运行 skmr login 登录或注册；"+
 				"会话里没有浏览器时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}

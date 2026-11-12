@@ -11,6 +11,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 	"os"
 	"strings"
 )
@@ -98,7 +99,12 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		return api.Client{}, &credentialError{message: fmt.Sprintf("本机没有凭据，--no-login 不会发起登录。先运行 skmr login，"+
 			"或把一把控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
 	}
-	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() {
+	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() && !sandbox.Detect().Sandboxed {
+		// **A sandbox can have `open` and still not be able to open a browser.** The command that
+		// waits for a callback nobody can produce sits there for the full five minutes; an agent
+		// cannot relay the URL while it is blocked. So a detectable sandbox takes the no-browser
+		// path below and names the API key instead. An explicit `skmr login` still tries, because
+		// the person may be able to open the printed URL themselves.
 		// On stderr, because it is a notice and not the command's answer: `--json` promises that
 		// stdout carries exactly one object, and a line printed while the browser opens would be a
 		// second one.
@@ -115,6 +121,15 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		// list, and a missing credential on a machine that could log in is not that. `startup` is the
 		// one caller that deliberately turns this into the credential class, because for it the
 		// refusal *is* the answer.
+		//
+		// **A detectable sandbox names the terminal it has to be run in.** `skmr login` in the same
+		// sandbox hits the blocked `open` and waits out the callback timeout — the sentence must not
+		// send a person back into the wait this branch exists to avoid.
+		if sandbox.Detect().Sandboxed {
+			return api.Client{}, fmt.Errorf("%w。请在沙箱外的终端运行 skmr login；"+
+				"无人值守把一把控制台签发的 API key 放进 %s（help auth）。",
+				errNoBrowserNoCredential, config.ApiKeyEnv)
+		}
 		return api.Client{}, fmt.Errorf("%w。有浏览器就运行 skmr login；"+
 			"无人值守把一把控制台签发的 API key 放进 %s（help auth）。",
 			errNoBrowserNoCredential, config.ApiKeyEnv)

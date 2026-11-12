@@ -44,7 +44,11 @@ artifact="skillmaster_${os}_${arch}.tar.gz"
 
 command -v curl >/dev/null 2>&1 || die "需要 curl（没有它下不了包）"
 
-tmp="$(mktemp -d)"
+# **An explicit template.** In the agent sandboxes this installer runs in, `mktemp -d` without one
+# asks macOS for the per-user temp directory (`/var/folders/...`), which the sandbox refuses; a
+# template under `$TMPDIR` (the writable one the sandbox provides) is what works.
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/skillmaster-install.XXXXXX")" ||
+  die "建不了临时目录：${TMPDIR:-/tmp}（沙箱里被拦时，把这条安装命令放到沙箱外跑一次）"
 # Best effort: a sandbox may refuse deletion. Cleanup is not worth failing an install that has
 # already placed the binary, and the temp directory is the installer's own.
 trap 'rm -rf "$tmp" 2>/dev/null || true' EXIT
@@ -81,6 +85,10 @@ say "校验和正确"
 tar -xzf "$tmp/$artifact" -C "$tmp" || die "解包失败：$artifact"
 
 mkdir -p "$INSTALL_DIR" || die "建不了安装目录：$INSTALL_DIR"
+# **Later lines are commands a person or an agent will paste.** A relative override would stop
+# meaning the same thing after `cd`, and an unquoted path with a space would split into two words.
+resolved="$(cd "$INSTALL_DIR" && pwd)" || die "解析不了安装目录：$INSTALL_DIR"
+INSTALL_DIR="$resolved"
 # **Write the executable in place first.** A sandbox can allow writing a file and still refuse to
 # rename over an existing one: replacing a name needs the delete the allowlist deliberately omits
 # (WorkBuddy 5.8.6, measured 2026-11-11) — and this installer is often run by an agent. The
@@ -159,10 +167,14 @@ print_sandbox_step() {
   say "不只是 SkillMaster 的文件夹（没有配置或配置为空时不动它）；"
   say "会写入的 Codex（旧式）与启用了整进程沙箱的 Gemini，网络侧只有总开关，会被打开，等于放开全部出站网络。"
   say ""
-  say "想先看会改什么：$INSTALL_DIR/skmr doctor --fix --dry-run"
-  say "同意就运行：$INSTALL_DIR/skmr doctor --fix"
+  say "想先看会改什么："
+  say "  \"$INSTALL_DIR/skmr\" doctor --fix --dry-run"
+  say "同意就运行："
+  say "  \"$INSTALL_DIR/skmr\" doctor --fix"
   say "如果是 agent 在跑安装：先问用户「是否现在配置」一次，得到同意后再运行上面这条。"
-  say "以后想撤回条目：$INSTALL_DIR/skmr doctor --fix --undo（为放行打开的开关不会还原，输出也会说明）。"
+  say "以后想撤回条目："
+  say "  \"$INSTALL_DIR/skmr\" doctor --fix --undo"
+  say "（为放行打开的开关不会还原，输出也会说明。）"
 }
 
 if has_clients; then
@@ -170,8 +182,11 @@ if has_clients; then
 else
   say ""
   say "没有检测到带沙箱配置的 AI 工具（Claude Code、WorkBuddy、Codex 等）。"
-  say "如果你用的是 Cline、Aider 这类，运行 skmr doctor --fix 会打印替代做法。"
+  say "如果你用的是 Cline、Aider 这类，运行 \"$INSTALL_DIR/skmr\" doctor --fix 会打印替代做法。"
 fi
 
 say ""
-say "下一步：skmr startup"
+say "下一步："
+say "  \"$INSTALL_DIR/skmr\" auth status"
+say "已登录再运行："
+say "  \"$INSTALL_DIR/skmr\" startup"

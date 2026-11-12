@@ -134,7 +134,7 @@ CGO_ENABLED=0                      静态链接，Alpine 这类 musl 环境不�
 
 **原地写没有原子性**：`cp` / `Copy-Item` 一开始写就截断目标，进程被杀、沙箱超时或磁盘满会留下半截二进制，且没有备份；`install.sh` 的 `INT`/`TERM` trap 会提示重跑安装（`install.ps1` 没有 trap）。staged 退路只在复制返回失败时触发，覆盖不了「复制进程被杀」。
 
-**第 8 步只有 macOS / Linux 的 `install.sh` 有**（v62，[ADR 0186](../docs/decisions/0186-the-cli-writes-a-narrow-sandbox-allowlist.md)）：检测到带沙箱配置的 AI 工具时，只打印会改什么与 `--dry-run` / `--fix` 命令，**不读终端、不写配置**；agent 在跑安装时先用 `AskUserQuestion` 问用户，同意后运行 `skmr doctor --fix`，人在终端运行这条命令即视为同意。Windows 的 `install.ps1` 暂不做这一步，装完手动跑 `skmr doctor --fix`。
+**第 8 步只有 macOS / Linux 的 `install.sh` 有**（v62，[ADR 0186](../docs/decisions/0186-the-cli-writes-a-narrow-sandbox-allowlist.md)）：检测到带沙箱配置的 AI 工具时，只打印会改什么与 `--dry-run` / `--fix` / `--undo` 命令，**不读终端、不写配置**；agent 在跑安装时先用 `AskUserQuestion` 问用户，同意后运行 `"$INSTALL_DIR/skmr" doctor --fix`（打印时带引号，路径含空格也能直接执行），人在终端运行这条命令即视为同意。收尾打印的下一步是 `auth status`，已登录再运行 `startup`。Windows 的 `install.ps1` 暂不做第 8 步，装完用它的绝对路径手动跑 `doctor --fix`，再 `auth status` → `startup`。
 
 **用法**：
 

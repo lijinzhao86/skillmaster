@@ -1,7 +1,7 @@
 # v62-cli-sandbox · 凭据默认存文件，沙箱配置一次放行
 
-> **最后更新**：2026-11-11
-> **状态**：进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录、Claude Code 沙箱失败与终端隔离配置成功、安装器已跑；Claude Code 真机写入（T10）与 T17–T19 未跑，见 [`test-plan.md`](test-plan.md) §结果；未合并）
+> **最后更新**：2026-11-12
+> **状态**：进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录、Claude Code 沙箱失败与终端隔离配置成功、安装器已跑；Claude Code 真机写入（T10）与 T17–T19 未跑，见 [`test-plan.md`](test-plan.md) §结果；小版本迭代 1 条，见 [`iterations/0001-agent-install-chain.md`](iterations/0001-agent-install-chain.md)；未合并）
 > **含收费**：否
 
 ## 目标
@@ -36,10 +36,9 @@
 | [`prd.md`](prd.md) | 用户与场景、范围、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果、已知问题 |
+| [`iterations/0001-agent-install-chain.md`](iterations/0001-agent-install-chain.md) | agent 安装链路的沙箱修复 |
 
 调研依据：[`docs/research/agent-sandboxes.md`](../../research/agent-sandboxes.md) 的客户端矩阵与配置键。
-
-（`iterations/` 待第一次小版本改动时再建。）
 
 ## 影响最大的未决问题
 

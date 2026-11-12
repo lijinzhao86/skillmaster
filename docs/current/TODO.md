@@ -59,7 +59,7 @@
 
 | 版本 | 欠账 | 记录处 |
 |---|---|---|
-| v62-cli-sandbox | **已实现、未合并。** 真机 `--fix` 写入（WorkBuddy 终端与沙箱各跑一次；Claude Code 终端用隔离配置验证、真实配置未写；Codex / Copilot 在 T15 被顺带写入真实配置、已恢复/删除；其余客户端的真机写入仍未跑）；`startup` skill 里「先跑 `doctor --fix`」那一步（内容在平台，随下次 skill 发布）。**本版范围外、另开**：技能目录（Claude Code 的 `~/.claude/skills` 受保护）与缓存目录（`$TMPDIR` 在 WorkBuddy 默认放行）的放行——PRD #7 只显式写入状态目录、域名与为放行所需的开关；Codex 旧式的工作区可写是模式副作用，不覆盖这两个目标。 | [test-plan §结果](../versions/v62-cli-sandbox/test-plan.md) · [README](../versions/v62-cli-sandbox/README.md) |
+| v62-cli-sandbox | **已实现、未合并。** 真机 `--fix` 写入（WorkBuddy 终端与沙箱各跑一次；Claude Code 终端用隔离配置验证、真实配置未写；Codex / Copilot 在 T15 被顺带写入真实配置、已恢复/删除；其余客户端的真机写入仍未跑）；`startup` skill 里的沙箱配置步骤（只读 `--dry-run` 探测 → 必要时提问 → 同意后 `--fix`，不覆盖安装 4.5 的拒绝；内容在平台，随下次 skill 发布）。**本版范围外、另开**：技能目录（Claude Code 的 `~/.claude/skills` 受保护）与缓存目录（`$TMPDIR` 在 WorkBuddy 默认放行）的放行——PRD #7 只显式写入状态目录、域名与为放行所需的开关；Codex 旧式的工作区可写是模式副作用，不覆盖这两个目标。 | [test-plan §结果](../versions/v62-cli-sandbox/test-plan.md) · [README](../versions/v62-cli-sandbox/README.md) |
 | v39-media-files | **v42 删除了 `sop/`，T27 要读的 `sop/07-files.md` 已不存在——跑之前先改写。** P3：整包导入流式化（解除 128 MiB 临时上限）、CLI 整版取回（`get --all`）流式落盘（解除 17 MiB 限制）、blob 回收清扫器；P0–P2 的验收用例多数尚未执行。 | [README](../versions/v39-media-files/README.md) · [test-plan](../versions/v39-media-files/test-plan.md) |
 | v38-install-delivers-skill | **v42 删除了 `sop/`，v38 的 T4 等用例第一步就读 `sop/06-install.md`，前提不再成立——跑之前先改写。** 真机验收 T3 / T7 / T4 / T8–T11 / T12（Windows）/ T13。平台技能 `skillmaster/skillmaster-startup@1.0.0` 已在线，T3 / T7 的阻塞已解除，但用例本身仍未跑。 | [test-plan §结果](../versions/v38-install-delivers-skill/test-plan.md) |
 | v1-hosting | `PATCH` 元数据、`/inner/**` 独立端口、`/oauth/token` 与 `/oauth/revoke` 限流、RFC 9728 资源元数据。 | [README 状态行](../versions/v1-hosting/README.md) |

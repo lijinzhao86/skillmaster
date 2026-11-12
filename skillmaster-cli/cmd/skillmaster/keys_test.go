@@ -1038,18 +1038,6 @@ func TestACommandWithNoCredentialAndNoBrowserDoesNotStartOne(t *testing.T) {
 	}
 }
 
-// driveTheLogin stands in for the browser: what is being pinned is that a command that needs a
-// credential runs the login and carries on, not what opening a browser does.
-func driveTheLogin(t *testing.T, available bool, start func(store credentials.EnvStore) error) {
-	t.Helper()
-	wasBrowser, wasLogin := browserAvailable, startLogin
-	browserAvailable = func() bool { return available }
-	startLogin = func(_ context.Context, _ string, store credentials.EnvStore, _ string) error {
-		return start(store)
-	}
-	t.Cleanup(func() { browserAvailable, startLogin = wasBrowser, wasLogin })
-}
-
 // ---------------------------------------------------------------------------
 // auth status <地址> — 做 #9 的第二条查询
 // ---------------------------------------------------------------------------
