@@ -31,14 +31,14 @@ export interface LegalDoc {
 
 export const PRIVACY: LegalDoc = {
   title: '隐私政策',
-  effective: '2026 年 11 月 11 日',
-  version: '1.1',
+  effective: '2026 年 11 月 13 日',
+  version: '1.2',
   sections: [
     {
       heading: '引言',
       paragraphs: [
         'SkillMaster（以下简称「我们」）由深圳市山屿杉贸易有限公司运营，注册地址为深圳市前海合作区南山街道自贸西街18号香缤大厦320-B069。我们深知个人信息对你的重要性，并会尽力保护你的个人信息安全。',
-        '本政策适用于 skillmasterai.com 的各子域（www、console、dl）与我们提供的 skmr 命令行工具。它不适用于第三方 skill 的提供者、第三方网站或第三方服务；使用这些内容前，请阅读它们各自的规则。',
+        '本政策适用于 skillmasterai.com 的各子域与我们提供的 skmr 命令行工具。它不适用于第三方 skill 的提供者、第三方网站或第三方服务；使用这些内容前，请阅读它们各自的规则。',
         '我们遵循合法、正当、最小必要与公开透明的原则处理个人信息。浏览公开页面不需要注册；注册时我们会单独请你勾选同意《服务条款》与《隐私政策》，并记录你同意的文本版本与时间。未勾选不能完成注册。',
       ],
     },

@@ -1,6 +1,7 @@
 # skillmaster-site
 
-`www.skillmasterai.com` 上的营销首页。静态构建，不需要服务端。
+`www.skillmasterai.com` 上的营销首页。静态构建，不需要服务端。同一份构建也由
+`home.skillmasterai.com` 提供（v63 的临时入口，见 [`docs/versions/v63-home-subdomain/`](../docs/versions/v63-home-subdomain/README.md)）。
 
 ```bash
 npm ci
@@ -27,7 +28,7 @@ npm run build      # dist/：一份 HTML + 一份 CSS + 一份 JS，外加技能
 
 **一次，只读**（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)）：启动时 `GET /web/session`。2xx 画已登录导航（`进入控制台` + 账号），401、网络失败或 3 秒超时一律画未登录导航。没有写、没有表单、不存任何东西。
 
-- 生产：请求 `VITE_CONSOLE_URL` 的源，服务端对 www 放行一条只读 CORS，会话 cookie 带 `Domain`。
+- 生产：请求 `VITE_CONSOLE_URL` 的源，服务端对 `SKILLMASTER_SITE_ORIGIN` 配置的那一个来源放行一条只读 CORS，会话 cookie 带 `Domain`。
 - 开发：`vite.config.ts` 把 `^/web/` 代理到 `localhost:8080`，请求因此同源，不需要 CORS。
 - `VITE_CONSOLE_URL`（开发默认 `http://localhost:5173`）：**`npm run build` 少了它直接失败**。生产值在 `.env.production` 里，随仓库提交。
 

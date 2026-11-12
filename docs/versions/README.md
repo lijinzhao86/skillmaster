@@ -68,3 +68,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v60-usage-filters`](v60-usage-filters/README.md) | 进行中（已实现，循环审计收口；测试见 `test-plan.md` §结果；待合并） |
 | [`v61-skill-deletion`](v61-skill-deletion/README.md) | 进行中（已实现，待视觉验收与合并） |
 | [`v62-cli-sandbox`](v62-cli-sandbox/README.md) | 进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录）… |
+| [`v63-home-subdomain`](v63-home-subdomain/README.md) | 进行中（设计已定稿；本版先交付 P0 准备，P1/P2 等许可证进程） |
