@@ -103,6 +103,11 @@ func Snippets(client Client) string {
 	return snippetsFor(networkHosts(serverHost()), client)
 }
 
+// Hosts is what a sandbox has to allow for this CLI: the host being contacted, plus the download
+// host when it is a different name. It is what `doctor --fix` writes into a client's network
+// allowlist (ADR 0186), so the list is computed once here rather than in the command.
+func Hosts() []string { return networkHosts(serverHost()) }
+
 // networkHosts is what a sandbox has to allow for this CLI: the host being contacted, plus the
 // download host when it is a different name.
 func networkHosts(primary string) []string {

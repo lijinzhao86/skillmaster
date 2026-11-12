@@ -3,23 +3,27 @@ package credentials
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// fileStore is the fallback: one file, readable only by its owner.
+// fileStore is the default store since ADR 0185: one 0600 file, readable only by its owner.
 //
 // **`path` is where it is written; `older` is where a copy from another state directory may be
 // read.** The two are separate because the directory this machine normally keeps its credential in
 // can be readable and not writable at the same time (an agent sandbox mounts it read-only), and a
 // store that could only look in the writable place would report "not signed in" while the credential
 // sits one directory away. Reads prefer `path` — the copy this build last wrote — and fall back to
-// `older`. Writes always go to `path`.
+// `older`; `Clear` truncates both. Writes always go to `path`.
 type fileStore struct {
 	path  string
 	older string
 }
+
+func (s *fileStore) Source() string { return s.Where() }
 
 func (s *fileStore) Where() string {
 	// The copy that exists, when one does: "where is my credential" is a question about the file
@@ -83,6 +87,9 @@ func (s *fileStore) read() ([]byte, error) {
 }
 
 func (s *fileStore) Save(c Credentials) error {
+	if s.path == "" {
+		return errors.New("没有可写的凭据路径：状态目录定位失败")
+	}
 	blob, err := c.Blob()
 	if err != nil {
 		return err
@@ -95,34 +102,59 @@ func (s *fileStore) Save(c Credentials) error {
 		return fmt.Errorf("creating %s: %w", dir, err)
 	}
 
-	// Written to a neighbour and renamed, so an interrupted write cannot leave a half-file where a
-	// credential used to be.
+	// **Written in place, not to a neighbour and renamed.** A sandbox can allow writing a file and
+	// still refuse `rename` over it: replacing a name is a directory operation, and the allowlist
+	// this CLI writes deliberately does not ask for deletion (ADR 0186). WorkBuddy 5.8.6 measured
+	// on 2026-11-11 wrote the neighbour and then got `operation not permitted` on the rename, so
+	// the login could not be saved at all — in the very environment this version exists for.
 	//
-	// **The neighbour has a fixed name, and it is never removed** (ADR 0101). The CLI does not delete,
-	// so a failed write leaves the `.new` sibling behind — and a successful one consumes it with the
-	// rename. A
-	// fixed name rather than `CreateTemp`'s random one for a second reason: a sandbox that approves
-	// paths sees the same two paths every time instead of a new one per attempt. When a write does
-	// fail, the error names the leftover, because it is a 0600 file the person has to look at.
-	tmpName := s.path + ".new"
-	tmp, err := os.OpenFile(tmpName, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return fmt.Errorf("writing %s: %w", tmpName, err)
-	}
+	// The cost is atomicity: an interrupted write leaves a truncated credential and the person logs
+	// in again (`previousCredential` tolerates an unreadable copy and does not block the next login).
+	// That is the right trade here: a login that cannot save is a broken product, while a credential
+	// that has to be re-created is an inconvenience with a named way out.
+	return writeInPlace(s.path, blob)
+}
 
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return fmt.Errorf("setting permissions on %s: %w", tmpName, err)
+// writeInPlace writes the credential directly to its final path, following a symlink if there is
+// one (the link stays a link).
+func writeInPlace(path string, blob []byte) error {
+	// **Open without O_TRUNC, and truncate only after the permission change succeeded.** O_TRUNC
+	// takes effect at open: a chmod that the filesystem or sandbox refuses would then return an
+	// error with the old credential already gone, and the person would be signed out without
+	// being told. In this order a failed chmod leaves the previous file intact, so the only state
+	// that loses content is the one already being replaced.
+	_, statErr := os.Stat(path)
+	created := os.IsNotExist(statErr)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
 	}
-	if _, err := tmp.Write(blob); err != nil {
-		tmp.Close()
-		return fmt.Errorf("writing %s (this half-written file stays behind; remove it when you have confirmed): %w", tmpName, err)
+	// **A failed write to a file this run created leaves an empty file, and an empty file reads as
+	// "signed out"** — so `older` is not consulted and a usable copy one directory away becomes
+	// invisible. That is the cost of never deleting (ADR 0101); the message must say it, because
+	// "the old credential is still there" would be false.
+	kept := "the old credential is still there"
+	if created {
+		kept = "this login did not save; run `skmr login` again"
 	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("closing %s (this half-written file stays behind; remove it when you have confirmed): %w", tmpName, err)
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return fmt.Errorf("setting permissions on %s (%s): %w", path, kept, err)
 	}
-	if err := os.Rename(tmpName, s.path); err != nil {
-		return fmt.Errorf("replacing %s (%s stays behind; remove it when you have confirmed): %w", s.path, tmpName, err)
+	if err := file.Truncate(0); err != nil {
+		file.Close()
+		return fmt.Errorf("writing %s (%s): %w", path, kept, err)
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		file.Close()
+		return fmt.Errorf("writing %s (it may now be half-written; run `skmr login` again): %w", path, err)
+	}
+	if _, err := file.Write(blob); err != nil {
+		file.Close()
+		return fmt.Errorf("writing %s (it may now be half-written; run `skmr login` again): %w", path, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("closing %s (run `skmr login` again): %w", path, err)
 	}
 	return nil
 }
@@ -133,12 +165,43 @@ func (s *fileStore) Save(c Credentials) error {
 // meaning is exactly the deleted file's, and the machine is signed out. Truncating also keeps the
 // file's 0600 mode and its name, which is what makes the two paths a sandbox approves stable.
 //
+// **Both copies are cleared.** `Older` is a place this store reads, so a logout that only truncates
+// `path` would report success while the next command reads the credential from `Older` and stays
+// signed in. When `Older` exists and cannot be truncated, that is reported rather than forgiven: the
+// credential is still there.
+//
 // A file that is not there is already cleared: `logout` twice is not a failure.
 func (s *fileStore) Clear() error {
-	file, err := os.OpenFile(s.path, os.O_WRONLY|os.O_TRUNC, 0o600)
-	if errors.Is(err, fs.ErrNotExist) {
+	paths := []string{s.path}
+	if s.older != "" && s.older != s.path {
+		paths = append(paths, s.older)
+	}
+	var errs []error
+	for _, path := range paths {
+		if err := truncate(path); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ClearPath makes the write path read as "nothing stored" without touching `older`. **A write that
+// succeeds at the keychain uses this, not `Clear`**: the older copy may be read-only by design
+// (that is what `older` is for), and failing the login because it cannot be truncated would report
+// a failure for a credential that was stored.
+//
+// **It creates the tombstone when the file is not there.** Simply truncating nothing is not enough:
+// the default store reads `path` first and `older` second, so with `path` absent a stale copy in
+// `older` would still be served and the credential just written to the keychain would never be
+// used. A zero-byte path is the fact that makes `read` stop there.
+func (s *fileStore) ClearPath() error {
+	if s.path == "" {
 		return nil
 	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return fmt.Errorf("preparing %s: %w", s.path, err)
+	}
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("clearing %s: %w", s.path, err)
 	}
@@ -148,8 +211,44 @@ func (s *fileStore) Clear() error {
 	return nil
 }
 
+func truncate(path string) error {
+	if path == "" {
+		return nil
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0o600)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("clearing %s: %w", path, err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("clearing %s: %w", path, err)
+	}
+	return nil
+}
+
 func fallbackNotice(path string) string {
 	return fmt.Sprintf(
-		"没有可用的钥匙串，凭据写在 %s（仅本人可读）。"+
+		"没有可用的钥匙串，凭据写在 %s（明文文件，仅本人可读）。"+
 			"这台机器上任何能以你的身份读文件的进程都能读到它。", path)
+}
+
+// FileDefaultNotice is what ADR 0185 owes the person on every login: the default is a plaintext
+// file now, and the way back to the keychain is one flag.
+func FileDefaultNotice(path string) string {
+	return fmt.Sprintf(
+		"凭据默认写在 %s（明文文件，仅本人可读）。要用系统钥匙串登录：skmr login --keyring。", path)
+}
+
+// KeyringFallbackNotice is the sentence for `login --keyring` when the keychain refused and the
+// file took the credential. Reusing FileDefaultNotice there would say the default is a file and
+// recommend `--keyring` — the flag that just failed.
+func KeyringFallbackNotice(path, reason string) string {
+	next := "在沙箱外再跑一次 skmr login --keyring"
+	if strings.Contains(reason, "超时") {
+		next = "解锁钥匙串（或在机器前批准）后再跑一次 skmr login --keyring"
+	}
+	return fmt.Sprintf(
+		"系统钥匙串没写进去，这次凭据存到了 %s（明文文件，仅本人可读）。要放进钥匙串：%s。", path, next)
 }

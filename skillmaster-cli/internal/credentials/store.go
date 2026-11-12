@@ -1,9 +1,9 @@
 // Package credentials is where the CLI keeps what a login left behind.
 //
-// ADR 0025 decides the shape: the OS keychain first, a file with 0600 permissions as the
-// fallback, and the person told when the fallback is what happened. This package is that
-// decision, and the two places it is easy to get wrong are both in the platform files next to
-// this one — see keychain.go.
+// **ADR 0185 decides the default**: a 0600 file first, the OS keychain as an explicit option
+// (`login --keyring`) and as a read fallback for machines that signed in before it. ADR 0025's
+// announcement survives for the case that still needs it — a machine with no keychain. The two
+// places it is easy to get wrong are both in the platform files next to this one — see keychain.go.
 package credentials
 
 import (
@@ -92,15 +92,21 @@ type Store interface {
 	Clear() error
 	// Where says where this store keeps things, so a message can name the place rather than
 	// saying "somewhere".
+	//
+	// **Source is deliberately not part of this interface.** Only the stores that can answer "which
+	// copy served this run" implement it (ADR 0185), and `EnvStore.Source` asks for it when it can.
+	// Putting it here would force every test double to invent an answer for a question it does not
+	// have.
 	Where() string
 }
 
 // Open picks the store for this machine.
 //
 // The second return value is a sentence to show the person, and it is empty in the ordinary case.
-// It exists because ADR 0025 requires the fallback to be **announced**: a credential in a plain
-// file is a different promise from one in a keychain, and the person is the only one who can
-// decide whether that is acceptable on this machine.
+// **The default being a file is announced by `login`, not by every command** (ADR 0185): a login
+// is where the choice is made, and printing it on `auth status` or inside `doctor` turns a daily
+// command into a recurring notice nobody reads. What is left here is the case that is not ordinary
+// — a machine with no keychain at all — which `OpenKeyring` reports too.
 //
 // The choice is made from the environment, never by trying the keychain and seeing. Trying is the
 // expensive mistake in both directions: on a headless Linux box it blocks for about three seconds
@@ -114,7 +120,31 @@ type Store interface {
 // later in the run. That is why the notice cannot be exhaustive: it says what happened at the
 // start, and `Store.Where` is what says where the credential ended up.
 func Open(loc Location, server string) (Store, string) {
+	file := &fileStore{path: loc.Path, older: loc.Older}
+	var keychain Store
+	notice := ""
+	if keychainUsable() {
+		keychain = newResponsiveKeychain(&keychainStore{server: server}, file)
+	} else {
+		notice = fallbackNotice(loc.Path)
+	}
+	return newFileFirst(file, keychain), notice
+}
+
+// OpenKeyring is the store `login --keyring` asks for: the keychain first, the file as the fallback
+// ADR 0025 keeps. It is the shape every machine got before ADR 0185, and it stays available for the
+// people who want it.
+func OpenKeyring(loc Location, server string) (Store, string) {
 	return openWith(keychainUsable(), loc, server)
+}
+
+// Source is what a Store can say about which copy served this run, when it can say anything at all
+// (ADR 0185). Stores that cannot answer fall back to Where, which is still true about the place.
+func sourceOf(store Store) string {
+	if source, ok := store.(interface{ Source() string }); ok {
+		return source.Source()
+	}
+	return store.Where()
 }
 
 // Location is where this machine keeps one server's credential file.

@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 182 条。
+共 184 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -190,3 +190,5 @@
 | [0180](0180-personal-scenario-ranks-by-evidence-library-only.md) | 个人适用场景按证据分级排序，只在库内生效，v1 不训练 | 已采纳 | 2026-11-11 |
 | [0181](0181-text-limits-use-unicode-code-points.md) | 文本上限统一用 Unicode 码点，写入与发布同契约 | 已采纳 | 2026-11-11 |
 | [0182](0182-owner-usage-is-a-period-view.md) | 所有者的「使用」页签是区间视图，平台信号不跟着变 | 已采纳 | 2026-11-11 |
+| [0185](0185-credentials-default-to-a-file.md) | CLI 凭据默认存文件，钥匙串改为可选 | 已采纳 | 2026-11-11 |
+| [0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md) | CLI 在安装时改写客户端的沙箱配置，范围限定为 SkillMaster 自己的目录与域名 | 已采纳 | 2026-11-11 |

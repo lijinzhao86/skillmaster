@@ -127,6 +127,14 @@ func Dir() (string, error) {
 	return resolved.dir, err
 }
 
+// OrdinaryDir is where the state lives on a machine that is not sandboxed.
+//
+// **It is not Dir() on a sandboxed machine, and that difference is the point.** A command in a
+// sandbox may fall back to `$TMPDIR`, but the directory to allow in the client's configuration is
+// the ordinary one — that is where the next command outside the sandbox will look, and it is the
+// location a person means by "SkillMaster's directory".
+func OrdinaryDir() string { return ordinaryStateDir() }
+
 // DirNote explains a state directory that is not the first candidate, or returns "".
 //
 // **A fallback the person cannot see is worse than a failure.** An agent's sandbox refuses writes

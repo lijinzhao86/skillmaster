@@ -156,7 +156,7 @@ func frontmatterScalar(content []byte, key string) (string, bool) {
 func credentialLocation(server string) credentials.Location {
 	write, older, err := config.CredentialPaths(server)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "找不到用户配置目录（%v），将只使用钥匙串。\n", err)
+		fmt.Fprintf(os.Stderr, "找不到用户配置目录（%v）：登录会失败，先修好 HOME / XDG_CONFIG_HOME。\n", err)
 		return credentials.Location{}
 	}
 	return credentials.Location{Path: write, Older: older}
@@ -173,6 +173,10 @@ func credentialLocation(server string) credentials.Location {
 // forgetting is a dialog on somebody's screen rather than a red test.
 var machineStore = credentials.Open
 
+// machineKeyringStore is the `--keyring` half of the same seam. It is separate rather than a
+// parameter so the test suite can keep both away from the real keychain (main_test.go).
+var machineKeyringStore = credentials.OpenKeyring
+
 // openStore picks both the place a credential lives and what the next command will present.
 //
 // **The environment is wrapped around the store here, once**, rather than checked in each command:
@@ -181,8 +185,17 @@ var machineStore = credentials.Open
 // commands which have to explain the difference — `auth status` and `logout` — can ask which of the
 // two answered.
 func openStore(server string) (credentials.EnvStore, string) {
+	return openStoreWith(server, machineStore)
+}
+
+// openStoreKeyring is `login --keyring`: the same wrapping, over the keychain-first store.
+func openStoreKeyring(server string) (credentials.EnvStore, string) {
+	return openStoreWith(server, machineKeyringStore)
+}
+
+func openStoreWith(server string, open func(credentials.Location, string) (credentials.Store, string)) (credentials.EnvStore, string) {
 	loc := credentialLocation(server)
-	fallback, notice := machineStore(loc, server)
+	fallback, notice := open(loc, server)
 	return credentials.EnvStore{
 		Var:      config.ApiKeyEnv,
 		Value:    os.Getenv(config.ApiKeyEnv),

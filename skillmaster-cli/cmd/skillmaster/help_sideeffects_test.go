@@ -87,7 +87,9 @@ func TestLogoutHelpLeavesTheRealCredentialAlone(t *testing.T) {
 		if os.Getenv("SKILLMASTER_REAL_KEYCHAIN_TEST") != "1" {
 			t.Skip("the keychain branch asks for authorization; set SKILLMASTER_REAL_KEYCHAIN_TEST=1 to run it")
 		}
-		keychain, _ := credentials.Open(credentials.Location{Path: path}, server)
+		// `OpenKeyring`, not `Open`: since ADR 0185 the default store is file-first, and this subtest
+		// is the one that exercises the keychain.
+		keychain, _ := credentials.OpenKeyring(credentials.Location{Path: path}, server)
 		if !strings.Contains(keychain.Where(), "钥匙串") {
 			t.Skipf("this machine has no usable keychain (%s)", keychain.Where())
 		}

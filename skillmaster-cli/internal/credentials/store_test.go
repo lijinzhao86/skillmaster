@@ -139,9 +139,9 @@ func TestClearingTruncatesAndKeepsTheFile(t *testing.T) {
 	}
 }
 
-// Saving goes through the `.new` sibling and consumes it with the rename: no temporary name is left
-// behind on the ordinary path, and the CLI never deletes one.
-func TestSavingConsumesItsSibling(t *testing.T) {
+// Saving writes in place since ADR 0185 and leaves no `.new` sibling behind. The CLI never deletes
+// one, so a neighbour that appeared here would mean the old staged-write path came back.
+func TestSavingLeavesNoNewSibling(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "credentials")
 	store := &fileStore{path: path}
 	if err := store.Save(sample()); err != nil {

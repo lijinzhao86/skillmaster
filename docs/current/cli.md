@@ -9,10 +9,10 @@
 | `skmr` | SkillMaster 命令行 | — |
 | `skmr auth` | 这份凭据的状态 | — |
 | `skmr auth status` | 这份凭据是什么 | `skmr auth status [<地址>]` |
-| `skmr doctor` | 自检本机环境 | `skmr doctor` |
+| `skmr doctor` | 自检；--fix 改配置 | `skmr doctor [--fix [--undo] [--dry-run]]` |
 | `skmr draft` | 草稿的动词 | — |
 | `skmr draft create` | 新建一份草稿 | `skmr draft create <命名空间>/<名字> [--from <版本\|版本码>] --name <名称> [--note <说明>]` |
-| `skmr login` | 在浏览器里登录这台机器 | `skmr login` |
+| `skmr login` | 在浏览器里登录这台机器 | `skmr login [--keyring]` |
 | `skmr logout` | 退出本机的凭据 | `skmr logout` |
 | `skmr notifications` | 通知：待处理与全部 | — |
 | `skmr notifications accept` | 接受共享邀请 | `skmr notifications accept <id> [--json]` |

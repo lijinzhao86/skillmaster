@@ -341,11 +341,12 @@ live there. The rest of the repository does not need to change: that is the poin
 
 ## Two things to handle on the first day, not later
 
-Both come from the keychain decision in
-[ADR 0025](../docs/decisions/0025-cli-credential-storage.md) — keychain first, a `0600`
-file as the fallback — and both fail in ways that look like something else. They were
-researched on 2026-09-27 and are recorded here because nothing in the repository said
-them until now.
+Both come from the credential-storage decision in
+[ADR 0025](../docs/decisions/0025-cli-credential-storage.md) — since
+[ADR 0185](../docs/decisions/0185-credentials-default-to-a-file.md) the default is a `0600`
+file first, and the keychain is the explicit `--keyring` option and the read fallback — and both
+fail in ways that look like something else. They were researched on 2026-09-27 and are recorded
+here because nothing in the repository said them until now.
 
 **1. A headless Linux box has no Secret Service, and the naive code waits for one.**
 The library reaches for D-Bus by shelling out, and with no session bus it sits there
@@ -382,9 +383,10 @@ every cheap check says "fine" about exactly the case that hangs. `responsiveKeyc
 a five-second deadline on the real call, and on expiry moves the run to the `0600` file, saying so
 through `Where()`. Two consequences, both in that file's comment: the abandoned `security` is left
 for the OS (measured: it does **not** land the write, so no surprise second copy), and a credential
-can exist in both places — which is why `Load` serves the **later** of the two rather than the
-keychain's, since the older copy holds a refresh token the server has already rotated and presenting
-it is a replay (ADR 0024 revokes the whole chain for that).
+can exist in both places — which is why the `--keyring` store's `Load` serves the **later** of the
+two rather than the keychain's, since the older copy holds a refresh token the server has already
+rotated and presenting it is a replay (ADR 0024 revokes the whole chain for that). The default store
+does not compare timestamps at all: the file wins outright (ADR 0185, `fileFirstStore`).
 
 **And one property to keep**: `zalando/go-keyring` is pure Go — wincred and godbus, no
 CGO — so `CGO_ENABLED=0` static builds work. That is what makes a single binary

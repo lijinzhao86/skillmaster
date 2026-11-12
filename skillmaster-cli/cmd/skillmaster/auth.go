@@ -31,28 +31,48 @@ import (
 // **What is left is the login that was always the point**: a browser, a page, one click, and a
 // credential that expires, appears on the console's 「登录设备」 screen, and can be ended there.
 func login(ctx context.Context, args []string) error {
+	keyring, err := parseLoginArgs(args)
+	if err != nil {
+		return err
+	}
 	server := config.Server()
-	store, notice := openStore(server)
+	var store credentials.EnvStore
+	var notice string
+	if keyring {
+		store, notice = openStoreKeyring(server)
+	} else {
+		store, notice = openStore(server)
+		// **The plaintext-file notice is printed by `saveAndReport`, after the write.** Computing
+		// it here would call `Where()` before the write path exists, and in a sandbox the file
+		// store would then name the ordinary directory's older copy — a different file from the
+		// one the login just wrote. A machine with no keychain already has a sentence of its own.
+	}
 
 	previous, hadPrevious := previousCredential(store)
 
 	// `--help` never reaches here: the process answers it before any handler runs (v16 做 #1), which
 	// is also why `login --help` no longer opens a consent page.
-	switch {
-	case len(args) > 0:
-		// **Anything else is a mistake rather than a login.** A *positional* argument is the quieter
-		// spelling of the same mistake — the commands that took a credential from an argument were
-		// removed a version ago, so a key pasted after `login` has lost its flag — and it is refused
-		// without being repeated back (`namedArgument` says why).
-		return unknownFlag("login", args[0])
-	default:
-		if err := loginWithBrowser(ctx, os.Stdout, server, store, notice); err != nil {
-			return err
-		}
+	if err := loginWithBrowser(ctx, os.Stdout, server, store, notice); err != nil {
+		return err
 	}
 
 	revokeReplaced(ctx, server, previous, hadPrevious)
 	return nil
+}
+
+// parseLoginArgs reads the one flag login has (ADR 0185). **Anything else is a mistake rather than a
+// login**: a positional argument is the quieter spelling of the same mistake — the commands that took
+// a credential from an argument were removed a version ago — and it is refused without being repeated
+// back (`namedArgument` says why).
+func parseLoginArgs(args []string) (keyring bool, err error) {
+	for _, arg := range args {
+		if arg == "--keyring" {
+			keyring = true
+			continue
+		}
+		return false, unknownFlag("login", arg)
+	}
+	return keyring, nil
 }
 
 // refusalMessage turns the server's own reason for a 401 into something a person can act on.
@@ -187,10 +207,7 @@ func authCmd(ctx context.Context, args []string) (err error) {
 // that knows it rather than inferred from the other.
 func authStatus(ctx context.Context, args []string) error {
 	server := config.Server()
-	store, notice := openStore(server)
-	if notice != "" {
-		fmt.Fprintln(os.Stderr, notice)
-	}
+	store, _ := openStore(server)
 	address := ""
 	if len(args) == 1 {
 		address = args[0]
@@ -523,6 +540,13 @@ func saveAndReport(progress io.Writer, store credentials.EnvStore, notice, serve
 		Scope:       strings.Join(credential.Scopes, " "),
 	}
 	if err := store.Save(stored); err != nil {
+		// **The keychain half-success is not a failed save.** The credential is stored; only the
+		// file tombstone failed, so "保存凭据失败" and "改用 API key" would both point at the wrong
+		// problem.
+		var halfSaved *credentials.KeychainTombstoneError
+		if errors.As(err, &halfSaved) {
+			return fmt.Errorf("%w；让凭据文件可写（必要时先删掉它）后重试（help auth）", err)
+		}
 		// The store refused (a sandbox, a read-only home). Both ways out are named here because this
 		// is the sentence a locked-down machine dies on, and there is no later page that says them
 		// (v22 A3).
@@ -533,6 +557,20 @@ func saveAndReport(progress io.Writer, store credentials.EnvStore, notice, serve
 		// On stderr, so a script reading stdout is not confused by it — and shown every time the
 		// fallback is in use, because ADR 0025 asks for it to be announced rather than discovered.
 		fmt.Fprintln(os.Stderr, notice)
+	} else if where := store.Source(); isFile(where) {
+		// **The paths that do not go through `login()` still have to say it.** A command that starts
+		// a login for itself (`clientFor`) has no `login` notice to print, and ADR 0185 owes the
+		// person the same sentence there: this is a plaintext file, and `--keyring` is the way back.
+		// **Unless the keychain was the thing that just failed**: then recommending `--keyring`
+		// would point at the flag the person already used.
+		if fellBack, ok := store.Fallback.(interface {
+			FellBackToFile() bool
+			FallbackReason() string
+		}); ok && fellBack.FellBackToFile() {
+			fmt.Fprintln(os.Stderr, credentials.KeyringFallbackNotice(where, fellBack.FallbackReason()))
+		} else {
+			fmt.Fprintln(os.Stderr, credentials.FileDefaultNotice(where))
+		}
 	}
 	fmt.Fprintf(progress, "已登录 %s，凭据存放于 %s\n", server, store.Where())
 	// Whose login it is (v46). The browser screen says which account the credential will go to

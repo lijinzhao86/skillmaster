@@ -83,25 +83,33 @@ try {
     try { New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop | Out-Null }
     catch { Die "建不了安装目录：$InstallDir" }
 
-    # Replace the executable in one rename, so a running copy is never half-written and a failed
-    # update never leaves the machine without a binary: `Move-Item -Force` onto an existing file is
-    # delete-then-move, which has exactly that window.
+    # **Write the executable in place first.** A sandbox can allow writing a file and still refuse
+    # to rename over an existing one; this installer is often run by an agent (on Windows the
+    # sandbox story is less tested, but the shape is the same). No skmr.exe is running while this
+    # copy happens — the `--version` probe runs after it.
+    # In-place copy is not atomic: killing it midway can leave a truncated skmr.exe with no backup,
+    # so the failure message below names the install command as the way to redo it.
+    # The staged + Replace/Move form is a fallback for a failed copy (a running exe cannot be
+    # replaced this way either — `skmr update` has a helper for that case, this installer does not).
     # Staged inside the install directory, not in %TEMP%: `File.Replace` wraps ReplaceFile, which
-    # fails with ERROR_NOT_SAME_DEVICE when the two files are on different volumes — and a profile
-    # with TEMP redirected to another drive is exactly the machine this has to work on.
-    # **The archive's entry is `skmr.exe`** (ADR 0113 决定 2), so this is a plain copy: nothing is
-    # renamed here.
+    # fails with ERROR_NOT_SAME_DEVICE across volumes.
+    # **The archive's entry is `skmr.exe`** (ADR 0113 决定 2), so this is a plain copy.
     $target = Join-Path $InstallDir 'skmr.exe'
-    # Unique per run and still in the install directory: `File.Replace` needs both paths on one
-    # volume, and a fixed name would let two installers overwrite — and, on failure, delete — each
-    # other's copy.
-    $staged = Join-Path $InstallDir ('skmr.exe.new.' + [System.Guid]::NewGuid().ToString('N'))
-    try { Copy-Item -Path (Join-Path $tmp 'skmr.exe') -Destination $staged -Force -ErrorAction Stop }
-    catch { Die "复制失败：$InstallDir" }
-    if (Test-Path $target) {
-        [System.IO.File]::Replace($staged, $target, $null)
-    } else {
-        [System.IO.File]::Move($staged, $target)
+    try {
+        Copy-Item -Path (Join-Path $tmp 'skmr.exe') -Destination $target -Force -ErrorAction Stop
+    } catch {
+        $staged = Join-Path $InstallDir ('skmr.exe.new.' + [System.Guid]::NewGuid().ToString('N'))
+        try { Copy-Item -Path (Join-Path $tmp 'skmr.exe') -Destination $staged -Force -ErrorAction Stop }
+        catch { Die "复制失败：$InstallDir（如果是在 agent 沙箱里，请让 agent 把这条安装命令放到沙箱外跑，或在你自己的终端安装）" }
+        try {
+            if (Test-Path $target) {
+                [System.IO.File]::Replace($staged, $target, $null)
+            } else {
+                [System.IO.File]::Move($staged, $target)
+            }
+        } catch {
+            Die "写不进 $target，也改不了名：如果是在 agent 沙箱里，请让 agent 把这条安装命令放到沙箱外跑，或在你自己的终端安装"
+        }
     }
 
     # --- 5. Say what to do next -----------------------------------------------
@@ -123,7 +131,8 @@ try {
     if ($LASTEXITCODE -ne 0) { Die "装好了但跑不起来：$target --version" }
 
     Say ""
-    Say "下一步：skmr startup"
+    Say "下一步：skmr doctor --fix（把状态目录写进检测到的 AI 工具配置；Windows 安装器不做这一步）"
+    Say "然后：skmr startup"
 } finally {
     # The staged copy lives in the install directory (it has to, for the rename to be atomic), so it
     # is not covered by removing $tmp: a failed replace would otherwise leave it beside the old

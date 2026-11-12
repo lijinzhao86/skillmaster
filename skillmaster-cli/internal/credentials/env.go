@@ -90,6 +90,9 @@ func (s EnvStore) Where() string {
 // conflating them is how a message ends up saying a credential was stored in the environment.
 func (s EnvStore) Source() string {
 	if s.presented() == "" {
+		if source, ok := s.Fallback.(interface{ Source() string }); ok {
+			return source.Source()
+		}
 		return s.Fallback.Where()
 	}
 	return "环境变量 " + s.Var

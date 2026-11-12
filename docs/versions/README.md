@@ -66,3 +66,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v58-usage-history`](v58-usage-history/README.md) | 已完成（2026-11-11 合并 PR #167，release `27a1e76`）… |
 | [`v59-personal-scenario`](v59-personal-scenario/README.md) | 已完成（2026-11-11 合并 PR #169，release `a9eed7e`）… |
 | [`v60-usage-filters`](v60-usage-filters/README.md) | 进行中（已实现，循环审计收口；测试见 `test-plan.md` §结果；待合并） |
+| [`v62-cli-sandbox`](v62-cli-sandbox/README.md) | 进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录）… |

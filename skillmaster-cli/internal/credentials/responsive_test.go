@@ -2,7 +2,9 @@ package credentials
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -113,6 +115,40 @@ func TestASilentKeychainOnSaveMovesThisRunToTheFile(t *testing.T) {
 	// environment cannot predict. The alternative is a credential in a plain file, unremarked.
 	if store.Where() == fallback.Where() {
 		t.Fatal("Where says the file without saying that the keychain went silent")
+	}
+	// The notice is printed from Source(); it must name the file this run actually wrote, not a
+	// read-only copy the file store could see before the write.
+	if store.Source() != fallback.Where() {
+		t.Fatalf("Source = %q, want the written file %q", store.Source(), fallback.Where())
+	}
+}
+
+// The credential reached the keychain, but the file tombstone could not be written. That is a half
+// success, not a failed save: the typed error is what lets the caller say so.
+func TestAKeychainWriteWithAnUnclearableFileIsHalfSuccess(t *testing.T) {
+	keychain := &stubKeychain{}
+	store, fallback := responsiveFor(t, keychain)
+	if err := os.Mkdir(fallback.path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := store.Save(Credentials{AccessToken: "in-the-keychain"})
+	var half *KeychainTombstoneError
+	if !errors.As(err, &half) {
+		t.Fatalf("Save = %v, want a KeychainTombstoneError", err)
+	}
+	if keychain.saved != 1 {
+		t.Fatalf("keychain saves = %d", keychain.saved)
+	}
+}
+
+func TestKeyringFallbackNoticeSaysWhatToDoForTheReason(t *testing.T) {
+	refusal := KeyringFallbackNotice("/tmp/credentials", "系统钥匙串写不进去，本次改用这里的明文文件")
+	if !strings.Contains(refusal, "在沙箱外") {
+		t.Fatalf("refusal notice = %q", refusal)
+	}
+	timeout := KeyringFallbackNotice("/tmp/credentials", "系统钥匙串写超时，本次改用这里的明文文件")
+	if !strings.Contains(timeout, "解锁") {
+		t.Fatalf("timeout notice = %q", timeout)
 	}
 }
 
@@ -296,6 +332,37 @@ func TestASuccessfulKeychainWriteRemovesTheFileCopy(t *testing.T) {
 	// created it.
 	if _, found := loadFallback(t, fallback); found {
 		t.Fatal("the older file copy survived a successful keychain write")
+	}
+}
+
+// A successful `--keyring` write must stop the default store from serving a copy in `older`: the
+// write path gets a zero-byte tombstone, `older` is left alone (it may be read-only), and the next
+// default read goes to the keychain.
+func TestASuccessfulKeychainWriteTombstonesTheWritePath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "write", "cred")
+	olderPath := filepath.Join(dir, "older", "cred")
+	if err := (&fileStore{path: olderPath}).Save(Credentials{AccessToken: "the-old-copy"}); err != nil {
+		t.Fatalf("seeding the older copy: %v", err)
+	}
+	store := newResponsiveKeychain(&stubKeychain{}, &fileStore{path: path, older: olderPath})
+	if err := store.Save(Credentials{AccessToken: "the-new-keychain-copy"}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil || info.Size() != 0 {
+		t.Fatalf("the write path is not a zero-byte tombstone: %v, %v", info, err)
+	}
+	if _, found, _ := (&fileStore{path: olderPath}).Load(); !found {
+		t.Fatalf("Save truncated the read-only older copy")
+	}
+
+	fresh := newFileFirst(&fileStore{path: path, older: olderPath},
+		&stubStore{creds: Credentials{AccessToken: "the-new-keychain-copy"}, found: true})
+	creds, found, err := fresh.Load()
+	if err != nil || !found || creds.AccessToken != "the-new-keychain-copy" {
+		t.Fatalf("a fresh default store served %+v, %v, %v", creds, found, err)
 	}
 }
 
