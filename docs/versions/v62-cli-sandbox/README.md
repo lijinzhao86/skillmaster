@@ -1,7 +1,7 @@
 # v62-cli-sandbox · 凭据默认存文件，沙箱配置一次放行
 
 > **最后更新**：2026-11-12
-> **状态**：进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录、Claude Code 沙箱失败与终端隔离配置成功、安装器已跑；Claude Code 真机写入（T10）与 T17–T19 未跑，见 [`test-plan.md`](test-plan.md) §结果；小版本迭代 1 条，见 [`iterations/0001-agent-install-chain.md`](iterations/0001-agent-install-chain.md)；未合并）
+> **状态**：进行中（已实现；真机 WorkBuddy `--fix`（终端与沙箱）/登录、Claude Code 沙箱失败与终端隔离配置成功、安装器已跑；Claude Code 真机写入（T10）与 T17–T19 未跑，见 [`test-plan.md`](test-plan.md) §结果；小版本迭代 1 条，见 [`iterations/0001-agent-install-chain.md`](iterations/0001-agent-install-chain.md)；已合并（2026-11-12））
 > **含收费**：否
 
 ## 目标
