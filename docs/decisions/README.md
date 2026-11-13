@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 189 条。
+共 190 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -93,7 +93,7 @@
 | [0083](0083-two-tag-layers.md) | 两套标签：公开分类、公开标签与我的标签 | 已采纳 | 2026-10-23 |
 | [0084](0084-l1-search-extension.md) | 检索的 L1 扩展：`when_to_use`、多词与公开标签 | **部分被取代**——§理由里否决「向量检索」的那一条由 [ADR 0095](0095-semantic-retrieval-is-accepted.md) 取代（2026-10-25）；**其余决定（匹配面、多词取「且」、标签过滤在访问谓词内、排序可解释）仍然有效** | 2026-10-23 |
 | [0085](0085-rename-web-to-console.md) | `skillmaster-web` 改名为 `skillmaster-console` | 已采纳 | 2026-10-23 |
-| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；其余不变） | 2026-10-24 |
+| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；§决定 3 的「一个来源」由 [ADR 0190](0190-the-site-origin-is-an-explicit-list.md) 放宽为显式列表，2026-11-13；其余不变） | 2026-10-24 |
 | [0087](0087-cli-exit-codes-are-a-public-contract.md) | CLI 的退出码是公开契约 | 已采纳 | 2026-10-24 |
 | [0088](0088-cli-major-version-is-the-api-generation.md) | CLI 的主版本号就是它说的 API 代次 | 部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄；上线前的命令按 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 4 的「上线前直接把命令收干净」处理——`files` → `ls` 的退役**形态**取自 0112、**依据**是 0077 决定 4（不满足 0112 的三条条件），见 [0120](0120-file-enumeration-is-ls.md)；v32 的 A10 / A12 / A13 / A14 是既有命令的**语义改变**，按同一原则直接改，**不套退役形态**；「弃用提示」不出现，[0113](0113-the-cli-is-called-skmr.md) 决定 3 只在代码里给旧**二进制名**留一处入口） | 2026-10-25 |
 | [0089](0089-no-local-skills.md) | 本机不装任何 skill，三条规则写进系统提示词 | 已采纳（取代 [ADR 0002](0002-gateway-skill-and-cli.md) 的决定 1；**§决定 2 的规则文本已由 [ADR 0094](0094-load-the-library-at-session-start.md) 取代**） | 2026-10-25 |
@@ -194,6 +194,7 @@
 | [0184](0184-taking-a-public-skill-down-is-a-service-lifecycle.md) | 公开 skill 的退场按服务生命周期 | 已采纳 | 2026-11-11 |
 | [0185](0185-credentials-default-to-a-file.md) | CLI 凭据默认存文件，钥匙串改为可选 | 已采纳 | 2026-11-11 |
 | [0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md) | CLI 在安装时改写客户端的沙箱配置，范围限定为 SkillMaster 自己的目录与域名 | 已采纳 | 2026-11-11 |
-| [0187](0187-the-marketing-home-can-run-on-a-subdomain.md) | 营销首页可以临时挂在同一注册域的子域上，切回用 301 | 已采纳 | 2026-11-13 |
+| [0187](0187-the-marketing-home-can-run-on-a-subdomain.md) | 营销首页可以临时挂在同一注册域的子域上，切回用 301 | 已采纳（§决定 2 的「切回时 301 到 `www`」与 §决定 3 的「CORS 只放行一个来源」均由 [ADR 0190](0190-the-site-origin-is-an-explicit-list.md) 取代，2026-11-13；其余不变） | 2026-11-13 |
 | [0188](0188-feedback-consent-lives-on-the-agent-channel.md) | 反馈的同意在 agent 通道里记录，不放到浏览器 | 已采纳 | 2026-11-13 |
 | [0189](0189-feedback-is-kept-indefinitely-with-an-object-copy.md) | 反馈长期保留，另存一份对象存储 | 已采纳 | 2026-11-13 |
+| [0190](0190-the-site-origin-is-an-explicit-list.md) | 首页入口保留 home，CORS 来源是一个显式列表 | 已采纳 | 2026-11-13 |
