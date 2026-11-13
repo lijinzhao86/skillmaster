@@ -307,13 +307,13 @@ jobs:
           # question this job can answer: does the site answer through the real name and the real
           # certificate, from the machine that serves it.
           # **It asks `home`, not `www`** (v63). `home` is the marketing page's main entry;
-          # `www` continues to serve the same build as an independent page.
+          # `www` serves its own frozen copy and is not updated by this deploy.
           # **It compares bytes, not just the status.** The first `listen 443` block is the
           # console, so a name nginx does not match — a missing `home` block, a typo — answers
           # 200 with the console's `index.html`; a status probe would call that a success.
           # **It follows the redirect, and both names resolve here.** If the long-term relation
-          # between `www` and `home` ever turns one into a 301 to the other, the probe still lands
-          # on this same build, so no probe edit is needed.
+          # between `www` and `home` ever turns one into a 301 to the other, the probe still reaches
+          # a served page, so no probe edit is needed.
           if ! ssh "${opts[@]}" "$target" \
                'f=$(mktemp)
                 trap "rm -f $f" EXIT

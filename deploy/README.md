@@ -13,7 +13,7 @@ One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, fiv
                              └─ /web, /api/v1, /oauth,
                                 /.well-known, /gateway  ──► 127.0.0.1:8080
   home.skillmasterai.com    ─── /srv/skillmaster/site      the marketing page's main entry (v63)
-  www.skillmasterai.com     ─── /srv/skillmaster/site      the same page, an independent page (v63)
+  www.skillmasterai.com     ─── /srv/skillmaster/site-www  a frozen copy for the licence work
   skillmasterai.com         ─── 301 to home
   dl.skillmasterai.com      ─── proxy   ──► skillmaster-dl.oss-cn-hangzhou.aliyuncs.com
                                             (the CLI packages, uploaded by cli-release.yml)
@@ -405,8 +405,8 @@ been tested, and switching the challenge method is a separate operation.
 
 ## 首页入口（v63）
 
-`home.skillmasterai.com` 是首页的主入口；`www.skillmasterai.com` 作为独立页面保留同一份构建，
-内容不改、不被任何页面链接，用来让 `www` 腾出手办经营性 ICP 许可证。
+`home.skillmasterai.com` 是首页的主入口；`www.skillmasterai.com` 作为独立页面保留（办证期间从
+独立副本提供，见下），内容不改、不被任何页面链接，用来让 `www` 腾出手办经营性 ICP 许可证。
 形状、取舍与验收在 [`docs/versions/v63-home-subdomain/`](../docs/versions/v63-home-subdomain/README.md)，
 这里只写怎么落地。**P0 不切换入口**：`www`、`SKILLMASTER_SITE_ORIGIN` 与控制台的 `VITE_SITE_URL`
 都不动。P0 唯一的用户可见变化是隐私政策文本与版本号（v63 A7），它随站点与服务端各一次 Deploy 生效。
@@ -484,6 +484,15 @@ been tested, and switching the challenge method is a separate operation.
 
 许可证下来后 `www` 与 `home` 的长期关系（继续独立，还是要 301）由许可证办理方的要求决定，
 见 [`v63 技术设计`](../docs/versions/v63-home-subdomain/technical-design.md) §开放问题；现在不预做。
+
+### `www` 的独立副本（2026-11-13）
+
+办证期间 `www` 从 `/srv/skillmaster/site-www` 提供——那是切换时从 `/srv/skillmaster/site`
+拷的一份。它不随站点发布更新，改它也不会影响 `home`；`home` 的发布路径完全不变。
+
+回退（办证结束、要把两边合回同一份构建）：把 `deploy/nginx/skillmaster.conf` 里 `www` 块的
+`root` 改回 `/srv/skillmaster/site`，拷配置、`nginx -t`、reload；`site-www` 目录可以留着，也可以
+确认不再需要后删掉。
 
 ## Certificates
 

@@ -9,6 +9,8 @@
 
 **同一份构建产物，两个前门，一个主入口。** 首页的静态文件只有一个来源 `/srv/skillmaster/site`（`site.yml` 发布到那里），`www` 与 `home` 都指向它。没有新的构建、新的产物或新的运行时。
 
+> **2026-11-13 补记**：交付后 `www` 改为从独立副本 `/srv/skillmaster/site-www` 提供（办证期间冻结，改它不影响 `home`，站点发布也不覆盖它）；`home` 仍用 `/srv/skillmaster/site`。回退方式见 [`deploy/README.md`](../../../deploy/README.md) §首页入口。本节其余内容与两张表描述的是拆分前的形状。
+
 ```
                      nginx (host, :80 -> :443)
   console.skillmasterai.com ─┬─ /srv/skillmaster/console

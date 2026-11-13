@@ -1,8 +1,9 @@
 # skillmaster-site
 
-`home.skillmasterai.com` 上的营销首页（v63 起是主入口）。静态构建，不需要服务端。同一份构建
-`www.skillmasterai.com` 也继续提供，作为独立页面保留（见
-[`docs/versions/v63-home-subdomain/`](../docs/versions/v63-home-subdomain/README.md)）。
+`home.skillmasterai.com` 上的营销首页（v63 起是主入口）。静态构建，不需要服务端。办证期间
+`www.skillmasterai.com` 从独立副本 `/srv/skillmaster/site-www` 提供，不再随发布更新（见
+[`docs/versions/v63-home-subdomain/`](../docs/versions/v63-home-subdomain/README.md) 与
+[`deploy/README.md`](../deploy/README.md) §首页入口）。
 
 ```bash
 npm ci
