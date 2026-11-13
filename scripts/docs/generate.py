@@ -280,7 +280,12 @@ def gen_limits() -> str:
     # v65: the attachment rules. The type allowlist is prose in the TD; the four counts are the
     # contract a client has to mirror, so they are generated rather than copied.
     attachment_safety = read(SERVER / "modules/feedback/FeedbackAttachmentSafety.java")
-    attachment_names = ("MAX_ATTACHMENTS", "MAX_IMAGE_BYTES", "MAX_VIDEO_BYTES", "MAX_TOTAL_BYTES")
+    attachment_names = (
+        "MAX_ATTACHMENTS",
+        "MAX_IMAGE_BYTES",
+        "MAX_VIDEO_BYTES",
+        "MAX_TOTAL_BYTES",
+    )
     attachment_limits = {}
     for name in attachment_names:
         match = re.search(rf"{name}\s*=\s*([\d_L\s*]+);", attachment_safety)
@@ -299,8 +304,14 @@ def gen_limits() -> str:
         value = evaluate(expression)
         if value is None:
             fail(f"无法求值 FeedbackAttachmentSafety.{name} = {expression}")
-        rendered = f"{value} 个/条" if name == "MAX_ATTACHMENTS" else f"{value} 字节（{human(value)}）"
-        lines.append(f"| `FeedbackAttachmentSafety.{name}` | `{expression}` | {rendered} |")
+        rendered = (
+            f"{value} 个/条"
+            if name == "MAX_ATTACHMENTS"
+            else f"{value} 字节（{human(value)}）"
+        )
+        lines.append(
+            f"| `FeedbackAttachmentSafety.{name}` | `{expression}` | {rendered} |"
+        )
     lines.append("")
     return "\n".join(lines)
 
