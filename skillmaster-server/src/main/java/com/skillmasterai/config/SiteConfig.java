@@ -1,6 +1,7 @@
 package com.skillmasterai.config;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.session.autoconfigure.DefaultCookieSerializerCustomizer;
@@ -20,9 +21,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * {@code skillmaster.site.cookie-domain}. Left blank (development, tests) the cookie stays host-only,
  * exactly as before this change.
  *
- * <p><strong>2 · One path, one origin, one method.</strong> The CORS rule is deliberately the
- * narrowest thing that works: {@code /web/session}, {@code GET}, the site's own origin — not
- * {@code /web/**} and not every method. Everything else on this plane is called same-origin by the
+ * <p><strong>2 · One path, a named list of origins, one method.</strong> The CORS rule is
+ * deliberately the narrowest thing that works: {@code /web/session}, {@code GET}, the sites named in
+ * configuration — not {@code /web/**} and not every method. The list exists because the landing page
+ * is served from two names during the handover ({@code www} and {@code home}, ADR 0190); it is still
+ * an explicit list, never a wildcard. Everything else on this plane is called same-origin by the
  * console, which needs no CORS at all. Note that this does <em>not</em> widen what the site can do:
  * the CSRF cookie stays host-only (see the {@link DefaultCookieSerializer} customizer below), so the
  * site still cannot write.
@@ -38,17 +41,21 @@ class SiteConfig {
      *
      * <p>An empty or blank origin registers nothing: a deployment that has not said where the site
      * lives gets no CORS at all, rather than a rule that quietly matches everything.
+     *
+     * <p>It accepts a comma-separated list (ADR 0190). During the handover {@code www} and
+     * {@code home} serve the same page and both read the session; the list is explicit, so a
+     * wildcard or an empty entry stops the boot instead of silently widening or narrowing the rule.
      */
     @Bean
     CorsConfigurationSource corsConfigurationSource(
             @Value("${skillmaster.site.origin:}") String origin) {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        String site = normalizeOrigin(origin);
-        if (site == null) {
+        List<String> sites = normalizeOrigins(origin);
+        if (sites.isEmpty()) {
             return source;
         }
         CorsConfiguration read = new CorsConfiguration();
-        read.setAllowedOrigins(List.of(site));
+        read.setAllowedOrigins(sites);
         read.setAllowedMethods(List.of("GET"));
         // `Accept` is the only header the request sets; the browser adds the rest itself.
         read.setAllowedHeaders(List.of("Accept"));
@@ -86,32 +93,39 @@ class SiteConfig {
     }
 
     /**
-     * The configured site origin, or null when the deployment did not name one.
+     * The configured site origins, in the order written; empty when the deployment named none.
      *
      * <p>A trailing slash is stripped because a browser's {@code Origin} header never carries one —
      * leaving it would make the rule match nothing, and the page would quietly stay signed-out.
      *
-     * <p>A list or a wildcard is refused at startup rather than registered. {@code CorsConfiguration}
-     * would treat {@code "*"} as a wildcard, and a comma would become one literal origin nobody
-     * sends; both turn a typo into a CORS rule that is either wider than the ADR allows or narrower
-     * than the person meant, and neither is observable from the browser.
+     * <p>Commas separate origins (ADR 0190: {@code www} and {@code home} both serve the landing page
+     * during the handover). A wildcard is refused, and so is an empty entry — {@code https://a,} is a
+     * typo, and quietly dropping it would leave one name signed-out with no symptom anywhere.
+     * Duplicates collapse.
      */
-    static String normalizeOrigin(String origin) {
-        if (origin == null) {
-            return null;
+    static List<String> normalizeOrigins(String configured) {
+        if (configured == null || configured.isBlank()) {
+            return List.of();
         }
-        String trimmed = origin.trim();
-        while (trimmed.endsWith("/")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        List<String> origins = new ArrayList<>();
+        for (String part : configured.split(",", -1)) {
+            String trimmed = part.trim();
+            while (trimmed.endsWith("/")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
+            }
+            if (trimmed.isEmpty()) {
+                throw new IllegalStateException(
+                        "skillmaster.site.origin has an empty entry, found: " + configured);
+            }
+            if (trimmed.contains("*") || trimmed.chars().anyMatch(Character::isWhitespace)) {
+                throw new IllegalStateException(
+                        "skillmaster.site.origin must name origins, found: " + configured);
+            }
+            if (!origins.contains(trimmed)) {
+                origins.add(trimmed);
+            }
         }
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-        if (trimmed.contains("*") || trimmed.contains(",")) {
-            throw new IllegalStateException(
-                    "skillmaster.site.origin must name one origin, found: " + origin);
-        }
-        return trimmed;
+        return List.copyOf(origins);
     }
 
     /**
