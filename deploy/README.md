@@ -55,6 +55,24 @@ Production configuration has exactly one source: the repository's Actions variab
 secrets, rendered into `server.env` by every deployment. Editing that file on the host
 does not survive the next deploy — deliberately.
 
+## Operator credentials (2026-11-13)
+
+Three places, one job each. Values never live in the repository.
+
+| Where | What | Who uses it |
+|---|---|---|
+| `~/.aliyun/config.json` (`600`) | Aliyun CLI profiles: `skillmaster-agent-admin` (account-wide management), `skillmaster` (deploy only) | operators and agents on this machine |
+| GitHub Actions secrets | everything `server.env` is rendered from (`SKILLMASTER_SMS_*`, `OSS_DL_*`, database, tokens) | CI |
+| `/etc/skillmaster/acme.env` (`600 root`) | the DNS-01 hook's Aliyun AccessKey | certbot on the host |
+| `/etc/skillmaster/server.env` (`600 root`) | rendered by every deploy from the Actions secrets | the service |
+
+- The management identity (`skillmaster-agent-admin`) is separate from the deploy identity
+  (`skillmaster-deploy`); they have different jobs and different keys.
+- Rotate CLI AccessKeys every 90 days: create a new key in the console, `aliyun configure set`
+  the profile, then disable the old key.
+- A console-only RAM user (for people) gets no AccessKey. `www-editor`, the licence work's
+  page editor, has console access and **no permissions** until that work chooses a channel.
+
 ## Service credentials (v52)
 
 The vault's root key lives in Huawei Cloud KMS ([ADR 0172](../docs/decisions/0172-the-root-key-is-huawei-cloud-kms.md)),
@@ -417,11 +435,11 @@ been tested, and switching the challenge method is a separate operation.
 步骤 3 与 4 要放在同一个维护窗口里并避开巡检时刻：主机先换配置、仓库后合并，两步之间
 每日巡检会因配置哈希不一致红一次（合并后恢复，再手动跑一次确认）。
 
-1. **加解析记录。** 在**本机**跑，需要 `gh` 与有效的 `aliyun` OAuth profile `domain`
-   （过期时先 `aliyun configure --mode OAuth --profile domain --oauth-site-type CN` 重新登录）：
+1. **加解析记录。** 在**本机**跑，需要 `gh` 与 `aliyun` profile `skillmaster-agent-admin`
+   （账号级管理的 AccessKey，见 §Operator credentials）：
 
    ```bash
-   aliyun --profile domain alidns AddDomainRecord --DomainName skillmasterai.com \
+   aliyun --profile skillmaster-agent-admin alidns AddDomainRecord --DomainName skillmasterai.com \
      --RR home --Type A --Value "$(gh variable get DEPLOY_HOST)" --region cn-hangzhou
    dig +short home.skillmasterai.com     # 应返回同一地址
    ```
