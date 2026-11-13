@@ -51,7 +51,7 @@
 - **`/logout` 现在有一屏（v46 起）**：挂载时发一次现有的 `POST /web/logout`；成功后是 `LogoutDoneView` 的引导页（三句话 + 可复制的 `skmr logout` + 回到首页，演示件 `?page=logout`，截图 `17-logout.png` / `17b-logout-copied.png`）。失败时仍只有一行说明与一条回去的链接。设计要求见 [ADR 0141](../docs/decisions/0141-a-logout-stops-on-a-guide-screen.md) 与 [`.dev-sop/design.md`](../.dev-sop/design.md)。
 - `home-check.mjs` §8 钉住了：已登录时**导航里**没有 `登录/开始使用`、**页脚的三条链接仍在**、`进入控制台` 指向控制台、菜单默认关着、点开、Esc 关并把焦点还给按钮；图是 `artifacts/design/home/00-home-signed-in.png`。
 
-**这是产品行为，不只是设计上的一个样子**（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)）：产品里 www 启动时向控制台发**一次只读的** `GET /web/session`，2xx 就画已登录态，401 / 失败 / 超时就画未登录态；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`，服务端只对 `GET /web/session` 放行 www 源的 CORS，`XSRF-TOKEN` 保持主机级。登录、注册、退出仍然都在控制台——菜单里的「退出登录」是一条指向 `console/logout` 的普通链接。
+**这是产品行为，不只是设计上的一个样子**（[ADR 0086](../docs/decisions/0086-the-homepage-reads-the-session.md)）：产品里首页启动时向控制台发**一次只读的** `GET /web/session`，2xx 就画已登录态，401 / 失败 / 超时就画未登录态；会话 cookie 的 `Domain` 放宽到 `skillmasterai.com`，服务端只对 `GET /web/session` 放行配置里的来源列表（当前 `www` 与 `home`）的 CORS，`XSRF-TOKEN` 保持主机级。登录、注册、退出仍然都在控制台——菜单里的「退出登录」是一条指向 `console/logout` 的普通链接。
 
 **演示件证明不了产品的这一态。** 演示件不连后端（`home-check` 断言零 `fetch`），它把状态写在地址里：`?signed-in` 就是「已登录」。产品的这个态只能带一份真实的控制台会话去验（v15 测试方案 T2 / T14 / T15）。**不要拿演示件的两种态当产品验收的证据**，也不要反过来要求产品去读 `?signed-in`。
 

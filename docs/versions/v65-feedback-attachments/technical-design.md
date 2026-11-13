@@ -3,7 +3,7 @@
 > **最后更新**：2026-11-13
 > **状态**：已实现
 > **所属版本**：[`README.md`](README.md)
-> **架构决策已独立成 [ADR 0190](../../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md)**——本文只链接、不复述理由。
+> **架构决策已独立成 [ADR 0191](../../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md)**——本文只链接、不复述理由。
 
 ## 架构
 
@@ -36,7 +36,7 @@
 | M6（`modules/blob/`） | `putObject` / `deleteObject` 的私有 OSS 通道 | 不知道附件是什么 |
 | M14 / M10 | 回执通知、`feedback_submit` / `feedback_delete` 审计 | 不读附件字节 |
 
-**上传在数据库事务之外。** 对象存储不能加入数据库事务；`SubmitFeedbackUseCase.submit` 不再整体加 `@Transactional`，而是在校验与限流之后、写库之前上传对象，再用 `TransactionTemplate` 把「反馈行 + 附件行 + 通知 + 审计」放进一个事务。写库失败时按已上传的键逐个删；删不掉就记日志留键。顺序与理由见 [ADR 0190](../../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md) §后果。
+**上传在数据库事务之外。** 对象存储不能加入数据库事务；`SubmitFeedbackUseCase.submit` 不再整体加 `@Transactional`，而是在校验与限流之后、写库之前上传对象，再用 `TransactionTemplate` 把「反馈行 + 附件行 + 通知 + 审计」放进一个事务。写库失败时按已上传的键逐个删；删不掉就记日志留键。顺序与理由见 [ADR 0191](../../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md) §后果。
 
 **取图的三条路是「线索」而不是承诺。** 消息里的路径（`[Image: source: …]`）是宿主未文档化的行为；会话缓存是 Claude Code 的私有目录；剪贴板受平台与沙箱影响。`attach` 按优先级尝试，拿到什么就打印什么来源；agent 用 `Read` 看一眼候选图片，确认是用户说的那张，再交给 `send`。WorkBuddy 的真机行为在测试方案里单独验；取不到时退到「请用户把文件拖进对话」。
 
@@ -64,7 +64,7 @@ CREATE INDEX idx_feedback_attachment_feedback ON feedback_attachment(feedback_id
 ```
 
 - **归属**：`ModuleMap` 的 M18 表集合加 `feedback_attachment`；`TableOwnershipTest` 会把它钉住。
-- **级联**：撤回删 `user_feedback` 行时附件行随 `ON DELETE CASCADE` 消失；对象不能跟着行走，必须先删对象再删行（[ADR 0190](../../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md) 决定 7）。
+- **级联**：撤回删 `user_feedback` 行时附件行随 `ON DELETE CASCADE` 消失；对象不能跟着行走，必须先删对象再删行（[ADR 0191](../../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md) 决定 7）。
 - **不硬编码数量上限**：`position` 只做非负兜底；5 个的上限是业务规则，改数值不应该需要迁移。
 - **对象键**：`feedback/attachments/YYYY/MM/DD/<ULID>.<ext>`；日期取提交时刻的 UTC，`ext` 由识别出的类型决定（`png` / `jpg` / `gif` / `webp` / `mp4` / `mov` / `webm`）。不拼原文件名，也不拼回执号；原文件名只在数据库里。
 - **模型身份**：`docs/current/model.md` 增加 `FeedbackAttachment` 一行——`id`（ULID）是行身份，`object_key` 是字节身份；一条附件只属于一条反馈。

@@ -291,7 +291,7 @@ def gen_limits() -> str:
     lines.append("## 反馈附件的上限\n")
     lines.append(
         "`skmr feedback send --attach` 的四个上限。CLI 保留同值常量用于发送前失败，"
-        "服务端仍是闸；数值改动是改对外契约，按大版本走（ADR 0190）。\n"
+        "服务端仍是闸；数值改动是改对外契约，按大版本走（ADR 0191）。\n"
     )
     lines.append("| 常量 | 原始表达式 | 值 |")
     lines.append("|---|---|---|")

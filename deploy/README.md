@@ -12,9 +12,9 @@ One ECS instance (`ecs.u1-c1m2.large`, `cn-shanghai-b`), one public address, fiv
   console.skillmasterai.com ─┬─ /srv/skillmaster/console   the console SPA's files
                              └─ /web, /api/v1, /oauth,
                                 /.well-known, /gateway  ──► 127.0.0.1:8080
-  www.skillmasterai.com     ─── /srv/skillmaster/site      the marketing page
-  home.skillmasterai.com    ─── /srv/skillmaster/site      the same page, temporary entry (v63)
-  skillmasterai.com         ─── 301 to www
+  home.skillmasterai.com    ─── /srv/skillmaster/site      the marketing page's main entry (v63)
+  www.skillmasterai.com     ─── /srv/skillmaster/site-www  a frozen copy for the licence work
+  skillmasterai.com         ─── 301 to home
   dl.skillmasterai.com      ─── proxy   ──► skillmaster-dl.oss-cn-hangzhou.aliyuncs.com
                                             (the CLI packages, uploaded by cli-release.yml)
 
@@ -54,6 +54,24 @@ a custom domain, so nginx is the front door and the bucket is the origin — see
 Production configuration has exactly one source: the repository's Actions variables and
 secrets, rendered into `server.env` by every deployment. Editing that file on the host
 does not survive the next deploy — deliberately.
+
+## Operator credentials (2026-11-13)
+
+Three places, one job each. Values never live in the repository.
+
+| Where | What | Who uses it |
+|---|---|---|
+| `~/.aliyun/config.json` (`600`) | Aliyun CLI profiles: `skillmaster-agent-admin` (account-wide management), `skillmaster` (deploy only) | operators and agents on this machine |
+| GitHub Actions secrets | everything `server.env` is rendered from (`SKILLMASTER_SMS_*`, `OSS_DL_*`, database, tokens) | CI |
+| `/etc/skillmaster/acme.env` (`600 root`) | the DNS-01 hook's Aliyun AccessKey | certbot on the host |
+| `/etc/skillmaster/server.env` (`600 root`) | rendered by every deploy from the Actions secrets | the service |
+
+- The management identity (`skillmaster-agent-admin`) is separate from the deploy identity
+  (`skillmaster-deploy`); they have different jobs and different keys.
+- Rotate CLI AccessKeys every 90 days: create a new key in the console, `aliyun configure set`
+  the profile, then disable the old key.
+- A console-only RAM user (for people) gets no AccessKey. `www-editor`, the licence work's
+  page editor, has console access and **no permissions** until that work chooses a channel.
 
 ## Service credentials (v52)
 
@@ -330,7 +348,7 @@ ssh root@<host> 'ln -sfn /srv/skillmaster/console-releases/manual /srv/skillmast
 ```bash
 curl -fsS https://console.skillmasterai.com/.well-known/oauth-authorization-server | head
 curl -fsS -o /dev/null -w '%{http_code}\n' https://www.skillmasterai.com/    # 200
-curl -fsS -o /dev/null -w '%{http_code}\n' https://home.skillmasterai.com/   # 200（P0/P1；P2 起 301）
+curl -fsS -o /dev/null -w '%{http_code}\n' https://home.skillmasterai.com/   # 200
 curl -fsS -o /dev/null -w '%{http_code}\n' https://skillmasterai.com/        # 301
 curl -fsS -o /dev/null -w '%{http_code}\n' https://dl.skillmasterai.com/install.sh   # 200
 ```
@@ -403,9 +421,10 @@ read back from it, and binaries built before v43 keep updating from it. It is no
 not change that arrangement; whether port 80 would now complete an HTTP-01 challenge has not
 been tested, and switching the challenge method is a separate operation.
 
-## 首页入口的临时切换（v63）
+## 首页入口（v63）
 
-`home.skillmasterai.com` 是首页的临时入口，用来让 `www` 腾出手办经营性 ICP 许可证。
+`home.skillmasterai.com` 是首页的主入口；`www.skillmasterai.com` 作为独立页面保留（办证期间从
+独立副本提供，见下），内容不改、不被任何页面链接，用来让 `www` 腾出手办经营性 ICP 许可证。
 形状、取舍与验收在 [`docs/versions/v63-home-subdomain/`](../docs/versions/v63-home-subdomain/README.md)，
 这里只写怎么落地。**P0 不切换入口**：`www`、`SKILLMASTER_SITE_ORIGIN` 与控制台的 `VITE_SITE_URL`
 都不动。P0 唯一的用户可见变化是隐私政策文本与版本号（v63 A7），它随站点与服务端各一次 Deploy 生效。
@@ -416,11 +435,11 @@ been tested, and switching the challenge method is a separate operation.
 步骤 3 与 4 要放在同一个维护窗口里并避开巡检时刻：主机先换配置、仓库后合并，两步之间
 每日巡检会因配置哈希不一致红一次（合并后恢复，再手动跑一次确认）。
 
-1. **加解析记录。** 在**本机**跑，需要 `gh` 与有效的 `aliyun` OAuth profile `domain`
-   （过期时先 `aliyun configure --mode OAuth --profile domain --oauth-site-type CN` 重新登录）：
+1. **加解析记录。** 在**本机**跑，需要 `gh` 与 `aliyun` profile `skillmaster-agent-admin`
+   （账号级管理的 AccessKey，见 §Operator credentials）：
 
    ```bash
-   aliyun --profile domain alidns AddDomainRecord --DomainName skillmasterai.com \
+   aliyun --profile skillmaster-agent-admin alidns AddDomainRecord --DomainName skillmasterai.com \
      --RR home --Type A --Value "$(gh variable get DEPLOY_HOST)" --region cn-hangzhou
    dig +short home.skillmasterai.com     # 应返回同一地址
    ```
@@ -451,38 +470,47 @@ been tested, and switching the challenge method is a separate operation.
    [`server.md`](../.dev-sop/release/server.md) 各 `workflow_dispatch` 一次 Deploy：站点那次带上
    隐私政策 `1.2` 与新探针；服务端那次让新 jar 的 `application.yml` 默认值生效——`server.yml`
    不渲染 `SKILLMASTER_PRIVACY_VERSION`，生产值就来自这个默认值。**先站点、再服务端**：两次之间
-   记录版本不能领先于页面版本（否则会把用户没看过的文本记成已同意）。发布后跑 T10 与 T11。
+   记录版本不能领先于页面版本（否则会把用户没看过的文本记成已同意）。发布后跑 T9 与 T10。
 
-### P1 · 切换（所有者发话后再做）
+### P1 · 主入口切到 home（`www` 保持原样）
 
-1. 定 `www` 的处置：301 到 `home`，或换成一张静态说明页（见 v63 技术设计 §开放问题）。
-2. 改控制台出口：`skillmaster-console/.env.production` 的 `VITE_SITE_URL` 指向
-   `https://home.skillmasterai.com`，合并后重新部署控制台。
-3. 改服务端来源：
+`www` 的页面、它的 nginx 块与内容都不动。这次只改三个取值加一个服务端契约，顺序不能反。
+
+1. **先部署带列表支持的服务端。** 合并后 dispatch 一次服务端 Deploy，此时
+   `SKILLMASTER_SITE_ORIGIN` 仍是单值——新代码接受单值，这一步先确认代码本身没问题。
+2. **再把来源改成两个值：**
 
    ```bash
-   gh variable set SKILLMASTER_SITE_ORIGIN --body https://home.skillmasterai.com
-   # 再手动 dispatch 一次服务端 Deploy；它把变量渲染进 server.env
+   gh variable set SKILLMASTER_SITE_ORIGIN \
+     --body 'https://www.skillmasterai.com,https://home.skillmasterai.com'
+   # 再 dispatch 一次服务端 Deploy；变量只在部署时渲染进 server.env
    ```
 
-4. 最后改 nginx：`www` 的 443 块按第 1 步改，裸域的 301 目标改成 `home`。改仓库里的
-   `deploy/nginx/skillmaster.conf` 并合并，再拷配置、`nginx -t`、reload——两步放在同一维护窗口
-   （否则巡检会因配置哈希与 main 不一致而红）。**顺序理由**：先让控制台与服务端指向已经能用的
-   `home`，再动 `www`，中间没有死链。
-5. 在云监控补一条 `https://home.skillmasterai.com/` 的 200 探测（现有三个任务见 §自愈与监控）；
-   否则切过去之后，真正承担入口的名字没有 HTTP 告警。
+   **回滚的前提**：变量变成两个值之后，每次 Deploy（包括 `release=<旧 sha>` 的回滚）都会用
+   当前变量重写 `server.env`，而 ADR 0190 之前的 jar 遇到逗号会拒绝启动。要回滚到那样的
+   release，先把 `SKILLMASTER_SITE_ORIGIN` 改回单值再 dispatch；否则回滚会在启动失败后自动
+   切回当前 release——线上不中断，但回滚没有发生。
 
-### P2 · 切回（许可证下来后）
+3. **控制台指向 `home`**：`skillmaster-console/.env.production` 的 `VITE_SITE_URL` 改成
+   `https://home.skillmasterai.com`，合并后重新部署控制台。
+4. **裸域 301 指向 `home`**：`deploy/nginx/skillmaster.conf` 的裸域块改成
+   `return 301 https://home.skillmasterai.com$request_uri`；合并，再拷配置、`nginx -t`、reload
+   （同一维护窗口）。
+5. **云监控**补一条 `https://home.skillmasterai.com/` 的 200 探测（现有三个任务见 §自愈与监控）。
+6. **验证**：两个宿主都显示登录态；`https://skillmasterai.com/` 301 到 `home`；控制台与站点的
+   构建产物里都没有指向 `www` 的链接；跑一次 `ops-check`。
 
-1. nginx：`home` 的 443 块改成 `return 301 https://www.skillmasterai.com$request_uri`；`www` 恢复
-   静态服务；裸域 301 指回 `www`。改仓库里的 `deploy/nginx/skillmaster.conf` 并合并，再拷配置、
-   `nginx -t`、reload——两步放在同一维护窗口。
-2. `gh variable set SKILLMASTER_SITE_ORIGIN --body https://www.skillmasterai.com`，dispatch 服务端 Deploy。
-3. `skillmaster-console/.env.production` 的 `VITE_SITE_URL` 改回 `www`，重新部署控制台。
+许可证下来后 `www` 与 `home` 的长期关系（继续独立，还是要 301）由许可证办理方的要求决定，
+见 [`v63 技术设计`](../docs/versions/v63-home-subdomain/technical-design.md) §开放问题；现在不预做。
 
-**站点发布探针不用改**：它跟随跳转，`home` 的 301 会落到 `www` 的同一份构建上。
+### `www` 的独立副本（2026-11-13）
 
-**`home` 不拆**：DNS 记录与证书 SAN 都保留，以后 `www` 维护时还能用。
+办证期间 `www` 从 `/srv/skillmaster/site-www` 提供——那是切换时从 `/srv/skillmaster/site`
+拷的一份。它不随站点发布更新，改它也不会影响 `home`；`home` 的发布路径完全不变。
+
+回退（办证结束、要把两边合回同一份构建）：把 `deploy/nginx/skillmaster.conf` 里 `www` 块的
+`root` 改回 `/srv/skillmaster/site`，拷配置、`nginx -t`、reload；`site-www` 目录可以留着，也可以
+确认不再需要后删掉。
 
 ## Certificates
 

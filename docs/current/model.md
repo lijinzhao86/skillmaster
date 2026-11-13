@@ -54,7 +54,7 @@ User ──1:N── Namespace ──1:N── Skill ──1:N── SkillVersio
 | **SkillStat** | 使用计数（P1 才写） | `skill_id` |
 | **AuditEvent** | 某事发生过的记录 | 自增 `bigint`——只追加、量最大、id 从不进 URL |
 | **Feedback** | 用户或 agent 提交的一份反馈文档；数据库行长期保留，对象存储另有一份副本（[ADR 0189](../decisions/0189-feedback-is-kept-indefinitely-with-an-object-copy.md)） | 双身份：`id`（ULID）是行身份，`receipt`（`FB-YYYYMMDD-XXXXXX`）是人看到、输入与撤回时用的值（v64） |
-| **FeedbackAttachment** | 反馈附带的一份图片或视频附件的元数据；字节在私有 OSS，行记归属、类型、大小与摘要（[ADR 0190](../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md)） | 双身份：`id`（ULID）是行身份，`object_key` 是字节身份；一条附件只属于一条反馈（v65） |
+| **FeedbackAttachment** | 反馈附带的一份图片或视频附件的元数据；字节在私有 OSS，行记归属、类型、大小与摘要（[ADR 0191](../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md)） | 双身份：`id`（ULID）是行身份，`object_key` 是字节身份；一条附件只属于一条反馈（v65） |
 
 **`current_version_id` 故意没有外键**，因为它指向 `skill_version`，而后者又指回 `skill`，加了就循环。它是模型里唯一的这种指法，值**只由上线动作移动**——可以前进也可以回移，回移就是回滚（[ADR 0031](../decisions/0031-submitting-and-publishing-are-two-actions.md)）。
 

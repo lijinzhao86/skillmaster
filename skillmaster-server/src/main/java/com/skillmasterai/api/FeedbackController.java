@@ -44,7 +44,7 @@ import tools.jackson.databind.ObjectMapper;
  * <p><strong>There is no list route.</strong> The receipt is the only handle a person needs, and it
  * arrives in the notification. An operator reads the table directly, which is what keeps this
  * plane from growing an authorisation model it does not have. Attachments are not an exception:
- * there is no route that returns their bytes either (ADR 0190).
+ * there is no route that returns their bytes either (ADR 0191).
  */
 @RestController
 @RequestMapping(path = "/api/v1/feedback")

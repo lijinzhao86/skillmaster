@@ -121,7 +121,7 @@ public class SubmitFeedbackUseCase {
         // **A key prefix is replaced, not confirmed** (v64 做 #13): a client that did not redact
         // first still gets its document stored, with the key replaced below. The three personal-data
         // categories are the ones the person has to confirm. Attachments are not scanned: the
-        // preview says so, and ADR 0190 records why.
+        // preview says so, and ADR 0191 records why.
         FeedbackSafety.Scan scan = FeedbackSafety.scan(text);
         if (needsConfirmation(scan) && !allowSensitive) {
             throw new RequestException(ErrorCode.FEEDBACK_SENSITIVE,

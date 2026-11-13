@@ -42,7 +42,7 @@ v64 的反馈只收文本。用户要么用文字描述界面问题，要么把�
 
 | # | 不做什么 | 为什么 | 什么时候可能做 |
 |---|---|---|---|
-| 1 | 自动内容审核（图片或视频） | 反馈是私有收件箱：桶私有、无公开链接、只有运营可读，用户可预览与撤回。接阿里云内容安全要新增服务、费用、异步状态机与误杀处理，当前量级不划算。残余风险写进 [ADR 0190](../../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md) | 附件量起来、出现违规内容投诉、或附件需要公开展示时 |
+| 1 | 自动内容审核（图片或视频） | 反馈是私有收件箱：桶私有、无公开链接、只有运营可读，用户可预览与撤回。接阿里云内容安全要新增服务、费用、异步状态机与误杀处理，当前量级不划算。残余风险写进 [ADR 0191](../../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md) | 附件量起来、出现违规内容投诉、或附件需要公开展示时 |
 | 2 | 图片元数据（EXIF/GPS、XMP）剥离 | 需要解码或二进制改写；v65 原样保存并在预览里提示「图片或视频可能含位置等元数据」。这是隐私上的已知残余，不是遗漏 | 用户反馈元数据泄露、或合规评审要求时 |
 | 3 | 视频转码、封面、在线播放 | 运营只需要看现场；下载原文件即可。转码要引入 ffmpeg 或云转码，收益低 | 运营界面需要内嵌播放时 |
 | 4 | 控制台里的反馈提交入口与附件查看器 | v65 只做 agent/CLI；控制台入口是另一拨用户与另一套界面，一加就强制第 2 关界面设计与视觉验收；运营查看附件直接读私有 OSS。**2026-11-13 用户定**：入口放 TODO（见 [`TODO.md`](../../current/TODO.md) 的「控制台反馈入口与附件表单」）；查看器随运营工作台 | 反馈量起来、或需要非技术用户直接在网页提交时，单开一版；运营工作台开版时补查看器 |
@@ -92,10 +92,10 @@ v64 的反馈只收文本。用户要么用文字描述界面问题，要么把�
 
 ## 依赖与前置
 
-- **外部依赖**：生产环境已启用私有 OSS 桶（v64 归档已依赖）；不新增第三方服务。附件不做自动审核是产品负责人的明确决定，见 [ADR 0190](../../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md)。
+- **外部依赖**：生产环境已启用私有 OSS 桶（v64 归档已依赖）；不新增第三方服务。附件不做自动审核是产品负责人的明确决定，见 [ADR 0191](../../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md)。
 - **内部前提**：
   - v64 反馈链路已合入 `main`（PR #185）。
-  - 附件类型、上限、对象键与撤回口径由 [ADR 0190](../../decisions/0190-feedback-attachments-are-private-unmoderated-objects.md) 定；实现按该 ADR 与 [`technical-design.md`](technical-design.md) 走。
+  - 附件类型、上限、对象键与撤回口径由 [ADR 0191](../../decisions/0191-feedback-attachments-are-private-unmoderated-objects.md) 定；实现按该 ADR 与 [`technical-design.md`](technical-design.md) 走。
   - 隐私政策 1.2 → 1.3：官网 `skillmaster-site/src/legal/legalText.ts`、设计演示件 `design/src/home/legalText.ts`、服务端 `skillmaster.account.privacy-version` 三处同步；旧账号不强制重新同意，提交时按当次版本记录（与 v64 相同）。
   - 取图链路依赖宿主行为：Claude Code 本机版本会把贴图路径写进用户消息（未文档化的内部行为），`--last-paste` 不依赖它；WorkBuddy 的缓存与沙箱行为需真机验证，验证不过就退到「请用户拖文件」的兜底。
   - CLI 只发 beta（既有发布约定），本版不改变发布通道。
