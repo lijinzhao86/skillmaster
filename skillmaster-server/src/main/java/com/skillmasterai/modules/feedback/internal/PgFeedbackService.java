@@ -5,6 +5,8 @@ import com.skillmasterai.common.ShortCode;
 import com.skillmasterai.common.Ulid;
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.feedback.Feedback;
+import com.skillmasterai.modules.feedback.FeedbackAttachment;
+import com.skillmasterai.modules.feedback.FeedbackAttachmentDraft;
 import com.skillmasterai.modules.feedback.FeedbackSafety;
 import com.skillmasterai.modules.feedback.FeedbackService;
 import java.nio.charset.StandardCharsets;
@@ -52,9 +54,11 @@ public final class PgFeedbackService implements FeedbackService {
 
     @Override
     public Feedback create(String userId, String skillAddress, String content,
-            String consentVersion, Map<String, Object> diagnostics, String at) {
+            String consentVersion, Map<String, Object> diagnostics, String at,
+            List<FeedbackAttachmentDraft> attachments) {
         String stored = FeedbackSafety.redactSecrets(content);
         String sha = Sha256Hex.of(stored.getBytes(StandardCharsets.UTF_8));
+        List<FeedbackAttachmentDraft> drafts = attachments == null ? List.of() : attachments;
         for (int attempt = 0; attempt < RECEIPT_ATTEMPTS; attempt++) {
             Feedback feedback = new Feedback(
                     Ulid.generate(),
@@ -71,11 +75,28 @@ public final class PgFeedbackService implements FeedbackService {
                     null,
                     at);
             if (repository.insert(feedback) == 1) {
+                for (FeedbackAttachmentDraft draft : drafts) {
+                    repository.insertAttachment(new FeedbackAttachment(
+                            draft.id(),
+                            feedback.id(),
+                            draft.position(),
+                            draft.filename(),
+                            draft.mediaType(),
+                            draft.sizeBytes(),
+                            draft.sha256(),
+                            draft.objectKey(),
+                            at));
+                }
                 return feedback;
             }
             LOG.debug("feedback receipt collision, retrying");
         }
         throw new IllegalStateException("could not allocate a unique feedback receipt");
+    }
+
+    @Override
+    public List<FeedbackAttachment> attachmentsFor(String feedbackId) {
+        return repository.findAttachments(feedbackId);
     }
 
     @Override
@@ -90,6 +111,12 @@ public final class PgFeedbackService implements FeedbackService {
         Optional<Feedback> found = repository.lockByReceiptAndUser(receipt, userId);
         if (found.isEmpty()) {
             return false;
+        }
+        // **Every object first, then the row.** A failed delete throws, the transaction rolls back,
+        // the row stays and the keys are still known for the retry. Deleting an already-deleted key
+        // is idempotent, so a retry after a partial failure is safe.
+        for (FeedbackAttachment attachment : repository.findAttachments(found.get().id())) {
+            blobs.deleteObject(attachment.objectKey());
         }
         String archiveKey = found.get().archiveKey();
         if (archiveKey != null) {

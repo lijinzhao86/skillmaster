@@ -74,6 +74,11 @@ skmr skill read <地址> <相对路径> [--limit <行数>]
 
 1. 运行 `skmr feedback template` 拿模板；
 2. 写一份反馈文档，**先把完整内容给用户看并得到同意**；不要写密钥、密码、私有代码、他人的个人信息或对话全文；
-3. 运行 `skmr feedback send --file <文件> --consent`，把回执号告诉用户。
+3. 用户贴了图片或视频时，把附件一起带上——**不要让用户手敲 CLI**：
+   - 消息里已有文件路径（如 `[Image: source: …]`，或拖进来的文件带出的路径）→ `skmr feedback attach --copy <路径>`；
+   - 没有路径 → `skmr feedback attach --last-paste`（先找当前会话的粘贴缓存，再读 macOS 剪贴板）；
+   - 还取不到 → 请用户把文件拖进对话（终端会带出路径），或另存为文件后告诉你路径。
+   拿到路径后，图片用 `Read` 看一眼，确认是用户说的那张；视频按文件名和预览让用户确认（`Read` 不能渲染视频）；
+4. 运行 `skmr feedback send --file <文件> [--attach <附件路径>] --consent`，把回执号告诉用户。
 
-不带 `--consent` 只预览、不发送。用户要撤回时运行 `skmr feedback delete <回执> --yes`。
+不带 `--consent` 只预览、不发送；预览会把附件清单给用户看、等用户确认后再加 `--consent`。图片或视频不会被自动扫描，画面里的密钥、个人信息与他人隐私要由用户自己确认；图片或视频还可能含位置等元数据。用户要撤回时运行 `skmr feedback delete <回执> --yes`。

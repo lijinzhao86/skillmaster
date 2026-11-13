@@ -1,4 +1,4 @@
-<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；skillmaster-server/src/main/java/com/skillmasterai/common/SkillFieldLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/feedback/FeedbackSafety.java；skillmaster-server/src/main/java/com/skillmasterai/usecase/SubmitFeedbackUseCase.java；重新生成：python3 scripts/docs/generate.py -->
+<!-- 生成物，勿手改。源：skillmaster-server/src/main/java/com/skillmasterai/modules/ingest/IngestLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/blob/BlobSettings.java；skillmaster-server/src/main/java/com/skillmasterai/common/SkillFieldLimits.java；skillmaster-server/src/main/java/com/skillmasterai/modules/feedback/FeedbackSafety.java；skillmaster-server/src/main/java/com/skillmasterai/modules/feedback/FeedbackAttachmentSafety.java；skillmaster-server/src/main/java/com/skillmasterai/usecase/SubmitFeedbackUseCase.java；重新生成：python3 scripts/docs/generate.py -->
 
 # 上限（生成）
 
@@ -40,3 +40,14 @@
 |---|---|---|
 | `FeedbackSafety.MAX_CODE_POINTS` | `20_000` | 20000 码点 |
 | `SubmitFeedbackUseCase.MAX_PER_HOUR` | `10` | 10 条/小时 |
+
+## 反馈附件的上限
+
+`skmr feedback send --attach` 的四个上限。CLI 保留同值常量用于发送前失败，服务端仍是闸；数值改动是改对外契约，按大版本走（ADR 0191）。
+
+| 常量 | 原始表达式 | 值 |
+|---|---|---|
+| `FeedbackAttachmentSafety.MAX_ATTACHMENTS` | `5` | 5 个/条 |
+| `FeedbackAttachmentSafety.MAX_IMAGE_BYTES` | `10L * 1024 * 1024` | 10485760 字节（10 MiB） |
+| `FeedbackAttachmentSafety.MAX_VIDEO_BYTES` | `50L * 1024 * 1024` | 52428800 字节（50 MiB） |
+| `FeedbackAttachmentSafety.MAX_TOTAL_BYTES` | `100L * 1024 * 1024` | 104857600 字节（100 MiB） |

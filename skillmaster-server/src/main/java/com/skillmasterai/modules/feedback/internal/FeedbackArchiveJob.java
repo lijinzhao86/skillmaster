@@ -3,6 +3,7 @@ package com.skillmasterai.modules.feedback.internal;
 import com.skillmasterai.common.Timestamps;
 import com.skillmasterai.modules.blob.BlobStore;
 import com.skillmasterai.modules.feedback.Feedback;
+import com.skillmasterai.modules.feedback.FeedbackAttachment;
 import com.skillmasterai.modules.feedback.FeedbackService;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -121,7 +122,8 @@ public final class FeedbackArchiveJob {
             try (GZIPOutputStream gzip = new GZIPOutputStream(Files.newOutputStream(file));
                     BufferedWriter writer = new BufferedWriter(
                             new OutputStreamWriter(gzip, StandardCharsets.UTF_8))) {
-                writer.write(json.writeValueAsString(document(row)));
+                writer.write(json.writeValueAsString(
+                        document(row, feedback.attachmentsFor(row.id()))));
                 writer.newLine();
             }
             String key = PgFeedbackService.archiveKey(row);
@@ -203,7 +205,7 @@ public final class FeedbackArchiveJob {
         }
     }
 
-    private Map<String, Object> document(Feedback row) {
+    private Map<String, Object> document(Feedback row, List<FeedbackAttachment> attachments) {
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("id", row.id());
         document.put("receipt", row.receipt());
@@ -215,6 +217,19 @@ public final class FeedbackArchiveJob {
         document.put("consent_at", row.consentAt());
         document.put("source", row.source());
         document.put("diagnostics", row.diagnostics());
+        // **Metadata only.** The bytes are already in the private bucket under `object_key`; this
+        // copy exists so an operator can see what was attached without the database. Copying the
+        // bytes here would double the storage and make a withdrawal rewrite two objects.
+        document.put("attachments", attachments.stream().map(attachment -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("position", attachment.position());
+            item.put("filename", attachment.filename());
+            item.put("media_type", attachment.mediaType());
+            item.put("size_bytes", attachment.sizeBytes());
+            item.put("sha256", attachment.sha256());
+            item.put("object_key", attachment.objectKey());
+            return item;
+        }).toList());
         document.put("created_at", row.createdAt());
         return document;
     }

@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 190 条。
+共 191 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -198,3 +198,4 @@
 | [0188](0188-feedback-consent-lives-on-the-agent-channel.md) | 反馈的同意在 agent 通道里记录，不放到浏览器 | 已采纳 | 2026-11-13 |
 | [0189](0189-feedback-is-kept-indefinitely-with-an-object-copy.md) | 反馈长期保留，另存一份对象存储 | 已采纳 | 2026-11-13 |
 | [0190](0190-the-site-origin-is-an-explicit-list.md) | 首页入口保留 home，CORS 来源是一个显式列表 | 已采纳 | 2026-11-13 |
+| [0191](0191-feedback-attachments-are-private-unmoderated-objects.md) | 反馈附件是私有、不自动审核的命名对象 | 已采纳 | 2026-11-13 |

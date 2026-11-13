@@ -259,6 +259,11 @@ class ApiExceptionHandler {
                     -> org.springframework.http.HttpStatus.NOT_FOUND;
             case com.skillmasterai.common.ErrorCode.FEEDBACK_THROTTLED
                     -> org.springframework.http.HttpStatus.TOO_MANY_REQUESTS;
+            /* v65: object storage is not a validation failure. The document's text is fine and the
+               caller's next step is to retry later, which is what 503 says; 400 would tell the CLI
+               to change a request that has nothing wrong with it. */
+            case com.skillmasterai.common.ErrorCode.FEEDBACK_ATTACHMENT_UNAVAILABLE
+                    -> org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE;
             default -> org.springframework.http.HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status)

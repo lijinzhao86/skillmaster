@@ -54,6 +54,15 @@ var codes = []Code{
 	{Name: "feedback_throttled", Text: "一小时内的反馈条数用完了", Exit: 1},
 	{Name: "feedback_consent_stale", Text: "同意说明已更新", Exit: 1},
 	{Name: "feedback_not_found", Text: "没有这条反馈，或它不属于你", Exit: 1},
+	// v65: the attachment rules. The CLI catches most of these before the request; these names
+	// are what a server refusal still maps to when the two copies of a limit disagree.
+	{Name: "feedback_attachment_too_many", Text: "附件数量超过上限", Exit: 1},
+	{Name: "feedback_attachment_too_large", Text: "附件超过单文件大小上限", Exit: 1},
+	{Name: "feedback_attachment_total_too_large", Text: "附件合计超过大小上限", Exit: 1},
+	{Name: "feedback_attachment_type", Text: "附件类型不在允许范围", Exit: 1},
+	{Name: "feedback_attachment_empty", Text: "附件是空文件", Exit: 1},
+	{Name: "feedback_attachment_unreadable", Text: "附件读不出来", Exit: 1},
+	{Name: "feedback_attachment_unavailable", Text: "附件存储不可用", Exit: 1},
 	{Name: "note_is_frozen", Text: "这一版的说明不能再改", Exit: 1},
 	{Name: "release_type_is_frozen", Text: "这一版的类型不能再改", Exit: 1},
 	{Name: "content_already_exists", Text: "同样的内容已经有一版了", Exit: 1},
