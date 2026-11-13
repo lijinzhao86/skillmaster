@@ -10,7 +10,7 @@
 | A1 `home` 返回与同一构建一致的首页 | P0 | T1、T2 | 通过 |
 | A2 证书覆盖 `home` 且能续期 | P0 | T3 | 通过 |
 | A3 控制台三处链接与裸域 301 指向 `home` | P1 | T4、T7 | 通过 |
-| A4 `home` 与 `www` 都显示登录态 | P1 | T5、T6 | T5 通过；T6 待人工确认 |
+| A4 `home` 与 `www` 都显示登录态 | P1 | T5、T6 | 通过 |
 | A5 `www` 可访问、内容不变、不被任何页面链接 | P1 | T7 | 通过 |
 | A6 巡检与探针在各期都有效 | P0 / P1 | T8、T9 | 通过 |
 | A7 隐私政策 `1.2` 且页面与服务端同版 | P0 | T10 | 通过 |
@@ -113,7 +113,7 @@
 | T3 | P0 | 通过 | 主证书 SAN 含 `DNS:home.skillmasterai.com`；`certbot renew --dry-run` → all simulated renewals succeeded |
 | T4 | P1 | 通过 | 控制台 Deploy run `43339631705` success；线上 bundle `/assets/index-DQSMbZyT.js` 里 `home.skillmasterai.com` 1 处（三处链接共用同一个 `VITE_SITE_URL` 常量）、`www.skillmasterai.com` 0 处 |
 | T5 | P1 | 通过 | 服务端第二次 Deploy run `43339425075` success；预检 `www` 与 `home` 都返回各自的 `access-control-allow-origin` 与 credentials，`example.com` 无放行头 |
-| T6 | P1 | 未执行 | 需要带真实会话的浏览器分别打开两个宿主；CORS 与 cookie 的机制由 T5 与 `SiteSessionIT` 覆盖，这一条只证明浏览器里看到的样子 |
+| T6 | P1 | 通过 | 2026-11-13 所有者用真实账号在浏览器分别打开 `home` 与 `www`，两处导航都显示「进入控制台」+ 账号 |
 | T7 | P1 | 通过 | `home` 与 `www` 的 `/index.html` 都与 `/srv/skillmaster/site/index.html` 逐字节相同；控制台与站点 bundle 里 `www` 计数都是 0；`https://skillmasterai.com/privacy?x=1` 301 到 `https://home.skillmasterai.com/privacy?x=1` |
 | T8 | P0/P1 | 通过 | P0：Ops check run `43282973137`。P1：Ops check run `43339908770` success |
 | T9 | P0/P1 | 通过 | P0：Site Deploy run `43282740310`。P1：Site Deploy run `43339767085` success；探针按内容比对通过，未触发回滚 |
