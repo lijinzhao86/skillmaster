@@ -9,10 +9,10 @@
 |---|---|---|---|
 | A1 `home` 返回与同一构建一致的首页 | P0 | T1、T2 | 通过 |
 | A2 证书覆盖 `home` 且能续期 | P0 | T3 | 通过 |
-| A3 控制台三处链接与裸域 301 指向 `home` | P1 | T4、T7 | 未执行 |
-| A4 `home` 与 `www` 都显示登录态 | P1 | T5、T6 | 未执行 |
-| A5 `www` 可访问、内容不变、不被任何页面链接 | P1 | T7 | 未执行 |
-| A6 巡检与探针在各期都有效 | P0 / P1 | T8、T9 | P0 通过；P1 待执行 |
+| A3 控制台三处链接与裸域 301 指向 `home` | P1 | T4、T7 | 通过 |
+| A4 `home` 与 `www` 都显示登录态 | P1 | T5、T6 | T5 通过；T6 待人工确认 |
+| A5 `www` 可访问、内容不变、不被任何页面链接 | P1 | T7 | 通过 |
+| A6 巡检与探针在各期都有效 | P0 / P1 | T8、T9 | 通过 |
 | A7 隐私政策 `1.2` 且页面与服务端同版 | P0 | T10 | 通过 |
 
 ## 用例
@@ -111,13 +111,15 @@
 | T1 | P0 | 通过 | `dig +short home.skillmasterai.com` → `47.117.36.14` |
 | T2 | P0 | 通过 | 主机上从 `home` 与 `www` 各取 `/index.html`，均与 `/srv/skillmaster/site/index.html` 逐字节相同（`cmp` 无输出） |
 | T3 | P0 | 通过 | 主证书 SAN 含 `DNS:home.skillmasterai.com`；`certbot renew --dry-run` → all simulated renewals succeeded |
-| T4 | P1 | 未执行 | — |
-| T5 | P1 | 未执行 | — |
-| T6 | P1 | 未执行 | — |
-| T7 | P1 | 未执行 | — |
-| T8 | P0/P1 | P0 通过 | Ops check run `43282973137` success：五个名字解析、主证书 SAN、配置哈希与证书天数 |
-| T9 | P0/P1 | P0 通过 | Site Deploy run `43282740310` success；探针按内容比对通过，未触发回滚 |
+| T4 | P1 | 通过 | 控制台 Deploy run `43339631705` success；线上 bundle `/assets/index-DQSMbZyT.js` 里 `home.skillmasterai.com` 1 处（三处链接共用同一个 `VITE_SITE_URL` 常量）、`www.skillmasterai.com` 0 处 |
+| T5 | P1 | 通过 | 服务端第二次 Deploy run `43339425075` success；预检 `www` 与 `home` 都返回各自的 `access-control-allow-origin` 与 credentials，`example.com` 无放行头 |
+| T6 | P1 | 未执行 | 需要带真实会话的浏览器分别打开两个宿主；CORS 与 cookie 的机制由 T5 与 `SiteSessionIT` 覆盖，这一条只证明浏览器里看到的样子 |
+| T7 | P1 | 通过 | `home` 与 `www` 的 `/index.html` 都与 `/srv/skillmaster/site/index.html` 逐字节相同；控制台与站点 bundle 里 `www` 计数都是 0；`https://skillmasterai.com/privacy?x=1` 301 到 `https://home.skillmasterai.com/privacy?x=1` |
+| T8 | P0/P1 | 通过 | P0：Ops check run `43282973137`。P1：Ops check run `43339908770` success |
+| T9 | P0/P1 | 通过 | P0：Site Deploy run `43282740310`。P1：Site Deploy run `43339767085` success；探针按内容比对通过，未触发回滚 |
 | T10 | P0 | 通过 | 站点构建含「各子域与」与「版本 1.2」；部署 jar 的 `application.yml` `privacy-version` 为 `1.2`；主机 `server.env` 不含 `SKILLMASTER_PRIVACY_VERSION`，运行值即 jar 默认值；设计件按源重出、`home-check` 全绿 |
+
+**P1 的落地顺序（2026-11-13）**：服务端单值 Deploy `43339115487` → 变量改成两个值 → 服务端 Deploy `43339425075` → 控制台 Deploy `43339631705` → 主机换 nginx 配置并 `reload` → 站点 Deploy `43339767085` → Ops check `43339908770`；云监控新增第四条探测 `skm_home`。
 
 第一次 Site Deploy（run `43281709582`）在主机侧 P0 之前被触发：`home` 还没有解析、证书也没有它的 SAN，探针按设计失败并回滚到上一版。补齐 DNS、证书与 nginx 之后重发成功；这次先后顺序反过来是操作问题，不是代码问题，运行手册已写明顺序。
 
