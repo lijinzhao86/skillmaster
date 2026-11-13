@@ -569,6 +569,48 @@
       "argv": ["feedback", "delete", "FB-20260101-AAAAAA", "--yes", "--json"],
       "status": 404,
       "body": "{\"error\": {\"code\": \"feedback_not_found\", \"message\": \"missing\"}}"
+    },
+    {
+      "code": "feedback_attachment_too_many",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_too_many\", \"message\": \"too many\"}}"
+    },
+    {
+      "code": "feedback_attachment_too_large",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_too_large\", \"message\": \"too large\"}}"
+    },
+    {
+      "code": "feedback_attachment_total_too_large",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_total_too_large\", \"message\": \"total too large\"}}"
+    },
+    {
+      "code": "feedback_attachment_type",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_type\", \"message\": \"bad type\"}}"
+    },
+    {
+      "code": "feedback_attachment_empty",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_empty\", \"message\": \"empty\"}}"
+    },
+    {
+      "code": "feedback_attachment_unreadable",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 400,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_unreadable\", \"message\": \"unreadable\"}}"
+    },
+    {
+      "code": "feedback_attachment_unavailable",
+      "argv": ["feedback", "send", "--file", "testdata/feedback.md", "--attach", "testdata/attachment.png", "--consent", "--json"],
+      "status": 503,
+      "body": "{\"error\": {\"code\": \"feedback_attachment_unavailable\", \"message\": \"storage down\"}}"
     }
   ]
 }

@@ -58,6 +58,7 @@
 | `my_skill_when_to_use` | M12 |
 | `my_skill_when_to_use_embedding` | M13 |
 | `user_feedback` | M18 |
+| `feedback_attachment` | M18 |
 
 ## `app_user`
 
@@ -583,4 +584,16 @@
 - `diagnostics` — JSONB
 - `archive_key` — TEXT
 - `archived_at` — TEXT
+- `created_at` — TEXT NOT NULL
+
+## `feedback_attachment`
+
+- `id` — TEXT PRIMARY KEY
+- `feedback_id` — TEXT NOT NULL REFERENCES user_feedback(id) ON DELETE CASCADE
+- `position` — INTEGER NOT NULL
+- `filename` — TEXT NOT NULL
+- `media_type` — TEXT NOT NULL
+- `size_bytes` — BIGINT NOT NULL
+- `sha256` — TEXT NOT NULL
+- `object_key` — TEXT NOT NULL UNIQUE
 - `created_at` — TEXT NOT NULL

@@ -17,8 +17,8 @@ import (
 // `ls` / `find` / `stat` / `head` / `tail` — 65 − 4 + 4 = 65. v39 added `put` and `get`: 67 + 2.
 // v52 adds the eight `secret` verbs (sharing is console-only, so no share/unshare): 79 + 8.
 // v54 adds `skill copy`: 90 + 1. v58 adds the `usage` verbs; v59 adds
-// `skill my-when-to-use` and its two verbs.
-const wantCommandPaths = 97
+// `skill my-when-to-use` and its two verbs. v65 adds `feedback attach`: 97 + 1.
+const wantCommandPaths = 98
 
 // relativeTimeWords are the phrases a help text must not use: they describe the product's state at
 // the moment somebody wrote it, and they go stale without anyone editing the text.

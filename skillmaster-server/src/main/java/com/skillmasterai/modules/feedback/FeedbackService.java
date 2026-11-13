@@ -18,8 +18,24 @@ public interface FeedbackService {
      * Stores the document with secret-bearing prefixes replaced. The server computes both the
      * digest and the consent version; neither comes from the client.
      */
+    default Feedback create(String userId, String skillAddress, String content, String consentVersion,
+            Map<String, Object> diagnostics, String at) {
+        return create(userId, skillAddress, content, consentVersion, diagnostics, at, List.of());
+    }
+
+    /**
+     * Stores the document and its already-validated attachments in one call.
+     *
+     * <p>The caller has uploaded the bytes and computed their digests before this runs; this method
+     * only writes rows. It must be called inside the transaction that also carries the notification
+     * and the audit event, so a failed attachment insert cannot leave a feedback row that claims
+     * attachments it does not have.
+     */
     Feedback create(String userId, String skillAddress, String content, String consentVersion,
-            Map<String, Object> diagnostics, String at);
+            Map<String, Object> diagnostics, String at, List<FeedbackAttachmentDraft> attachments);
+
+    /** The attachments of one feedback, in submission order. */
+    List<FeedbackAttachment> attachmentsFor(String feedbackId);
 
     Optional<Feedback> findByReceiptForUser(String receipt, String userId);
 

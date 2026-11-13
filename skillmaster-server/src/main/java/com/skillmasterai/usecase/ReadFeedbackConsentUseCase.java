@@ -17,7 +17,8 @@ public class ReadFeedbackConsentUseCase {
     public static final String NOTICE = """
             提交反馈表示你已阅读并同意《隐私政策》中「你主动提交的反馈」一节。
             将发送：你写下的完整文档、你的账号标识、提交时间；关联 skill 与诊断字段只在显式要求时附带。
-            你可以随时运行 skmr feedback delete <回执> --yes 撤回并删除。""";
+            如果你加了附件，将一并发送附件文件、文件名、类型、大小与摘要；图片或视频不会被自动扫描。
+            你可以随时运行 skmr feedback delete <回执> --yes 撤回并删除（附件一并删除）。""";
 
     private final LegalTextVersions legal;
 
