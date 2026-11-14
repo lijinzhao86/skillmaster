@@ -35,10 +35,21 @@ main 的分支保护在仓库设置里，不在这个文件里。要配的检查
 ## 部署做了什么
 
 `Deploy` **不构建**。`release: new` 时，它先用 Actions API 找到同一 commit 的 push run，确认其中的 `Build` 结论是
-`success`；没有就失败，**在碰服务器之前**。然后下载 `Build` 上传的 jar（`actions/download-artifact`，
-跨 run 下载并校验 digest）→ 渲染 `/etc/skillmaster/server.env`（仓库的 vars/secrets，唯一来源）→
-`rsync`（`--partial`，一次 attempt 超时后从断点续传）到 `/opt/skillmaster/releases/<sha>/app.jar` → 切 `/opt/skillmaster/current` → `systemctl restart
-skillmaster` → **等 `/actuator/health` 回答**；不回答就切回上一个 release → 修剪旧 release。
+`success`；没有就失败，**在碰服务器之前**。然后：
+
+1. `Check the dispatch inputs` 步：`release` 格式与 `confirm_rollback` 在这里检查——**在被拒绝之前
+   不动主机**；
+2. 渲染 `/etc/skillmaster/server.env`（仓库的 vars/secrets，唯一来源）；
+3. **`Gateway` 步**（在切 jar 之前）：`.github/scripts/install-gateway.sh` 把 `deploy/nginx/skillmaster.conf`
+   与 `deploy/nginx/nginx.service.d/restart.conf` 传上主机；内容不同才备份并替换，但**校验与 reload
+   每次都做**（上一次可能装上了却没生效）。`systemctl daemon-reload` / `nginx -t` / `reload` 任一步
+   失败都**还原已替换的文件并让这次部署失败**，此时线上仍是旧 release 在跑（ADR 0207）；
+3. `rsync`（`--partial`，一次 attempt 超时后从断点续传）到 `/opt/skillmaster/releases/<sha>/app.jar` → 切
+   `/opt/skillmaster/current` → `systemctl restart skillmaster` → **等 `/actuator/health` 回答**；不回答就切回
+   上一个 release → 修剪旧 release。
+
+**网关不再是手工一步。** 2026-11-14 之前 `deploy/nginx/` 靠人拷，v68 加了 `cli-device-sign-ins` 反代前缀却没上机，
+第一次 CLI 设备登录因此拿到 nginx 的 405。`ops-check.yml` 每天的比对保留，当兜底而不是唯一发现手段。
 
 探针通过前还会确认两件事：进程必须是重启后的新 PID；`/opt/skillmaster/current` 必须指向**这一次**的
 release（比较软链的原始目标，不做 `readlink -f`，否则 `/opt/skillmaster` 整体搬过家时每次部署都会误判）。
