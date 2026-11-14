@@ -199,6 +199,29 @@ public final class SkillMetadataService {
      * an {@code Access} snapshot. Re-reading after the write closes the window where a rollback
      * commits in between; empty means "no pointer", which is not the revoked row's id.
      */
+    /**
+     * One page of public skills for the operations service's label refresh (v72).
+     *
+     * <p>It is the discovery plane's predicate, not a new one, so a private, unpublished, offline
+     * or deleted skill cannot be labeled by this path either.
+     */
+    public java.util.List<PublicSkill> publicSkills(String cursor, int limit) {
+        return skills.publicPage(cursor, limit).stream()
+                .map(row -> new PublicSkill(row.id(), row.namespaceId(), row.name(),
+                        row.currentVersionId()))
+                .toList();
+    }
+
+    /**
+     * What the inner plane needs to address a skill and fetch its current version.
+     *
+     * <p>{@code namespaceId}, not a slug: resolving it is M4's, and M12's SQL must not name the
+     * namespace table. The caller filters official namespaces while it resolves.
+     */
+    public record PublicSkill(String skillId, String namespaceId, String name,
+            String currentVersionId) {
+    }
+
     public Optional<String> currentVersionId(String skillId) {
         return skills.currentVersionId(skillId);
     }

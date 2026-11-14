@@ -52,9 +52,11 @@ public final class LabelRepository {
     }
 
     /**
-     * One batch for a page of cards. The join to {@code skill} is the version rule: an agent claim
-     * is evidence about the version it evaluated, while only an operator's confirmed claim is a
-     * decision that outlives versions.
+     * One batch for a page of cards.
+     *
+     * <p><strong>No source or version filter any more.</strong> Since v72 the table only holds final
+     * values (ADR 0197); whatever reached it is displayable, and the vocabulary's state is the one
+     * remaining rule. The default values are still hidden here, because they exist for filtering.
      */
     public Map<String, List<LabelValue>> labelsOfSkills(Collection<String> skillIds) {
         if (skillIds == null || skillIds.isEmpty()) {
@@ -66,15 +68,7 @@ public final class LabelRepository {
                        d.group_key, d.filterable
                   FROM skill_label l
                   JOIN label_definition d ON d.id = l.definition_id
-                  JOIN skill s ON s.id = l.skill_id
                  WHERE l.skill_id = ANY(:ids)
-                   AND l.review_state IN ('auto', 'confirmed')
-                   -- v66 TD: an agent claim speaks for the version it evaluated; only an
-                   -- operator's **confirmed** decision outlives versions. `author` / `upstream`
-                   -- exist in the CHECK for later writers and are not displayable yet.
-                   AND l.source IN ('agent', 'operator')
-                   AND ((l.source = 'operator' AND l.review_state = 'confirmed')
-                        OR (l.source = 'agent' AND l.evaluated_version_id = s.current_version_id))
                    AND d.state IN ('enabled', 'stopped')
                    AND d.value NOT IN ('prompt-only', 'free')
                  ORDER BY l.skill_id,
@@ -93,7 +87,7 @@ public final class LabelRepository {
         return result;
     }
 
-    /** The same version rule as the labels, applied to the one outcome column. */
+    /** One visible sentence per skill; v72 removed the provenance columns, not the column. */
     public Map<String, String> outcomesOf(Collection<String> skillIds) {
         if (skillIds == null || skillIds.isEmpty()) {
             return Map.of();
@@ -103,14 +97,43 @@ public final class LabelRepository {
                 SELECT id, outcome FROM skill
                  WHERE id = ANY(:ids)
                    AND outcome IS NOT NULL
-                   AND (outcome_source = 'operator'
-                        OR outcome_evaluated_version_id = current_version_id)
                 """)
                 .param("ids", skillIds.toArray(String[]::new))
                 .query((rs, rowNum) -> new String[]{rs.getString("id"), rs.getString("outcome")})
                 .list()
                 .forEach(row -> result.put(row[0], row[1]));
         return result;
+    }
+
+    /** The dimension a definition belongs to, for the write seam's validation. */
+    public Optional<String> dimensionOf(String definitionId) {
+        return jdbc.sql("SELECT dimension_key FROM label_definition WHERE id = :id")
+                .param("id", definitionId)
+                .query(String.class)
+                .optional();
+    }
+
+    /**
+     * Replaces a skill's whole label set. The caller has already validated every id.
+     *
+     * <p><strong>Delete then insert, not a diff.</strong> The endpoint's contract is "this is the
+     * set"; a value that stopped matching must disappear, and making the server compute which rows
+     * changed would be a second implementation of the rules.
+     */
+    public void replace(String skillId, List<String> definitionIds) {
+        jdbc.sql("DELETE FROM skill_label WHERE skill_id = :skillId")
+                .param("skillId", skillId)
+                .update();
+        for (String definitionId : definitionIds) {
+            jdbc.sql("""
+                    INSERT INTO skill_label (skill_id, definition_id)
+                    VALUES (:skillId, :definitionId)
+                    ON CONFLICT DO NOTHING
+                    """)
+                    .param("skillId", skillId)
+                    .param("definitionId", definitionId)
+                    .update();
+        }
     }
 
     private record LabelRow(String skillId, LabelValue value) {

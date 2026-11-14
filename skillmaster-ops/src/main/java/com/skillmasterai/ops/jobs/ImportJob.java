@@ -17,8 +17,10 @@ import com.skillmasterai.ops.imports.SyncEntry;
 import com.skillmasterai.ops.imports.SyncEntryResult;
 import com.skillmasterai.ops.imports.SyncExpansion;
 import com.skillmasterai.ops.imports.SyncSources;
+import com.skillmasterai.ops.ports.LabelSource;
 import com.skillmasterai.ops.ports.RunStore;
 import com.skillmasterai.ops.ports.SubmissionPort;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -52,11 +54,13 @@ public class ImportJob {
     private final SubmissionPort submissions;
     private final RunStore runs;
     private final RunLock locks;
+    private final LabelRunner labels;
     private final int concurrency;
+    private final String officialNamespace;
 
     public ImportJob(SyncSources sources, ContentSourceRegistry registry, SecurityScanner scanner,
             LicenseGate licenses, SubmissionPort submissions, RunStore runs, RunLock locks,
-            com.skillmasterai.ops.config.OpsProperties properties) {
+            LabelRunner labels, com.skillmasterai.ops.config.OpsProperties properties) {
         this.sources = sources;
         this.registry = registry;
         this.scanner = scanner;
@@ -64,7 +68,9 @@ public class ImportJob {
         this.submissions = submissions;
         this.runs = runs;
         this.locks = locks;
+        this.labels = labels;
         this.concurrency = Math.max(1, properties.concurrency());
+        this.officialNamespace = properties.officialNamespace();
     }
 
     /**
@@ -167,6 +173,7 @@ public class ImportJob {
             SubmissionPort.Result result = submissions.submit(new SubmissionPort.Submission(
                     entry, ready.binding(), ready.revision(), ready.platformName(), ready.files(),
                     ready.license(), ready.signals()));
+            label(run, ready, result);
             String outcome = result.replayed() ? "replayed" : "created";
             record(run, entry, ready.binding(), ready.revision(), ready.platformName(),
                     result.skillId(), result.draftId(), outcome, null);
@@ -249,6 +256,26 @@ public class ImportJob {
     private static String declaredLicense(SkillDocument.Document document) {
         Object value = document.frontmatter().get("license");
         return value == null ? "" : String.valueOf(value);
+    }
+
+    /**
+     * Label the version that was just submitted. Deliberately after the submission succeeded and
+     * outside its failure: a label push that fails does not take the draft with it, and the entry
+     * row says {@code push_failed} so the next run tries again.
+     */
+    private void label(RunStore.Run run, Ready ready, SubmissionPort.Result result) {
+        try {
+            byte[] markdown = skillMd(ready.files());
+            List<LabelSource.FileFact> manifest = ready.files().stream()
+                    .map(file -> new LabelSource.FileFact(file.relpath(), file.content().length,
+                            false))
+                    .toList();
+            labels.evaluate(run.id(), "import", new LabelRunner.Target(result.skillId(),
+                    officialNamespace, ready.platformName(), result.draftId()),
+                    new String(markdown, StandardCharsets.UTF_8), manifest, true);
+        } catch (RuntimeException failure) {
+            LOG.warn("labeling {} failed after submit", ready.platformName(), failure);
+        }
     }
 
     private void record(RunStore.Run run, SyncEntry entry, SourceBinding binding, String revision,
