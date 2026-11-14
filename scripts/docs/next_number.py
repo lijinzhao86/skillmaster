@@ -97,7 +97,9 @@ class Numbers:
             match = ADR_FILE.match(parts[2])
             if match:
                 self.adrs.add(int(match.group(1)))
-        elif len(parts) == len(MIGRATIONS.parts) + 1 and path.startswith(str(MIGRATIONS) + "/"):
+        elif len(parts) == len(MIGRATIONS.parts) + 1 and path.startswith(
+            str(MIGRATIONS) + "/"
+        ):
             match = MIGRATION_FILE.match(parts[-1])
             if match:
                 self.migrations.add(int(match.group(1)))
@@ -144,7 +146,14 @@ def main() -> int:
     base = Numbers()
     for ref in refs:
         for path in git(
-            "ls-tree", "-r", "--name-only", ref, "--", "docs/versions", "docs/decisions", str(MIGRATIONS)
+            "ls-tree",
+            "-r",
+            "--name-only",
+            ref,
+            "--",
+            "docs/versions",
+            "docs/decisions",
+            str(MIGRATIONS),
         ).splitlines():
             base.add(path)
     floors = (
@@ -178,18 +187,32 @@ def main() -> int:
     ref_names = [
         line
         for line in git(
-            "for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin"
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/heads",
+            "refs/remotes/origin",
         ).splitlines()
         if line
     ]
     for name in ref_names:
         match = BRANCH_VERSION.search(name)
         if match:
-            claim("versions", int(match.group(1)), f"分支名 {name}" + (" ← 本次" if name == here else ""))
+            claim(
+                "versions",
+                int(match.group(1)),
+                f"分支名 {name}" + (" ← 本次" if name == here else ""),
+            )
         if name in checked_out:
             continue  # the worktree listing above already read this branch's files
         for path in git(
-            "ls-tree", "-r", "--name-only", name, "--", "docs/versions", "docs/decisions", str(MIGRATIONS)
+            "ls-tree",
+            "-r",
+            "--name-only",
+            name,
+            "--",
+            "docs/versions",
+            "docs/decisions",
+            str(MIGRATIONS),
         ).splitlines():
             parts = path.split("/")
             if len(parts) >= 3 and parts[:2] == ["docs", "versions"]:
@@ -200,7 +223,9 @@ def main() -> int:
                 found_adr = ADR_FILE.match(parts[2])
                 if found_adr:
                     claim("adrs", int(found_adr.group(1)), f"分支 {name}")
-            elif len(parts) == len(MIGRATIONS.parts) + 1 and path.startswith(str(MIGRATIONS) + "/"):
+            elif len(parts) == len(MIGRATIONS.parts) + 1 and path.startswith(
+                str(MIGRATIONS) + "/"
+            ):
                 found_migration = MIGRATION_FILE.match(parts[-1])
                 if found_migration:
                     claim("migrations", int(found_migration.group(1)), f"分支 {name}")
