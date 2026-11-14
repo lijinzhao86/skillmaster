@@ -419,6 +419,41 @@ jobs:
 
           chmod 600 server.env
 
+      # **The dispatch's own preconditions come first.** The Gateway step below changes production
+      # nginx; a run this job would reject for a bad `release` or a missing `confirm_rollback`
+      # must not have touched the host on its way to being rejected.
+      - name: Check the dispatch inputs
+        env:
+          RELEASE: ${{ inputs.release }}
+          CONFIRM_ROLLBACK: ${{ inputs.confirm_rollback }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE" =~ ^(new|[0-9a-f]{40})$ ]]; then
+            echo "::error::release must be 'new' or a full 40-character commit sha" >&2
+            exit 1
+          fi
+          # **A named release is a rollback, and it must say so.** The same button deploys this
+          # ref's Build and points production back at an older commit; without this gate a
+          # mistyped sha (or a second dispatch sent to "fix" the first) silently replaces the
+          # running version.
+          if [ "$RELEASE" != "new" ] && [ "$CONFIRM_ROLLBACK" != "rollback" ]; then
+            echo "::error::release=$RELEASE points production back at an existing release; set confirm_rollback=rollback to confirm, or leave release=new to deploy this ref's Build" >&2
+            exit 1
+          fi
+
+      # **The gateway ships with the server.** nginx was the one piece of production
+      # configuration no workflow owned: it reached the host by hand and was re-checked only by
+      # `ops-check.yml`, once a day. v68 added a proxy prefix, the server shipped without it, and
+      # the first CLI device login got nginx's 405 (2026-11-14). The step runs **before** the
+      # release is switched, so a configuration that does not pass `nginx -t` stops the deploy
+      # while production is still intact.
+      - name: Gateway
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: bash .github/scripts/install-gateway.sh
+
       - name: Deploy
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
@@ -429,18 +464,9 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [[ ! "$RELEASE" =~ ^(new|[0-9a-f]{40})$ ]]; then
-            echo "::error::release must be 'new' or a full 40-character commit sha" >&2
-            exit 1
-          fi
-          # **A named release is a rollback, and it must say so.** The same button deploys this
-          # ref's Build and points production back at an older commit; without this gate a
-          # mistyped sha (or a second dispatch sent to "fix" the first) silently replaces the
-          # running version. Fails before anything reaches the host.
-          if [ "$RELEASE" != "new" ] && [ "$CONFIRM_ROLLBACK" != "rollback" ]; then
-            echo "::error::release=$RELEASE points production back at an existing release; set confirm_rollback=rollback to confirm, or leave release=new to deploy this ref's Build" >&2
-            exit 1
-          fi
+          # `RELEASE` and `CONFIRM_ROLLBACK` were validated by the step above, which runs before
+          # the gateway is touched — a dispatch this job would reject must not have changed
+          # production nginx on its way to being rejected.
           key="$RUNNER_TEMP/deploy_key"
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
