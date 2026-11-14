@@ -426,6 +426,19 @@
       "any": [
         "--copy"
       ]
+    },
+    {
+      "id": "use-search-label",
+      "group": "use",
+      "prompt": "想找需要 Python 的公开 skill，怎么按运行环境筛？",
+      "page": "use/search.md",
+      "must": [
+        "skmr skills search",
+        "--scope public"
+      ],
+      "any": [
+        "--label"
+      ]
     }
   ]
 }

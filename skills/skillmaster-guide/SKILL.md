@@ -30,7 +30,7 @@ when_to_use: 要用 skmr 操作 skill，或搞不清草稿与线上、可见性�
 
 | 你要做 | 读 |
 |---|---|
-| 按意思找，或列我的库 | [找与列](use/search.md) |
+| 按意思或属性找，列我的库 | [找与列](use/search.md) |
 | 读文件、加载 skill | [读一个 skill 里的文件](use/read-files.md) |
 | 看清值不值得用：许可、场景、版本 | [看清一个 skill 是什么](use/inspect.md) |
 | 跑它里面的脚本（`skmr run`） | [跑 skill 里的脚本](use/run.md) |

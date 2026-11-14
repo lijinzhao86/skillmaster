@@ -1,10 +1,10 @@
 # 描述、标签与分类：让别人找得到你
 
-> 三样东西分工不同：**`description` 决定 agent 用不用你**，**公开标签决定人搜不搜得到你**，**分类决定你在哪个抽屉里**。
+> 几样东西分工不同：**`description` 决定 agent 用不用你**，**公开标签决定人搜不搜得到你**，**分类决定你在哪个抽屉里**，**属性标签由平台自动标注**（你不用填，也改不了；标注能力当前还在上线中）。
 
 ## 一、description：写给 agent 看
 
-写在 `SKILL.md` 的 frontmatter 里。搜索和列表里只有名字和这一句；决定用之前还能读许可、环境与版本，正文要等它决定用了才读。
+写在 `SKILL.md` 的 frontmatter 里。搜索和列表里只有名字和这一句；决定用之前还能读许可、兼容性与版本，正文要等它决定用了才读。
 
 - **写「做什么 + 什么时候用」**：「处理 PDF：合并、拆分、提取文字。需要读或改 PDF 时使用」。
 - **不要写**「一个强大的工具」「效率利器」——这类词对「什么时候用」没有任何信息。
@@ -42,14 +42,21 @@ skmr skill tag remove <地址> <标签> --public
 
 ## 三、分类
 
-只能用官方词表里的词，先看：`skmr skills categories`。
+只能选一个，用官方词表里的词，先看：`skmr skills categories`。
 
 ```bash
 skmr skill category set <地址> <分类>
 skmr skill category clear <地址>
 ```
 
-## 四、管理我的标签
+## 四、属性标签（运行环境、定价）
+
+这一栏**不用你填，也改不了**：公开 skill 上线之后，属性由平台从依赖文件与 `SKILL.md` 的命令里自动标注；标注上线后，读者可以按它筛（如 `skmr skills search --label runtime:python`，见 [找与列](../use/search.md)）。
+
+- 自动标注当前**还在上线中**，多数 skill 暂时没有属性；标注功能上线后，依赖写进 `requirements.txt` / `package.json` / `pom.xml` / `Dockerfile`、命令写进正文，标注会更准。
+- 词表与完整语义：`skmr skills labels`。免费与纯提示词不显示成属性，但可以用来筛。
+
+## 五、管理我的标签
 
 ```bash
 skmr skills my-tags add      <名字> --describe "说明"
@@ -60,7 +67,7 @@ skmr skills my-tags delete   <名字>
 
 `delete` 会拒绝并指向控制台：删除定义会摘掉所有 skill 上的贴法，且不能恢复，只能在控制台做。
 
-## 五、标签页：集中管理
+## 六、标签页：集中管理
 
 https://console.skillmasterai.com/my-tags
 

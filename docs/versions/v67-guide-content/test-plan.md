@@ -1,4 +1,4 @@
-# v66-guide-content · 测试方案
+# v67-guide-content · 测试方案
 
 > **最后更新**：2026-11-14
 > **所属版本**：[`README.md`](README.md)
@@ -71,7 +71,7 @@
 
 - **前置**：`guide-eval.json` 已写。
 - **步骤**：`go test ./cmd/skillmaster -run 'TestGuideEvalTableIsValid|TestGuideEvalScoring' -count=1`
-- **期望**：43 题；每个 Guide 页面至少被覆盖一次；id 唯一且是 kebab-case；题面不泄露篇目或 `must`/`any` 词；每个 `must` 与 `any` 都出现在目标页，且每个 `any` 候选都不在索引里、至少一个 `must`/`any` 不在索引里；`must` 里的命令都已声明、且是叶子。
+- **期望**：44 题；每个 Guide 页面至少被覆盖一次；id 唯一且是 kebab-case；题面不泄露篇目或 `must`/`any` 词；每个 `must` 与 `any` 都出现在目标页，且每个 `any` 候选都不在索引里、至少一个 `must`/`any` 不在索引里；`must` 里的命令都已声明、且是叶子。
 - **判定**：退出码 0。
 
 ### T8 · 单篇行数
@@ -108,7 +108,7 @@
 
 - **环境怎么造**：本机 Go 1.26+；`claude` 在 PATH；网络可调模型。评测在 `t.TempDir()` 里跑，工作目录只有 `guide/`（由 `skills/skillmaster-guide/` 复制），`--bare` 跳过 CLAUDE.md / hooks / skills / memory。
 - **数据**：
-  - 题表 `skillmaster-cli/testdata/guide-eval.json`，43 题，一题一句用户原话。
+  - 题表 `skillmaster-cli/testdata/guide-eval.json`，44 题，一题一句用户原话。
   - 模型 `deepseek-v4-flash`；每题最多读 4 个不同文件（重复读同一文件不另计；列目录不算文件，也不占额度）；每题 1 次；只允许 Read（`--restricted --tools Read`）。
   - **先读索引才算路由**：每题都要求先读 `guide/SKILL.md`；直接打开篇目算猜中，不计入路由。
   - 「首次读对」跳过 `SKILL.md`：每次都必须先读索引，索引本身不算一次尝试；列目录（读一个不以 `.md` 结尾的路径）也不算。
@@ -124,10 +124,10 @@
 | T2 | 通过 | `TestGuideIndexMentionsCapabilities` ok |
 | T3 | 通过 | `TestGuideCommandsAreDeclared` ok |
 | T4 | 通过 | 本地扫描 0 条断链；`check_docs.py` 退出 0 |
-| T5 | 通过 | `TestHelpBudgets` ok；索引 2996 字、102 行 |
-| T6 | 通过 | 43/43 路由 = 100%，43/43 作答 = 100%，43/43 通过 = 100%；首次读对 42/43（另一次 43/43；未命中的那次先读了 `ship/release.md` 再读目标页，路由仍成立）（模型 `deepseek-v4-flash`，1 次，读上限 4 个不同文件；`--restricted --tools Read` 下重跑） |
+| T5 | 通过 | `TestHelpBudgets` ok；索引 2998 字、102 行 |
+| T6 | 通过 | 44/44 路由 = 100%，44/44 作答 = 100%，44/44 通过 = 100%；首次读对 44/44（另一次 43/44；未命中的那次先读了 `ship/release.md` 再读目标页，路由仍成立）（模型 `deepseek-v4-flash`，1 次，读上限 4 个不同文件；`--restricted --tools Read` 下重跑） |
 | T7 | 通过 | `TestGuideEvalTableIsValid` / `TestGuideEvalScoring` ok |
-| T8 | 通过 | 42 个文件、1961 行；正文最长 97 行；`SKILL.md` 102 行（索引上限 150） |
+| T8 | 通过 | 42 个文件、1982 行；正文最长 97 行；`SKILL.md` 102 行（索引上限 150） |
 | T9 | 通过 | `go test ./...` 全绿；`impact.py --check` 退出 0；`generate.py --check` 无漂移；`check-file-size.mjs` 通过 |
 | T10 | 通过 | `scripts/guide-regression.sh` 六步全绿 |
 

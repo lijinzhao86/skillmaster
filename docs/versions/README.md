@@ -72,4 +72,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v64-feedback`](v64-feedback/README.md) | 进行中（已实现；服务端与 CLI 自动化测试通过，隐私页视觉验收（T8）与无凭据指引（T11）未执行）… |
 | [`v65-feedback-attachments`](v65-feedback-attachments/README.md) | 进行中（已实现；已执行的自动化测试全绿，T3 真实剪贴板、T4 三路都空、T12 路由清单、T13 视觉）… |
 | [`v66-skill-labels`](v66-skill-labels/README.md) | 进行中（**P0 已实现**：词表、读模型、筛选、CLI 与生产控制台；P1 抽取 / P2 抽样未交付） |
-| [`v66-guide-content`](v66-guide-content/README.md) | 进行中（实现与验证已完成；Guide 的线上版本待发布） |
+| [`v67-guide-content`](v67-guide-content/README.md) | 进行中（实现与验证已完成；Guide 的线上版本待发布） |

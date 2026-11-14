@@ -1,4 +1,4 @@
-# v66-guide-content · 产品需求
+# v67-guide-content · 产品需求
 
 > **最后更新**：2026-11-14
 > **所属版本**：[`README.md`](README.md)
@@ -32,9 +32,10 @@
 | 3 | 补 10 篇能力页：跑脚本、服务凭据、通知与邀请、使用记录、看清一个 skill、复制一份、开新草稿、环境自检、让 Agent 用上 CLI、注销账号 | 新增 Guide 页面 |
 | 4 | 重写索引：一行一个分支，补上 `draft create` / `skmr secret` / `skmr run` / `notifications` 四个入口；索引保持 ≤3000 字 | `SKILL.md` |
 | 5 | 把 `help-guide-known-issues.json` 基线清零；漂移检查只允许「不新增」 | CLI 测试数据 |
-| 6 | 新增 Guide 评测集：43 题「用户原话 → 期望篇目 + 必须出现的词」，配 harness 与有效性测试 | CLI 测试数据 + 测试 |
+| 6 | 新增 Guide 评测集：44 题「用户原话 → 期望篇目 + 必须出现的词」，配 harness 与有效性测试 | CLI 测试数据 + 测试 |
 | 7 | 记录实测口径与结果；Guide 线上发布后删 `docs/current/TODO.md` 的「guide 的教学落后 v44 后的 CLI」（发布前删掉会让线上仍旧版这件事失去跟踪） | 文档 |
-| 8 | 回归测试机：`scripts/guide-regression.sh` 一条命令跑结构、链接、文档、生成物与 43 题评测；`--fast` 跳过模型 | 脚本 |
+| 8 | 回归测试机：`scripts/guide-regression.sh` 一条命令跑结构、链接、文档、生成物与 44 题评测；`--fast` 跳过模型 | 脚本 |
+| 10 | 接管 v66-skill-labels 的 CLI 面：`skills labels`、`search --label`、结果行的属性、`skill show` 的预期结果与属性、13 个分类；加一道「按运行环境筛选」的评测题 | Guide 文本 + 测试数据 |
 | 9 | 接管 v65 合并进来的反馈页：按写作规范给开头答案与失败表指针，并加一道「带图片或视频」的评测题 | Guide 文本 + 测试数据 |
 
 ### 不做
@@ -47,7 +48,7 @@
 | 4 | 重做人向文档站与新人旅程 | 归 TODO「面向人的使用说明书」「新人旅程（人侧引导）」，位置与载体都未定 | 那两条开版时 |
 | 5 | 改控制台与官网 | 控制台不在 Agent 的 CLI 路径上；官网是另一套界面与文案 | 各自开版 |
 | 6 | 把账号注销做成 CLI 命令 | [ADR 0081](../../decisions/0081-every-console-operation-has-a-cli-command.md) 的高风险例外；[ADR 0175](../../decisions/0175-account-deletion-is-immediate-with-a-fixed-retention.md) 已记录：注销只在控制台，由人输入用户名与密码确认 | 不做 |
-| 7 | 把 Guide 评测接进 CI 默认路径 | 评测跑真实模型，43 题一次约 40 秒×并发，且模型会抖动；默认只在改帮助的 PR 上手动跑一次 | 评测稳定到可以当必过闸时；见 [技术设计](technical-design.md) §开放问题 |
+| 7 | 把 Guide 评测接进 CI 默认路径 | 评测跑真实模型，44 题一次约 40 秒×并发，且模型会抖动；默认只在改帮助的 PR 上手动跑一次 | 评测稳定到可以当必过闸时；见 [技术设计](technical-design.md) §开放问题 |
 
 ## 控制台操作与 CLI 对应
 
@@ -56,6 +57,8 @@
 | 页面 | Guide 里的对应 |
 |---|---|
 | `/discover` | `skmr skills search --scope public` / `skmr skill join` |
+| `/discover` 的分类与属性筛选 | `skmr skills search --category` / `--label`；词表用 `skmr skills categories` / `skmr skills labels` |
+| 信息页的「预期结果」与属性 | `skmr skill show` |
 | `/publish` | `skmr skills pending` / `skmr skills publish` |
 | `/notifications` | `skmr notifications list` 及其子命令 |
 | `/account/secrets` | `skmr secret` 系列 |
@@ -75,7 +78,7 @@
 | 3 | 每个 `skmr …` 命令路径与 flag 都在命令树里声明 | `TestGuideCommandsAreDeclared` 通过 |
 | 4 | 所有相对链接都能解析到文件 | 本地链接脚本输出 0 条断链 |
 | 5 | 索引 ≤3000 字、≤150 行；入口总预算 ≤5000 字 | `TestHelpBudgets` 通过 |
-| 6 | 43 题评测的路由、作答、通过各 ≥90% | `TestGuideEval` 在 `SKILLMASTER_GUIDE_EVAL=1` 下通过 |
+| 6 | 44 题评测的路由、作答、通过各 ≥90% | `TestGuideEval` 在 `SKILLMASTER_GUIDE_EVAL=1` 下通过 |
 | 7 | 每个 Guide 页面都至少被一道评测题覆盖 | `TestGuideEvalTableIsValid` 通过 |
 | 8 | 每篇正文 ≤100 行（索引除外） | 行数检查 |
 | 9 | CLI 全量测试与文档检查全绿；一键回归退出 0 | `go test ./...`、`check_docs.py`、`impact.py --check`、`scripts/guide-regression.sh` 退出 0 |
@@ -86,10 +89,10 @@
 
 | 指标 | 定义 | 怎么量 | 目标 |
 |---|---|---|---|
-| 路由准确率 | 评测中先读索引、再打开期望篇目的题数 ÷ 43 | `TestGuideEval` 输出的 `route_rate` | ≥90% |
-| 作答准确率 | 最终回答包含该题全部 `must` 词（`any` 至少一个）的题数 ÷ 43 | 同上 `answer_rate` | ≥90% |
-| 通过率 | 路由、作答、无违规同时成立的题数 ÷ 43 | `TestGuideEval` 输出的 `pass_rate` | ≥90% |
-| 首次读对率 | 跳过 `SKILL.md` 后，第一次读叶子页就落在期望篇目的题数 ÷ 43（诊断用，不作门槛） | 解析 stream 里的第一次叶子 Read | 记录，不设目标 |
+| 路由准确率 | 评测中先读索引、再打开期望篇目的题数 ÷ 44 | `TestGuideEval` 输出的 `route_rate` | ≥90% |
+| 作答准确率 | 最终回答包含该题全部 `must` 词（`any` 至少一个）的题数 ÷ 44 | 同上 `answer_rate` | ≥90% |
+| 通过率 | 路由、作答、无违规同时成立的题数 ÷ 44 | `TestGuideEval` 输出的 `pass_rate` | ≥90% |
+| 首次读对率 | 跳过 `SKILL.md` 后，第一次读叶子页就落在期望篇目的题数 ÷ 44（诊断用，不作门槛） | 解析 stream 里的第一次叶子 Read | 记录，不设目标 |
 | 评测口径 | 模型 `deepseek-v4-flash`；隔离目录只放 `guide/`；只允许 Read；每题最多读 4 个不同文件（重复读同一文件不另计）；每题 1 次；温度用模型默认 | [`test-plan.md`](test-plan.md) §环境与数据 | 换任何一项都必须重跑并重记 |
 
 ## 依赖与前置
