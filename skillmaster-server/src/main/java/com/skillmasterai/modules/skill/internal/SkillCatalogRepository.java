@@ -145,7 +145,8 @@ public final class SkillCatalogRepository {
     public List<SkillCatalogService.CatalogRow> page(List<String> namespaceFilterIds, String queryText,
             SkillCatalogService.RankingWeights weights, boolean byRelevance, boolean publicOnly,
             List<String> categoryKeys, List<String> publicTagKeys,
-            List<String> afterKey, int limit, Integer offset, Caller caller) {
+            List<String> labelDefinitionIds, List<String> afterKey, int limit, Integer offset,
+            Caller caller) {
 
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
         params.put("namespaceFilterIds", namespaceFilterIds.isEmpty() ? null
@@ -165,6 +166,7 @@ public final class SkillCatalogRepository {
         String textFilter = SqlFilters.text(queryText, params);
         String categoryFilter = SqlFilters.categories(categoryKeys, params);
         String publicTagFilter = SqlFilters.publicTags(publicTagKeys, params);
+        String labelFilter = SqlFilters.labels(labelDefinitionIds, params);
 
         String sql = SkillPredicates.IDENTIFIED + """
                 SELECT t.id, t.namespace_id, t.name, t.title, t.description, t.when_to_use,
@@ -215,6 +217,7 @@ public final class SkillCatalogRepository {
                       %s
                       %s
                       %s
+                      %s
                 ) t
                 WHERE :hasCursor = FALSE OR %s
                 ORDER BY %s
@@ -224,7 +227,7 @@ public final class SkillCatalogRepository {
                 RELEVANCE, SkillPredicates.STATE, SkillPredicates.PENDING_UNTIL,
                 SkillPredicates.ACTIVE,
                 SkillPredicates.DISCOVERABLE, SkillPredicates.VISIBLE, textFilter, categoryFilter,
-                publicTagFilter, keyset(byRelevance), order(byRelevance));
+                publicTagFilter, labelFilter, keyset(byRelevance), order(byRelevance));
 
         params.put("hasCursor", afterKey != null);
         params.put("limit", limit);
@@ -378,7 +381,8 @@ public final class SkillCatalogRepository {
             java.util.Map<String, Object> params) {
         return SqlFilters.categories(filters.categoryKeys(), params)
                 + SqlFilters.publicTags(filters.publicTagKeys(), params)
-                + SqlFilters.myTags(filters.myTagIds(), params);
+                + SqlFilters.myTags(filters.myTagIds(), params)
+                + SqlFilters.labels(filters.labelDefinitionIds(), params);
     }
 
     /**
@@ -389,7 +393,8 @@ public final class SkillCatalogRepository {
      * "is there more" — so this is only ever called by the console's read.
      */
     public long count(List<String> namespaceFilterIds, String queryText, boolean publicOnly,
-            List<String> categoryKeys, List<String> publicTagKeys, Caller caller) {
+            List<String> categoryKeys, List<String> publicTagKeys,
+            List<String> labelDefinitionIds, Caller caller) {
         java.util.Map<String, Object> params = new java.util.LinkedHashMap<>();
         params.put("namespaceFilterIds", namespaceFilterIds.isEmpty() ? null
                 : namespaceFilterIds.toArray(String[]::new));
@@ -406,9 +411,11 @@ public final class SkillCatalogRepository {
                   %s
                   %s
                   %s
+                  %s
                 """.formatted(SkillPredicates.DISCOVERABLE, SkillPredicates.VISIBLE,
                 SqlFilters.text(queryText, params), SqlFilters.categories(categoryKeys, params),
-                SqlFilters.publicTags(publicTagKeys, params));
+                SqlFilters.publicTags(publicTagKeys, params),
+                SqlFilters.labels(labelDefinitionIds, params));
         return jdbc.sql(sql).params(params).query(Long.class).single();
     }
 

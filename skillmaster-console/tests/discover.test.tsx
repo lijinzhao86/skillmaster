@@ -78,7 +78,7 @@ function card(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     version: '0.4.0',
     updated_at: '2026-09-21T09:00:00Z',
     deleted_at: null,
-    category: { key: 'doc', name: '文档与演示' },
+    category: { key: 'office-efficiency', name: '办公效率' },
     public_tags: [{ key: 'pdf', name: 'PDF' }],
     my_tags: [],
     ...overrides,
@@ -88,8 +88,8 @@ function card(overrides: Record<string, unknown> = {}): Record<string, unknown> 
 /** `GET /web/categories`: every page that draws a category picker reads it. */
 const CATEGORY_VOCABULARY = {
   categories: [
-    { key: 'doc', name: '文档与演示', state: 'enabled', public_total: 3 },
-    { key: 'ops', name: '运维与云', state: 'stopped', public_total: 0 },
+    { key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 3 },
+    { key: 'it-ops-security', name: 'IT 运维与安全', state: 'stopped', public_total: 0 },
   ],
 }
 
@@ -380,7 +380,7 @@ describe('searching', () => {
       '',
       () =>
         json(200, {
-          skills: [card({ category: { key: 'doc', name: '文档与演示' } })],
+          skills: [card({ category: { key: 'office-efficiency', name: '办公效率' } })],
           next_cursor: null,
         }),
     )
@@ -389,8 +389,84 @@ describe('searching', () => {
        browsing one shelf starts from a result. */
     expect(container.querySelector('.filter-select')).toBeNull()
     const chip = container.querySelector('.result-category')
-    expect(chip?.getAttribute('href')).toBe('/discover?tag=doc')
-    expect(text(chip)).toBe('文档与演示')
+    expect(chip?.getAttribute('href')).toBe('/discover?tag=office-efficiency')
+    expect(text(chip)).toBe('办公效率')
+  })
+
+  it('filters by attribute and says what was filtered, without a count', async () => {
+    /* v66: `label` is the second filter, repeated and ANDed, and the chip on a result row is the
+       way in. The head names the filter in words — the short names, not the wire keys — and 清除
+       is the way back. */
+    const { container, requests } = await showDiscover(
+      '?label=runtime%3Apython&label=pricing_type%3Apaid',
+      () =>
+        json(200, {
+          skills: [card({ labels: [] })],
+          p: 1,
+          page_size: 6,
+          total: 1,
+        }),
+    )
+
+    expect(requests[0]?.path).toBe(
+      '/web/discover?label=runtime%3Apython&label=pricing_type%3Apaid',
+    )
+    expect(text(container.querySelector('#discoverResultsTitle'))).toBe('筛选结果')
+    expect(text(container.querySelector('#discoverResultsNote'))).toBe(
+      'runtime:python · pricing_type:paid',
+    )
+    expect(container.querySelector('.count')).toBeNull()
+    const clear = container.querySelector('a.discover-clear')
+    expect(clear?.getAttribute('href')).toBe('/discover')
+    expect(text(clear)).toBe('清除')
+  })
+
+  it('draws attributes on the result row, three at a time', async () => {
+    const { container } = await showDiscover(
+      '?q=pdf',
+      () =>
+        json(200, {
+          skills: [
+            card({
+              labels: [
+                { key: 'runtime', value: 'python', label: 'Python', full: '需要 Python', group: 'language' },
+                { key: 'runtime', value: 'macos', label: 'macOS', full: '仅 macOS', group: 'os' },
+                { key: 'runtime', value: 'api-key', label: 'API key', full: '需要 API key', group: 'credential' },
+                { key: 'pricing_type', value: 'paid', label: '付费', full: '需要付费', group: 'pricing' },
+              ],
+            }),
+          ],
+        }),
+    )
+
+    const attrs = container.querySelectorAll('.result-attrs a.chip.is-blocker')
+    expect([...attrs].map((node) => text(node))).toEqual(['Python', 'macOS', 'API key'])
+    expect(attrs[0]?.getAttribute('href')).toBe('/discover?label=runtime%3Apython')
+    expect(attrs[0]?.getAttribute('data-group')).toBe('language')
+    // The fourth becomes +1, and the full list opens in the popover.
+    expect(text(container.querySelector('.result-attrs .result-more'))).toBe('+1')
+  })
+
+  it('draws a display-only attribute without a filter link', async () => {
+    /* `filterable: false` means the word shows but the server would refuse `?label=`. Drawing it
+       as an anchor would turn a display fact into a broken request. */
+    const { container } = await showDiscover(
+      '?q=pdf',
+      () =>
+        json(200, {
+          skills: [
+            card({
+              labels: [
+                { key: 'input_type', value: 'file', label: '文件', full: '需要提供文件', group: 'tool', filterable: false },
+              ],
+            }),
+          ],
+        }),
+    )
+
+    const chip = container.querySelector('.result-attrs .chip.is-blocker')
+    expect(text(chip)).toBe('文件')
+    expect(chip?.tagName).toBe('SPAN')
   })
 
   it('moves to the next page through p, six at a time', async () => {
@@ -401,9 +477,13 @@ describe('searching', () => {
     )
 
     expect(requests[0]?.path).toBe('/web/discover?q=pdf')
-    // The total is the server's: the header count and the numbered pager both read it.
-    expect(text(container.querySelector('.count'))).toBe('8 个结果')
-    expect(text(container.querySelector('.pager-count'))).toBe('共 8 个，第 1–6 个')
+    /* v66: the total still cuts the pages, but it is not printed — no "N 个结果" in the head and
+       no "共 N 个" in the pager (PRD A15). The head says which question this is instead. */
+    expect(container.querySelector('.count')).toBeNull()
+    expect(container.querySelector('.pager-count')).toBeNull()
+    expect(container.querySelector('.pager.is-countless')).not.toBeNull()
+    expect(text(container.querySelector('#discoverResultsTitle'))).toBe('搜索结果')
+    expect(text(container.querySelector('#discoverResultsNote'))).toBe('按相关度排序')
     expect(
       [...container.querySelectorAll('.pager-page')].map((link) => text(link)),
     ).toEqual(['2'])
@@ -437,11 +517,32 @@ describe('searching', () => {
        spells it as a display name, and the server's semantic path once understood only the name.
        This pins the client half — both filters leave in one request. */
     const { requests } = await showDiscover(
-      '?q=pdf&tag=doc',
+      '?q=pdf&tag=office-efficiency',
+      // The result head names the shelf from the vocabulary, so a tag filter reads it too.
+      () => json(200, { categories: [{ key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 1 }] }),
       () => json(200, { skills: [card()] }),
     )
 
-    expect(requests[0]?.path).toBe('/web/discover?q=pdf&tag=doc')
+    const discover = requests.find((request) => request.path.startsWith('/web/discover?'))
+    expect(discover?.path).toBe('/web/discover?q=pdf&tag=office-efficiency')
+  })
+
+  it('names the filtered shelf from the vocabulary, even when nothing matched', async () => {
+    /* v66: the head must not print the internal key when a filter returns no rows, and the name
+       must not depend on which rows the page happens to hold. */
+    const { container } = await showDiscover(
+      '?tag=office-efficiency',
+      () =>
+        json(200, {
+          categories: [
+            { key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 0 },
+          ],
+        }),
+      () => json(200, { skills: [], p: 1, page_size: 6, total: 0 }),
+    )
+
+    expect(text(container.querySelector('#discoverResultsTitle'))).toBe('筛选结果')
+    expect(text(container.querySelector('#discoverResultsNote'))).toBe('办公效率')
   })
 
   it('waits for Enter before searching again, because each search is a paid call', async () => {
@@ -489,14 +590,15 @@ describe('searching', () => {
     expect(text(container.querySelector('.picks-title'))).toBe('为你推荐')
   })
 
-  it('counts the rows a search by meaning found, not a total it was never given', async () => {
-    /* A semantic answer carries no `total`. The count has to come from the rows themselves —
-       reading `total` there would print "0 个结果" above ten cards — and with no page there is no
-       pager, whatever the row count. */
+  it('says these are search results, and never how many the public corpus holds', async () => {
+    /* A semantic answer carries no `total`, and since v66 no answer prints a count at all
+       (2026-11-14 用户定). The head is what tells this list apart from 为你推荐; with no page
+       there is no pager, whatever the row count. */
     const ten = Array.from({ length: 10 }, (_, index) => card({ name: `found-${index}` }))
     const { container } = await showDiscover('?q=pdf', () => json(200, { skills: ten }))
 
-    expect(text(container.querySelector('.count'))).toBe('10 个结果')
+    expect(container.querySelector('.count')).toBeNull()
+    expect(text(container.querySelector('#discoverResultsTitle'))).toBe('搜索结果')
     expect(container.querySelectorAll('#discoverResults .result')).toHaveLength(10)
     expect(container.querySelector('.pager')).toBeNull()
   })

@@ -31,7 +31,7 @@ import java.util.List;
  */
 public record SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
         List<String> publicTagKeys, SortOrder sort, int limit, String cursor, Integer offset,
-        List<String> excludedIds) {
+        List<String> excludedIds, List<String> labelDefinitionIds) {
 
     public static final int DEFAULT_LIMIT = 20;
     public static final int MAX_LIMIT = 100;
@@ -39,14 +39,15 @@ public record SearchRequest(String query, List<String> namespaceSlugs, List<Stri
     /** The shape the pre-v14 callers use: no tag filters, cursor pagination. */
     public SearchRequest(String query, List<String> namespaceSlugs, SortOrder sort, int limit,
             String cursor) {
-        this(query, namespaceSlugs, List.of(), List.of(), sort, limit, cursor, null, List.of());
+        this(query, namespaceSlugs, List.of(), List.of(), sort, limit, cursor, null, List.of(),
+                List.of());
     }
 
     /** The v14 API shape: tag filters, cursor pagination. */
     public SearchRequest(String query, List<String> namespaceSlugs, List<String> categoryKeys,
             List<String> publicTagKeys, SortOrder sort, int limit, String cursor) {
         this(query, namespaceSlugs, categoryKeys, publicTagKeys, sort, limit, cursor, null,
-                List.of());
+                List.of(), List.of());
     }
 
     /** The v30 API shape: same as v14, with the caller's already-seen rows removed. */
@@ -54,7 +55,7 @@ public record SearchRequest(String query, List<String> namespaceSlugs, List<Stri
             List<String> publicTagKeys, SortOrder sort, int limit, String cursor,
             List<String> excludedIds) {
         this(query, namespaceSlugs, categoryKeys, publicTagKeys, sort, limit, cursor, null,
-                excludedIds);
+                excludedIds, List.of());
     }
 
     public SearchRequest {
@@ -71,6 +72,8 @@ public record SearchRequest(String query, List<String> namespaceSlugs, List<Stri
         categoryKeys = categoryKeys == null ? List.of() : List.copyOf(categoryKeys);
         publicTagKeys = publicTagKeys == null ? List.of() : List.copyOf(publicTagKeys);
         excludedIds = excludedIds == null ? List.of() : List.copyOf(excludedIds);
+        labelDefinitionIds = labelDefinitionIds == null ? List.of()
+                : List.copyOf(labelDefinitionIds);
         // **Exclusion and the page-number offset are not combined** (v30). The offset path is the
         // console's pager, whose total (`count`) does not know about exclusions: a page could be
         // filtered while the total promised rows that are not there. No caller asks for both today;

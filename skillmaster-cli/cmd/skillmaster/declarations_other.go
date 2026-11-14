@@ -29,7 +29,7 @@ var otherSpecs = []*help.Spec{
 	},
 	{
 		Path: "skills search", Summary: "按意思找 skill",
-		Usage: "skmr skills search <问题> [--scope library|public|all] [--limit <条数>] [--exclude <地址>]... [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--semantic=false] [--verbose] [--no-login]",
+		Usage: "skmr skills search [<问题>] [--scope library|public|all] [--limit <条数>] [--exclude <地址>]... [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--label <维度>:<值>]... [--semantic=false] [--verbose] [--no-login]",
 		Flags: []help.Flag{
 			{Name: "--scope", Value: "<范围>", Summary: "library（默认）、public 或 all"},
 			{Name: "--limit", Value: "<条数>", Summary: "要几条，默认 10、最多 50"},
@@ -38,16 +38,18 @@ var otherSpecs = []*help.Spec{
 			{Name: "--category", Value: "<分类>", Summary: "按分类筛"},
 			{Name: "--public-tag", Value: "<标签>", Summary: "按公开标签筛"},
 			{Name: "--my-tag", Value: "<标签>", Summary: "按我的标签筛"},
+			{Name: "--label", Value: "<维度>:<值>", Summary: "按属性筛；可重复，多个取「且」"},
 			{Name: "--verbose", Summary: "多一行来源、许可证与使用"},
 			{Name: "--no-login", Summary: "没有凭据时立即失败"},
 		},
-		Args:   []help.Arg{{Name: "<问题>", Key: "query"}},
-		Output: "每条是地址一行 + 描述 2–3 行，走 stdout；不打印相似度。有结果且没带 --exclude 时，首行先给一句提示（教换说法重查时带上已给过的地址）；带了 --exclude 且结果为空时，另补一句「也可能是 --exclude 排掉的」并给出下一步。没有 --json。",
+		Args:   []help.Arg{{Name: "[<问题>]", Key: "query"}},
+		Output: "每条是地址一行 + 描述 2–3 行，再跟一行「属性：短名」（最多三枚，其余收成 +N），走 stdout；不打印相似度。有结果且没带 --exclude 时，首行先给一句提示（教换说法重查时带上已给过的地址）；带了 --exclude 且结果为空时，另补一句「也可能是 --exclude 排掉的」并给出下一步。没有 --json。",
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "关键词、分类与标签一个都没给", Next: "给一句问题，或加分类/标签"},
+			{Code: "invalid_request", Summary: "属性的词不在词表里", Next: "用 skmr skills labels 查可筛的键"},
 		},
 		Examples: []string{"skmr skills search \"怎么把 PDF 拆成单页\"",
-			"skmr skills search \"PDF\" --scope public --exclude dev/pdf-tools"},
+			"skmr skills search --label runtime:python --scope public"},
 		Parent: "skills", Next: "skmr skill invoke <地址>", Exits: exitsWithCredential,
 	},
 	{
@@ -82,11 +84,22 @@ var otherSpecs = []*help.Spec{
 		Path: "skills categories", Summary: "公开分类词表",
 		Usage:  "skmr skills categories [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
-		Output: "一次给全分类与公域计数，走 stdout。",
+		Output: "一次给全 13 个一级分类，走 stdout；不打印公域计数。",
 		Failures: []help.Failure{
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络后重试"},
 		},
 		Examples: []string{"skmr skills categories"},
+		Parent:   "skills", Exits: exitsWithCredential,
+	},
+	{
+		Path: "skills labels", Summary: "属性词表",
+		Usage:  "skmr skills labels [--no-login]",
+		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
+		Output: "一次给全属性词表：维度、键（可筛形状，如 runtime:python）、短名与完整语义，走 stdout；不打印公域计数。键原样交给 --label。",
+		Failures: []help.Failure{
+			{Code: "network", Summary: "连不上服务端", Next: "检查网络后重试"},
+		},
+		Examples: []string{"skmr skills labels"},
 		Parent:   "skills", Exits: exitsWithCredential,
 	},
 	{

@@ -497,7 +497,7 @@ var skillSpecs = []*help.Spec{
 		Usage:  "skmr skill show <命名空间>/<名字> [--no-login]",
 		Flags:  []help.Flag{{Name: "--no-login", Summary: "没有凭据时立即失败"}},
 		Args:   []help.Arg{{Name: "<命名空间>/<名字>", Key: "address", Required: true}},
-		Output: "描述、场景（作者的「适用场景」、我的「我的适用场景」两行分开）、环境、版本、来源、许可证与使用，走 stdout；空字段不打印。",
+		Output: "描述 → 适用场景 → 我的适用场景 → 预期结果 → 兼容性 → 属性 → 版本 / 状态 / 分类 / 公开标签 /（副本才有）复制自 / 来源 / 许可证 / 使用 / 我的标签，走 stdout；属性给全部短名；空字段不打印。",
 		Failures: []help.Failure{
 			{Code: "skill_not_found", Summary: "这个 skill 不在你的库里", Next: "用 skmr skills search 找名字"},
 			{Code: "skill_gone", Summary: "这个 skill 已被作者删除", Next: "地址不再服务；换一个用 skmr skills search"},

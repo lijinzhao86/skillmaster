@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.http.HttpResponse;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
@@ -14,6 +15,12 @@ import tools.jackson.databind.JsonNode;
  */
 @Sql("/sql/truncate-business-tables.sql")
 class PublicTagCategoryApiIT extends AbstractOrganizeIT {
+
+    @BeforeEach
+    void removeTemporaryStoppedWord() {
+        jdbc.sql("UPDATE skill SET category_key = NULL WHERE category_key = 'zz-stopped'").update();
+        jdbc.sql("DELETE FROM skill_category WHERE key = 'zz-stopped'").update();
+    }
 
     @Test
     void onlyTheOwnerOrAnAdminMayWritePublicTagsAndCategories() {
@@ -67,7 +74,7 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
 
         HttpResponse<String> shelf = postJson(
                 "/api/v1/skills/demo/pdf-tools/tags/public", bearer,
-                "{\"name\":\"文档与演示\"}");
+                "{\"name\":\"办公效率\"}");
         assertThat(shelf.statusCode()).isEqualTo(400);
         assertThat(issue(shelf)).isEqualTo("category_name_taken");
 
@@ -77,36 +84,48 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
 
     @Test
     void settingACategoryReplacesAndClearingIsANoOpWhenThereIsNone() {
+        jdbc.sql("UPDATE skill SET category_key = NULL WHERE category_key = 'zz-stopped'").update();
+        jdbc.sql("UPDATE skill SET category_key = NULL WHERE category_key = 'zz-stopped'").update();
+        jdbc.sql("DELETE FROM skill_category WHERE key = 'zz-stopped'").update();
         publicSkill("pdf-tools");
         String bearer = token();
 
         HttpResponse<String> first =
-                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"doc\"}");
+                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"office-efficiency\"}");
         assertThat(first.statusCode()).as(first.body()).isEqualTo(200);
         assertThat(changed(first)).isTrue();
 
         HttpResponse<String> same =
-                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"doc\"}");
+                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"office-efficiency\"}");
         assertThat(same.statusCode()).isEqualTo(200);
         assertThat(changed(same)).isFalse();
 
         HttpResponse<String> replaced =
-                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"data\"}");
+                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"data-analysis\"}");
         assertThat(replaced.statusCode()).isEqualTo(200);
         assertThat(count("SELECT count(*) FROM skill WHERE name = 'pdf-tools'"
-                + " AND category_key = 'data'")).isEqualTo(1);
+                + " AND category_key = 'data-analysis'")).isEqualTo(1);
 
+        // The real 13 words are all enabled; stopped is still a state the write path supports,
+        // so the test creates one rather than borrowing a production word.
+        jdbc.sql("""
+                INSERT INTO skill_category (key, name, state, sort_order, created_at)
+                VALUES ('zz-stopped', '停用词', 'stopped', 200, :at)
+                """).param("at", AT).update();
         HttpResponse<String> stopped =
-                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"ops\"}");
+                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"zz-stopped\"}");
         assertThat(stopped.statusCode()).isEqualTo(400);
         assertThat(issue(stopped)).isEqualTo("category_stopped");
 
         // A word already assigned stays: selecting it again is a no-op even after it is stopped.
-        jdbc.sql("UPDATE skill SET category_key = 'ops' WHERE name = 'pdf-tools'").update();
+        jdbc.sql("UPDATE skill SET category_key = 'zz-stopped' WHERE name = 'pdf-tools'").update();
         HttpResponse<String> sameStopped =
-                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"ops\"}");
+                putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"zz-stopped\"}");
         assertThat(sameStopped.statusCode()).isEqualTo(200);
         assertThat(changed(sameStopped)).isFalse();
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency'"
+                + " WHERE category_key = 'zz-stopped'").update();
+        jdbc.sql("DELETE FROM skill_category WHERE key = 'zz-stopped'").update();
 
         HttpResponse<String> cleared =
                 delete("/api/v1/skills/demo/pdf-tools/category", bearer);
@@ -148,7 +167,7 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
                 .param("id", skillId).query(String.class).single();
         String bearer = token();
 
-        putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"doc\"}");
+        putJson("/api/v1/skills/demo/pdf-tools/category", bearer, "{\"key\":\"office-efficiency\"}");
         postJson("/api/v1/skills/demo/pdf-tools/tags/public", bearer, "{\"name\":\"pdf\"}");
 
         String after = jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
@@ -160,7 +179,7 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
     void theVocabulariesCountOnlyDiscoverableSkills() {
         String publicSkill = publicSkill("public-one");
         String privateSkill = privateSkill("private-one");
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE id IN (:a, :b)")
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE id IN (:a, :b)")
                 .param("a", publicSkill).param("b", privateSkill).update();
         publicTag(publicSkill, "pdf", "PDF");
         publicTag(privateSkill, "pdf", "pdf");
@@ -174,12 +193,11 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
         String bearer = token();
 
         JsonNode categories = json(get("/api/v1/categories", bearer)).get("categories");
-        assertThat(categories).hasSize(10);
-        assertThat(categories.get(0).get("key").asText()).isEqualTo("doc");
+        assertThat(categories).hasSize(13);
+        assertThat(categories.get(0).get("key").asText()).isEqualTo("office-efficiency");
         assertThat(categories.get(0).get("public_total").asLong()).isEqualTo(1);
         assertThat(categories.valueStream()
-                .filter(row -> "ops".equals(row.get("key").asText())).findFirst().orElseThrow()
-                .get("state").asText()).isEqualTo("stopped");
+                .noneMatch(row -> row.get("key").asText().equals("doc"))).isTrue();
 
         JsonNode tags = json(get("/api/v1/public-tags", bearer)).get("tags");
         assertThat(tags).hasSize(1);
@@ -192,7 +210,7 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
     @Test
     void publicTagsAndCategoriesParticipateInPublicRecall() {
         String publicSkill = publicSkill("pdf-tools");
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE id = :id")
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE id = :id")
                 .param("id", publicSkill).update();
         publicTag(publicSkill, "pdf", "PDF");
         publicSkill("other");
@@ -203,7 +221,7 @@ class PublicTagCategoryApiIT extends AbstractOrganizeIT {
         assertThat(names(skills(get("/api/v1/skills?scope=public&q=PDF", bearer))))
                 .contains("pdf-tools");
         assertThat(names(skills(get(
-                "/api/v1/skills?scope=public&category=文档与演示", bearer))))
+                "/api/v1/skills?scope=public&category=办公效率", bearer))))
                 .containsExactly("pdf-tools");
         assertThat(names(skills(get(
                 "/api/v1/skills?scope=public&public_tag=PDF", bearer))))

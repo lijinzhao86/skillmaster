@@ -234,6 +234,11 @@ func skillsVerb(ctx context.Context, args []string) (err error) {
 			return err
 		}
 		return categoriesCmd(ctx, args[1:])
+	case "labels":
+		if err := rejectJSON("labels", args[1:]); err != nil {
+			return err
+		}
+		return labelsCmd(ctx, args[1:])
 	case "public-tags":
 		if err := rejectJSON("public-tags", args[1:]); err != nil {
 			return err

@@ -75,7 +75,7 @@ func search(ctx context.Context, args []string) error {
 		// because semantic search fell back must not read like a semantic one (v19 PRD #7).
 		fmt.Println(found.note)
 	}
-	printCards(found.cards, true, options.verbose)
+	printCards(found.cards, true, true, options.verbose)
 	if found.more {
 		// Said rather than silently dropped: a listing that stops without saying so reads as
 		// "that is everything", which is a claim the CLI would be making on the server's behalf.
@@ -134,7 +134,7 @@ func listSkills(ctx context.Context, args []string) error {
 	}
 	// The reading only under `--verbose` (v31): the default is the inventory. `--verbose` asks for
 	// the old card, which is the same list with a description and the small fields under each row.
-	printCards(found.cards, options.verbose, options.verbose)
+	printCards(found.cards, options.verbose, false, options.verbose)
 
 	// The address above is what a later command takes, and the next step is not obvious — the
 	// address alone does not load anything, and `invoke` is the command that both loads the body
@@ -179,9 +179,11 @@ func emptyLibraryLine(options queryArgs) string {
 //   - **`withReading`** prints 「描述 - 适用场景」. `skills search` always sets it — relevance is
 //     judged by exactly that text. `skills list` sets it only under `--verbose` (v31): an inventory
 //     is an address list, and descriptions have their own commands (`show`, and `--verbose` itself).
+//   - **`withAttributes`** prints 「属性：短名」 (v66). Only `skills search` sets it: a listing keeps
+//     its old shape, and the attributes are what a searcher compares candidates by.
 //   - **`verbose`** adds the source / state / version / updated line (PRD #51). It goes below the
 //     reading, so a caller that reads the first line still gets the address alone.
-func printCards(cards []api.Card, withReading, verbose bool) {
+func printCards(cards []api.Card, withReading, withAttributes, verbose bool) {
 	for _, card := range cards {
 		fmt.Println(card.Address())
 		if withReading {
@@ -192,12 +194,52 @@ func printCards(cards []api.Card, withReading, verbose bool) {
 				fmt.Printf("    %s\n", summary)
 			}
 		}
+		if withAttributes {
+			if line := attributesLine(card); line != "" {
+				fmt.Printf("    属性：%s\n", line)
+			}
+		}
 		if verbose {
 			if line := verboseLine(card); line != "" {
 				fmt.Printf("    %s\n", line)
 			}
 		}
 	}
+}
+
+// attributeNames is how many short names a search result prints before the rest become `+N`.
+//
+// **Three is the design's number, and the console draws the same cut** (v66 PRD A13): a row is read
+// to rule candidates out, and a fourth word costs a line without changing that decision.
+const attributeNames = 3
+
+// attributesLine is the one extra row a search result carries (v66): the skill's displayed
+// attributes. **Short names only** — the full sentences (`需要 Python`) live in `skills labels` and
+// are what the extractor recorded, not what a one-line comparison is for.
+func attributesLine(card api.Card) string {
+	if len(card.Labels) == 0 {
+		return ""
+	}
+	shown := card.Labels
+	if len(shown) > attributeNames {
+		shown = shown[:attributeNames]
+	}
+	names := shortLabelNames(shown)
+	if rest := len(card.Labels) - len(shown); rest > 0 {
+		names = append(names, fmt.Sprintf("+%d", rest))
+	}
+	return strings.Join(names, "、")
+}
+
+// shortLabelNames is the one reader of a label's display name: `label`, never `full`. The full
+// sentence is the extractor's evidence (`需要 Python`), and neither the list nor `skill show`
+// prints it — only `skills labels` does.
+func shortLabelNames(labels []api.Label) []string {
+	names := make([]string, 0, len(labels))
+	for _, label := range labels {
+		names = append(names, label.Label)
+	}
+	return names
 }
 
 // verboseLine is `--verbose`'s one line: where the skill came from, what state it is in, and the

@@ -129,7 +129,7 @@ var topSpecs = []*help.Spec{
 	{
 		Path:      "skills",
 		Summary:   "整个库的动词",
-		Children:  []string{"list", "search", "pending", "publish", "categories", "public-tags", "my-tags"},
+		Children:  []string{"list", "search", "pending", "publish", "categories", "labels", "public-tags", "my-tags"},
 		PureGroup: true,
 	},
 	{
