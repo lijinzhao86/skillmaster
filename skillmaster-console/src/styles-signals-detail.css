@@ -234,6 +234,20 @@
     flex: 1 1 100%;
     max-width: none;
   }
+  /* v65: the result state takes the first line — title / what was filtered on the left, 清除 on
+     the right — and the search box drops to the next. Nothing scrolls sideways. */
+  .discover-result-meta {
+    order: 1;
+    flex: 1 1 auto;
+  }
+  .discover-clear {
+    order: 2;
+    margin-left: auto;
+  }
+  .discover-search form {
+    order: 3;
+    flex: 1 1 100%;
+  }
   .result {
     grid-template-columns: 32px minmax(0, 1fr) minmax(108px, max-content);
     gap: 0 10px;
@@ -250,6 +264,12 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
+  }
+  /* v65: attributes above tags, both from the left; the desktop `margin-left:auto` would push the
+     tag run to the right edge of a column that is already left-aligned. */
+  .result-tags {
+    margin-left: 0;
+    justify-content: flex-start;
   }
   .result-action-row {
     gap: 8px;

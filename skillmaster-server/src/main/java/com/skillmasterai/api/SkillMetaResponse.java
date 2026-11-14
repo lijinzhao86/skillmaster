@@ -86,7 +86,13 @@ public record SkillMetaResponse(
         /* v61 (ADR 0184): the 下线中 ramp's due date while the skill still serves, or null. The CLI
            warns on every invoke/run that lands here and points at `skill copy`. */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        String offlinePendingUntil) {
+        String offlinePendingUntil,
+        /* v65: the platform's one-line expected result and displayed attributes. Both are omitted
+           when absent, so an older server and a skill with no claims look the same to a client. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String outcome,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+        java.util.List<SearchResponse.Label> labels) {
 
     public record Origin(String kind, String role, String label, String locator, String path,
             String url, String revision, String checkedAt, String status,
@@ -147,6 +153,17 @@ public record SkillMetaResponse(
             com.skillmasterai.modules.skill.SourceService sources,
             com.skillmasterai.modules.metrics.UsageQuery metrics,
             java.util.Set<String> boundEnvNames) {
+        return of(detail, objectMapper, credentialMayWrite, sources, metrics, boundEnvNames,
+                null, java.util.List.of());
+    }
+
+    /** v65: the same metadata plus the platform claims, assembled by M12 before the response. */
+    public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper,
+            boolean credentialMayWrite,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics,
+            java.util.Set<String> boundEnvNames, String outcome,
+            java.util.List<com.skillmasterai.modules.skill.LabelValue> labels) {
         JsonNode frontmatter = objectMapper.readTree(detail.frontmatterJson());
         java.util.List<String> required = requiredCredentials(frontmatter);
         return new SkillMetaResponse(
@@ -170,7 +187,11 @@ public record SkillMetaResponse(
                 required,
                 missingOf(required, boundEnvNames),
                 copiedFromOf(sources, detail.id()),
-                detail.offlinePendingUntil());
+                detail.offlinePendingUntil(),
+                outcome,
+                labels.stream().map(label -> new SearchResponse.Label(label.key(), label.value(),
+                        label.label(), label.full(), label.group(), label.filterable()))
+                        .toList());
     }
 
     /**

@@ -50,6 +50,36 @@ type TagCount struct {
 	PublicTotal int    `json:"public_total"`
 }
 
+// Label is one displayed attribute (v65): **the dimension (`Key`) and the value**, which together
+// spell the filter key `Key + ":" + Value` (`runtime:python`), plus the two names the vocabulary
+// carries. **`Label` is the short name the console and the CLI list draw**; `Full` is the sentence
+// the terminal's vocabulary command may print. Neither is derived here — the words are the
+// platform's, and a client that shortened them would be writing a second vocabulary.
+type Label struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Full  string `json:"full"`
+	Group string `json:"group"`
+	// Filterable is false for a word the vocabulary shows but does not let a caller filter on.
+	// Since v65 the server always sends it; the CLI prints the word as text either way.
+	Filterable bool `json:"filterable"`
+}
+
+// LabelRow is one row of the platform's attribute vocabulary (`GET /api/v1/labels`).
+type LabelRow struct {
+	Key           string `json:"key"`
+	DimensionKey  string `json:"dimension_key"`
+	DimensionName string `json:"dimension_name"`
+	Value         string `json:"value"`
+	Short         string `json:"short"`
+	Full          string `json:"full"`
+	Group         string `json:"group"`
+	Filterable    bool   `json:"filterable"`
+	State         string `json:"state"`
+	SortOrder     int    `json:"sort_order"`
+}
+
 // MyTag is a definition from the caller's own tag library, with the description that tells a person
 // (or an agent) when to use it and with how many effective attachments it currently has.
 type MyTag struct {
@@ -112,6 +142,10 @@ type QueryOptions struct {
 	MyTags     []string
 	PublicTags []string
 	Sources    []string
+	// Labels are attribute definitions in their `dimension:value` form (v65), repeated and ANDed.
+	// **Sent as typed**: the vocabularies are the server's, and resolving a word here would be a
+	// second reader of the same table.
+	Labels []string
 
 	Sort   string
 	Show   string
@@ -155,6 +189,9 @@ func (c Client) QuerySkills(ctx context.Context, options QueryOptions) (SearchPa
 	}
 	for _, source := range options.Sources {
 		query.Add("source", source)
+	}
+	for _, key := range options.Labels {
+		query.Add("label", key)
 	}
 	for _, address := range options.Excludes {
 		query.Add("exclude", address)
@@ -201,6 +238,21 @@ func (c Client) Categories(ctx context.Context) ([]CategoryRow, error) {
 		return nil, fmt.Errorf("分类响应不是 JSON：%w", err)
 	}
 	return answer.Categories, nil
+}
+
+// Labels reads the platform's attribute vocabulary (v65). The whole vocabulary arrives in one
+// response — it is dozens of rows, not a page — and it carries no public count: corpus size is an
+// internal signal, and both the console and these commands leave it out (PRD A15).
+func (c Client) Labels(ctx context.Context) ([]LabelRow, error) {
+	body, err := c.request(ctx, http.MethodGet, APIPrefix+"/labels", nil)
+	if err != nil {
+		return nil, err
+	}
+	var rows []LabelRow
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("属性词表响应不是 JSON：%w", err)
+	}
+	return rows, nil
 }
 
 // PublicTags reads one page of the public-tag vocabulary. `--all` is the command layer's loop; this

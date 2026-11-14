@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 189 条。
+共 193 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -85,7 +85,7 @@
 | [0075](0075-the-browser-client-is-react.md) | 浏览器端改用 React，其余纪律照 0015 不变 | 已采纳 | 2026-10-21 |
 | [0076](0076-the-design-file-is-react-source.md) | 设计稿用 React 写，前端整段搬过去 | 已采纳（决定 #6 被 [ADR 0121](0121-the-design-rules-live-in-the-web-design-skill.md) 取代） | 2026-10-22 |
 | [0077](0077-the-cli-grammar-is-singular-and-plural.md) | CLI 的命令按单复数分组 | 部分被取代（`tags` 的归属由 [0083](0083-two-tag-layers.md) 更正：读单个 skill 的标签归 `skill` 组；决定 3「`files` 是正名」由 [0120](0120-file-enumeration-is-ls.md) 取代） | 2026-10-22 |
-| [0078](0078-a-category-is-one-shelf.md) | 分类是一个货架：平级、单选；召回交给标签 | 已采纳（写于公开标签进入本版之前；公开标签的落版与两套标签的边界见 [0083](0083-two-tag-layers.md)——分类单选的决定不变） | 2026-10-23 |
+| [0078](0078-a-category-is-one-shelf.md) | 分类是一个货架：平级、单选；召回交给标签 | 已采纳，**部分被 [0191](0191-public-categories-are-thirteen-shelves.md) 取代**（「10 个词」、「公域由作者选」两半，以及「`skills categories` 打印公域计数」这一句；平级、单选、无父子、召回交给标签的决定不变。公开标签的落版与两套标签的边界见 [0083](0083-two-tag-layers.md)） | 2026-10-23 |
 | [0079](0079-cli-manages-tags-and-library-references.md) | CLI 管贴法、新建、定义编辑与库引用，不管删除 | 已采纳 | 2026-10-23 |
 | [0080](0080-cli-covers-non-high-risk-operations.md) | CLI 覆盖所有非高风险操作 | 已采纳 | 2026-10-23 |
 | [0081](0081-every-console-operation-has-a-cli-command.md) | 每处控制台操作都要有 CLI 对应 | 已采纳 | 2026-10-23 |
@@ -197,3 +197,7 @@
 | [0187](0187-the-marketing-home-can-run-on-a-subdomain.md) | 营销首页可以临时挂在同一注册域的子域上，切回用 301 | 已采纳 | 2026-11-13 |
 | [0188](0188-feedback-consent-lives-on-the-agent-channel.md) | 反馈的同意在 agent 通道里记录，不放到浏览器 | 已采纳 | 2026-11-13 |
 | [0189](0189-feedback-is-kept-indefinitely-with-an-object-copy.md) | 反馈长期保留，另存一份对象存储 | 已采纳 | 2026-11-13 |
+| [0191](0191-public-categories-are-thirteen-shelves.md) | 公域分类是十三个一级货架，单选、无二级 | 已采纳 | 2026-11-13 |
+| [0192](0192-public-labels-are-extensible-claims.md) | 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价 | 已采纳，**部分被 [0194](0194-labels-p0-narrows-two-adrs.md) 取代**（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点） | 2026-11-13 |
+| [0193](0193-public-labels-are-agent-produced-and-sampling-audited.md) | 公域标签由 Agent 自动打，按抽样验收 | 已采纳，**部分被 [0194](0194-labels-p0-narrows-two-adrs.md) 取代**（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点） | 2026-11-13 |
+| [0194](0194-labels-p0-narrows-two-adrs.md) | v65 标签 P0 对 0192 / 0193 的四点收窄 | 已采纳 | 2026-11-14 |

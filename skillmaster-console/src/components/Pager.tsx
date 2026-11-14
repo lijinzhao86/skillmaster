@@ -32,6 +32,7 @@ export default function Pager({
   pageSize = PAGE_SIZE_DEFAULT,
   sizeOptions = SIZE_OPTIONS_DEFAULT,
   onPageSize,
+  showTotal = true,
   id,
 }: {
   total: number
@@ -43,6 +44,11 @@ export default function Pager({
   /** The sizes offered. Drawn only when `onPageSize` is given. */
   sizeOptions?: number[]
   onPageSize?: (size: number) => void
+  /**
+   * v65: whether the "共 N 个，第 X–Y 个" sentence is drawn. The public results turn it off — the
+   * public corpus size is an internal signal (PRD A15) — and the numbers stay right-aligned.
+   */
+  showTotal?: boolean
   /** One per page: both pages are in the document, and an id must name one of them. */
   id?: string
 }) {
@@ -83,12 +89,14 @@ export default function Pager({
     )
 
   return (
-    <nav className="pager" id={id} aria-label="分页">
+    <nav className={'pager' + (showTotal ? '' : ' is-countless')} id={id} aria-label="分页">
       {/* Copied from the design's `Pager` word for word, `is-with-size` included: no rule reads that
           second class today, but the two files' markup is meant to be the same markup. */}
-      <span className={onPageSize === undefined ? 'pager-count' : 'pager-count is-with-size'}>
-        {'共 ' + total + ' 个，第 ' + (start + 1) + '–' + (start + shown) + ' 个'}
-      </span>
+      {showTotal ? (
+        <span className={onPageSize === undefined ? 'pager-count' : 'pager-count is-with-size'}>
+          {'共 ' + total + ' 个，第 ' + (start + 1) + '–' + (start + shown) + ' 个'}
+        </span>
+      ) : null}
       {onPageSize === undefined ? null : (
         <span className="pager-size">
           <span aria-hidden="true">每页</span>

@@ -3,8 +3,10 @@ package com.skillmasterai.usecase;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.retrieval.EmbeddingSettings;
+import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.retrieval.RetrievalService;
 import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.LabelService;
 import com.skillmasterai.modules.skill.MyWhenToUseService;
 import com.skillmasterai.modules.skill.SearchFilters;
 import com.skillmasterai.modules.skill.SearchScope;
@@ -49,10 +51,12 @@ public class SemanticSearchUseCase {
     private final RetrievalService retrieval;
     private final EmbeddingSettings settings;
     private final MyWhenToUseService notes;
+    private final LabelService labels;
 
     public SemanticSearchUseCase(NamespaceService namespaces, SkillCatalogService catalog,
             SkillCategoryService categories, SkillTagService tags, SkillCardAssembler cards,
-            RetrievalService retrieval, EmbeddingSettings settings, MyWhenToUseService notes) {
+            RetrievalService retrieval, EmbeddingSettings settings, MyWhenToUseService notes,
+            LabelService labels) {
         this.namespaces = namespaces;
         this.catalog = catalog;
         this.categories = categories;
@@ -61,6 +65,7 @@ public class SemanticSearchUseCase {
         this.retrieval = retrieval;
         this.settings = settings;
         this.notes = notes;
+        this.labels = labels;
     }
 
     /**
@@ -119,7 +124,7 @@ public class SemanticSearchUseCase {
      * @param limit rows wanted, 1..{@link #MAX_LIMIT}; the caller validates before getting here
      */
     public Outcome search(String query, SearchScope scope, List<String> categoryNames,
-            List<String> publicTagNames, List<String> myTagNames, int limit,
+            List<String> publicTagNames, List<String> myTagNames, List<String> labelKeys, int limit,
             List<String> excludedIds, AuthenticatedSubject subject) {
         if (!retrieval.enabled()) {
             // Switched off: answer without touching the database or enumerating an id set nobody
@@ -129,7 +134,8 @@ public class SemanticSearchUseCase {
         }
         Caller caller = Callers.of(namespaces, subject);
 
-        SearchFilters filters = resolve(categoryNames, publicTagNames, myTagNames, subject.userId());
+        SearchFilters filters = resolve(categoryNames, publicTagNames, myTagNames, labelKeys,
+                subject.userId());
         if (filters == null) {
             // Some name was not in the vocabulary. The keyword path's rule applies unchanged: a
             // filter selects nothing rather than being dropped, because a caller that typed a word
@@ -402,7 +408,7 @@ public class SemanticSearchUseCase {
      *         silently searching for less than it was asked to
      */
     private SearchFilters resolve(List<String> categoryNames, List<String> publicTagNames,
-            List<String> myTagNames, String userId) {
+            List<String> myTagNames, List<String> labelKeys, String userId) {
         List<String> categoryKeys = new ArrayList<>();
         for (String name : nullToEmpty(categoryNames)) {
             String key = normalizedKey(name);
@@ -430,7 +436,17 @@ public class SemanticSearchUseCase {
             }
             myTagIds.add(definition.get().id());
         }
-        return new SearchFilters(categoryKeys, publicTagKeys, myTagIds);
+        // **An unknown attribute word is a 400 on every path** (v65 TD §接口): the words come from
+        // the vocabulary, so a misspelling is the caller's to fix, not "nothing was similar
+        // enough". Categories and tags keep the empty-answer rule — a category key the console no
+        // longer shows is a stale link, not a typo the caller made here.
+        List<String> labelIds = new ArrayList<>();
+        for (String key : nullToEmpty(labelKeys)) {
+            labelIds.add(labels.definitionIdOf(key)
+                    .orElseThrow(() -> new InvalidSearchRequestException(
+                            "unknown label '" + key + "'")));
+        }
+        return new SearchFilters(categoryKeys, publicTagKeys, myTagIds, labelIds);
     }
 
     /**

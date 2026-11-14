@@ -61,6 +61,7 @@ class WebSkillController {
     private final ObjectMapper objectMapper;
     private final com.skillmasterai.modules.skill.SourceService sources;
     private final com.skillmasterai.modules.metrics.UsageQuery usage;
+    private final com.skillmasterai.modules.skill.LabelService labels;
     private final ActivityLog activity;
 
     WebSkillController(ListAuthoredSkillsUseCase listAuthored,
@@ -70,6 +71,7 @@ class WebSkillController {
             ObjectMapper objectMapper,
             com.skillmasterai.modules.skill.SourceService sources,
             com.skillmasterai.modules.metrics.UsageQuery usage,
+            com.skillmasterai.modules.skill.LabelService labels,
             ActivityLog activity) {
         this.listAuthored = listAuthored;
         this.readAuthored = readAuthored;
@@ -78,6 +80,7 @@ class WebSkillController {
         this.objectMapper = objectMapper;
         this.sources = sources;
         this.usage = usage;
+        this.labels = labels;
         this.activity = activity;
     }
 
@@ -137,7 +140,8 @@ class WebSkillController {
                             a.selected() == null ? null : a.selected().version(), null,
                             Map.of(), Timestamps.now()));
                     return ResponseEntity.ok(
-                            AuthoredSkillResponse.of(a, objectMapper, sources, usage));
+                            AuthoredSkillResponse.of(a, objectMapper, sources, usage,
+                                    labels.outcomeOf(a.skillId()), labels.labelsOf(a.skillId())));
                 })
                 .orElseThrow(() -> base != null && !"none".equals(base)
                         ? new com.skillmasterai.common.RequestException(

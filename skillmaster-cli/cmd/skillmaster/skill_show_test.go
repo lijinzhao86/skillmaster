@@ -17,6 +17,10 @@ func TestSkillShowPrintsTheFieldsInOrderAndOmitsTheEmptyOnes(t *testing.T) {
 				"description":"把 PDF 拆页、合并与压缩。",
 				"when_to_use":"需要拆分、合并或压缩 PDF 时。",
 				"compatibility":"需要 Python 3.10+ 与 poppler。",
+				"outcome":"一份拆好的 PDF，以及每页对应的原文页码。",
+				"labels":[
+				  {"key":"runtime","value":"python","label":"Python","full":"需要 Python","group":"language"},
+				  {"key":"runtime","value":"api-key","label":"API key","full":"需要 API key","group":"credential"}],
 				"version":{"name":"1.2.3","digest":"sha256:abc"}}`
 		case "/api/v1/skills/dev/pdf-tools/tags":
 			return http.StatusOK, threeGroups
@@ -31,7 +35,9 @@ func TestSkillShowPrintsTheFieldsInOrderAndOmitsTheEmptyOnes(t *testing.T) {
 		"  把 PDF 拆页、合并与压缩。\n" +
 		"  适用场景：需要拆分、合并或压缩 PDF 时。\n" +
 		"  我的适用场景：当我说循环审计时用它\n" +
-		"  运行环境：需要 Python 3.10+ 与 poppler。\n" +
+		"  预期结果：一份拆好的 PDF，以及每页对应的原文页码。\n" +
+		"  兼容性：需要 Python 3.10+ 与 poppler。\n" +
+		"  属性：Python、API key\n" +
 		"  版本：1.2.3\n" +
 		"  分类：文档与演示\n" +
 		"  公开标签：PDF、批量处理\n" +

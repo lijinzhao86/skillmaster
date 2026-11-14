@@ -70,7 +70,7 @@ class MyTagApiIT extends AbstractOrganizeIT {
         assertThat(issue(duplicate)).isEqualTo("name_taken");
 
         HttpResponse<String> shelf = postJson("/api/v1/me/tags", bearer,
-                "{\"name\":\"文档与演示\"}");
+                "{\"name\":\"办公效率\"}");
         assertThat(shelf.statusCode()).isEqualTo(400);
         assertThat(issue(shelf)).isEqualTo("category_name_taken");
 
@@ -206,7 +206,7 @@ class MyTagApiIT extends AbstractOrganizeIT {
     @Test
     void theThreeGroupsAreOrderedAndPrivateTagsNeverCrossAccounts() {
         String skillId = publicSkill("pdf-tools");
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE id = :id")
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE id = :id")
                 .param("id", skillId).update();
         publicTag(skillId, "pdf", "PDF");
         String bearer = token();
@@ -219,7 +219,7 @@ class MyTagApiIT extends AbstractOrganizeIT {
         attach(theirs, skillId);
 
         JsonNode groups = json(get("/api/v1/skills/demo/pdf-tools/tags", bearer));
-        assertThat(groups.get("category").get("key").asText()).isEqualTo("doc");
+        assertThat(groups.get("category").get("key").asText()).isEqualTo("office-efficiency");
         assertThat(groups.get("public_tags").get(0).get("key").asText()).isEqualTo("pdf");
         assertThat(groups.get("my_tags").get("readable").asBoolean()).isTrue();
         assertThat(groups.get("my_tags").get("tags")).hasSize(1);

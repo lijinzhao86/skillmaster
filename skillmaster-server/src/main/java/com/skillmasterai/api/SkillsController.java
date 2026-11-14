@@ -67,6 +67,7 @@ class SkillsController {
     private final com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage;
     private final CardSignals cardSignals;
     private final com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings;
+    private final com.skillmasterai.modules.skill.LabelService labels;
     private final ActivityLog activity;
 
     SkillsController(ReadSkillUseCase readSkill,
@@ -80,6 +81,7 @@ class SkillsController {
             com.skillmasterai.usecase.RecordSkillUsageUseCase recordUsage,
             CardSignals cardSignals,
             com.skillmasterai.usecase.HasSecretBindingsUseCase hasSecretBindings,
+            com.skillmasterai.modules.skill.LabelService labels,
             ActivityLog activity) {
         this.readSkill = readSkill;
         this.submitVersion = submitVersion;
@@ -93,6 +95,7 @@ class SkillsController {
         this.recordUsage = recordUsage;
         this.cardSignals = cardSignals;
         this.hasSecretBindings = hasSecretBindings;
+        this.labels = labels;
         this.activity = activity;
     }
 
@@ -117,6 +120,7 @@ class SkillsController {
             @RequestParam(required = false) List<String> category,
             @RequestParam(name = "my_tag", required = false) List<String> myTags,
             @RequestParam(name = "public_tag", required = false) List<String> publicTags,
+            @RequestParam(required = false) List<String> label,
             // v30: the addresses the caller has already seen. Repeated, like `namespace`; resolved
             // once below and passed to whichever path answers.
             @RequestParam(required = false) List<String> exclude,
@@ -164,7 +168,8 @@ class SkillsController {
             // they narrow the set before the ranking (v19 TD §检索链).
             if (sort != null || show != null || source != null || namespace != null) {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                        "a semantic search takes q, scope, category, public_tag, my_tag, exclude and limit;"
+                        "a semantic search takes q, scope, category, public_tag, my_tag, label,"
+                                + " exclude and limit;"
                                 + " pass semantic=false for the other filters");
             }
             if (cursor != null) {
@@ -175,11 +180,11 @@ class SkillsController {
             // answers the same: with `semantic=false` the same request is already a 400 below.
             if (searchScope == SearchScope.PUBLIC && myTags != null) {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                        "scope=public accepts q, category, public_tag, exclude, limit and cursor only");
+                        "scope=public accepts q, category, public_tag, label, exclude, limit and cursor only");
             }
             int wanted = semanticLimit(limit);
             SemanticSearchUseCase.Outcome outcome = semanticSearch.search(q, searchScope,
-                    category, publicTags, myTags, wanted, excludedIds, subject);
+                    category, publicTags, myTags, label, wanted, excludedIds, subject);
             if (!outcome.degraded()) {
                 if (outcome.hits().isEmpty()) {
                     // Two different empty answers, kept apart: a name that is not in the vocabulary
@@ -230,10 +235,10 @@ class SkillsController {
             if (sort != null || show != null || source != null || myTags != null
                     || namespace != null) {
                 throw new com.skillmasterai.modules.search.InvalidSearchRequestException(
-                        "scope=public accepts q, category, public_tag, exclude, limit and cursor only");
+                        "scope=public accepts q, category, public_tag, label, exclude, limit and cursor only");
             }
-            var listing = searchPublic.api(q, category, publicTags, limit, cursor, excludedIds,
-                    subject);
+            var listing = searchPublic.api(q, category, publicTags, label, limit, cursor,
+                    excludedIds, subject);
             recordQuery(subject, q, filtersOf(searchScope, namespace, category, myTags,
                     publicTags, source, sort, show), hitsOf(listing.cards()), cursor != null,
                     listing.cards().size());
@@ -241,7 +246,7 @@ class SkillsController {
                     endingOf(note, listing.cards().size(), listing.page().nextCursor()))));
         }
         LibraryListUseCase.Result result = libraryList.api(q, namespace, category, myTags,
-                publicTags, source, sort, show, limit, cursor, excludedIds, subject);
+                publicTags, label, source, sort, show, limit, cursor, excludedIds, subject);
         recordQuery(subject, q, filtersOf(searchScope, namespace, category, myTags, publicTags,
                 source, sort, show), hitsOf(result.cards()), cursor != null,
                 result.cards().size());
@@ -340,7 +345,8 @@ class SkillsController {
                             // metadata first, then M16's answer for this caller. M12 is not
                             // asked about M16.
                             hasSecretBindings.boundEnvNames(subject.userId(), detail.id(),
-                                    "shared".equals(detail.source()))));
+                                    "shared".equals(detail.source())),
+                            labels.outcomeOf(detail.id()), labels.labelsOf(detail.id())));
                 })
                 .orElseThrow(SkillNotFoundException::new);
     }

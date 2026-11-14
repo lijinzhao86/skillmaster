@@ -44,9 +44,9 @@ export const EMPTY_TAGS = {
 /** `GET /web/categories`: the information page's category menu reads it. */
 export const CATEGORY_VOCABULARY = {
   categories: [
-    { key: 'doc', name: '文档与演示', state: 'enabled', public_total: 4 },
-    { key: 'data', name: '数据与分析', state: 'enabled', public_total: 7 },
-    { key: 'ops', name: '运维与云', state: 'stopped', public_total: 2 },
+    { key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 4 },
+    { key: 'data-analysis', name: '数据分析', state: 'enabled', public_total: 7 },
+    { key: 'it-ops-security', name: 'IT 运维与安全', state: 'stopped', public_total: 2 },
   ],
 }
 
@@ -140,6 +140,12 @@ export const SKILL = {
   // The server lifts these two from the frontmatter (TD 附录 A); the page no longer parses it.
   when_to_use: '需要拆分或合并 PDF 时',
   compatibility: '需要 ghostscript',
+  // v65: the platform's expected result and displayed attributes, read from `/web/skills/{ns}/{name}`.
+  outcome: '一份拆好的 PDF，以及每页对应的原文页码。',
+  labels: [
+    { key: 'runtime', value: 'python', label: 'Python', full: '需要 Python', group: 'language' },
+    { key: 'runtime', value: 'api-key', label: 'API key', full: '需要 API key', group: 'credential' },
+  ],
   visibility: 'private',
   public_rung: null,
   offline_at: null,

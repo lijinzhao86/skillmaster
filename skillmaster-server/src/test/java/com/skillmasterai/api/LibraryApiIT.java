@@ -210,8 +210,8 @@ class LibraryApiIT extends AbstractOrganizeIT {
     @Test
     void aRetiredCategoryNameSelectsNothing() {
         String id = publicSkill("pdf-tools");
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE id = :id").param("id", id).update();
-        String name = jdbc.sql("SELECT name FROM skill_category WHERE key = 'doc'")
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE id = :id").param("id", id).update();
+        String name = jdbc.sql("SELECT name FROM skill_category WHERE key = 'office-efficiency'")
                 .query(String.class).single();
         String encoded = java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8);
         String bearer = token();
@@ -221,13 +221,13 @@ class LibraryApiIT extends AbstractOrganizeIT {
 
         // `skill_category` is platform seed data and deliberately **not** truncated between tests;
         // a state written here would leak into every later class, so it is put back.
-        jdbc.sql("UPDATE skill_category SET state = 'retired' WHERE key = 'doc'").update();
+        jdbc.sql("UPDATE skill_category SET state = 'retired' WHERE key = 'office-efficiency'").update();
         try {
             assertThat(json(get("/api/v1/skills?scope=public&category=" + encoded, bearer))
                     .get("skills"))
                     .as("a retired word is not a filter, even if a stale row carries it").isEmpty();
         } finally {
-            jdbc.sql("UPDATE skill_category SET state = 'enabled' WHERE key = 'doc'").update();
+            jdbc.sql("UPDATE skill_category SET state = 'enabled' WHERE key = 'office-efficiency'").update();
         }
     }
 
@@ -298,9 +298,9 @@ class LibraryApiIT extends AbstractOrganizeIT {
     void categoryAnyOfAndTagsAllOfNarrowTheLibrary() {
         String one = publicSkill("one");
         String two = publicSkill("two");
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE id = :id")
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE id = :id")
                 .param("id", one).update();
-        jdbc.sql("UPDATE skill SET category_key = 'data' WHERE id = :id")
+        jdbc.sql("UPDATE skill SET category_key = 'data-analysis' WHERE id = :id")
                 .param("id", two).update();
         publicTag(one, "pdf", "PDF");
         publicTag(two, "pdf", "PDF");
@@ -310,9 +310,9 @@ class LibraryApiIT extends AbstractOrganizeIT {
         String bearer = token();
 
         assertThat(names(skills(get(
-                "/api/v1/skills?scope=library&category=文档与演示&category=数据与分析", bearer))))
+                "/api/v1/skills?scope=library&category=办公效率&category=数据分析", bearer))))
                 .containsExactlyInAnyOrder("one", "two");
-        assertThat(names(skills(get("/api/v1/skills?scope=library&category=文档与演示", bearer))))
+        assertThat(names(skills(get("/api/v1/skills?scope=library&category=办公效率", bearer))))
                 .containsExactly("one");
         assertThat(names(skills(get("/api/v1/skills?scope=library&public_tag=PDF", bearer))))
                 .containsExactlyInAnyOrder("one", "two");

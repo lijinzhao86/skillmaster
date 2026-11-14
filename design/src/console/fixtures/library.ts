@@ -10,12 +10,14 @@ import { LADDER, type Rung } from './skill'
  * 规则放在这里而不是页面里，因为不止一个页面读它：「我的 skill」读库、发现页读公域、信息页读
  * 两套标签、统计读计数。计数**从行算出来**，不写死——写死的计数会在改夹具时悄悄变错。
  *
- * **地址里写 id，界面上写名字**（PRD §展示与计数口径）：`tag=doc` 是筛选地址，界面上是「文档与演示」。
+ * **地址里写 id，界面上写名字**（PRD §展示与计数口径）：`tag=office-efficiency` 是筛选地址，界面上是「办公效率」。
  * 这样改名之后旧链接仍然可用，而 CLI 那边取的是名字——两者不是一回事。
  */
 
 /**
- * 公开分类：平台词表，**平级 10 个词，每个 skill 最多贴一个**（2026-10-23 用户定）。
+ * 公开分类：平台词表，**平级 13 个词，每个 skill 最多贴一个**（2026-11-13，v65 / ADR 0191）。
+ * 前 12 个与 SkillHub 一级类目同名同义；第 13 个「AI 协作」是我们补的元技能货架。
+ * 另留一个 `ops`（运维与云）作为**停用旧词**，只用于演示「停用态」；产品迁移后不再新增它。
  *
  * 分类是一个「货架」：粗、稳定、可选一个；召回交给公开标签。调研过的平台都在往这个方向收——
  * B 站 2025 年取消了二级分区、抖音的分类在用户端不可见、小红书与 TikTok 由平台自动归类；保留
@@ -33,16 +35,21 @@ export interface Category {
 }
 
 export const CATEGORIES: Category[] = [
-  { id: 'doc', name: '文档与演示' },
-  { id: 'data', name: '数据与分析' },
-  { id: 'dev', name: '研发与测试' },
-  { id: 'design', name: '设计与界面' },
-  { id: 'writing', name: '写作与翻译' },
-  { id: 'research', name: '研究与检索' },
-  { id: 'office', name: '办公与协作' },
+  { id: 'office-efficiency', name: '办公效率' },
+  { id: 'content-creation', name: '内容创作' },
+  { id: 'dev-programming', name: '开发编程' },
+  { id: 'data-analysis', name: '数据分析' },
+  { id: 'design-media', name: '设计多媒体' },
+  { id: 'ai-agent', name: 'AI Agent' },
+  { id: 'knowledge-management', name: '知识管理' },
+  { id: 'business-ops', name: '商业运营' },
+  { id: 'education', name: '教育学习' },
+  { id: 'professional', name: '行业专业' },
+  { id: 'it-ops-security', name: 'IT 运维与安全' },
+  { id: 'life-service', name: '生活服务' },
+  { id: 'ai-collaboration', name: 'AI 协作' },
+  /* 停用旧词：只演示「停用后仍能筛、不能新选」这一态；产品里没有新 skill 会落在它上面。 */
   { id: 'ops', name: '运维与云', stopped: true },
-  { id: 'media', name: '图像与音视频' },
-  { id: 'security', name: '安全与合规' },
 ]
 
 /**
@@ -119,7 +126,7 @@ export function publicTagName(id: string): string {
 }
 
 /**
- * 「用在 N 个 skill 上」只算**我创建的、生效中的** skill：公开标签是作者的词，别人 skill 上的
+ * 次数只用来判断「我在自己 skill 上用过它没有」，不显示：公开标签是作者的词，别人 skill 上的
  * 那一份不归我管（PRD §公开标签）。
  */
 export function publicTagUsage(id: string): number {
@@ -127,15 +134,11 @@ export function publicTagUsage(id: string): number {
     .filter((skill) => skill.source === 'created' && skill.publicTags.includes(id)).length
 }
 
-/** 公开标签那一页的清单：我在自己 skill 上用过的词，计数降序、同数按名字。 */
-export function sortedPublicTags(): Array<PublicTag & { count: number }> {
+/** 公开标签那一页的清单：我在自己 skill 上用过的词，按名字排；次数只决定「用没用过」，不显示。 */
+export function sortedPublicTags(): PublicTag[] {
   return PUBLIC_TAGS
-    .map((tag) => ({ ...tag, count: publicTagUsage(tag.id) }))
-    .filter((tag) => tag.count > 0)
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count
-      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-    })
+    .filter((tag) => publicTagUsage(tag.id) > 0)
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 }
 
 /** 我的标签：一个账号最多 100 个定义，一个 skill 最多 20 个生效中的贴法。 */
@@ -298,40 +301,40 @@ export const LIBRARY: LibrarySkill[] = [
    描述取 `heygen-com/cut-the-curve`（949 字，实测样本里最长的一条），作者的适用场景见
    `LONG_WHEN_STRESS`；用户自己的那段见 `MY_WHEN_STRESS`（200 字，产品上限）——
    预览显示的是生效的那段（我的），作者那段退到信息页当参考。 */
-  { name: 'pdf-tools', namespace: 'dev', description: LONG_DESCRIPTIONS[1], whenToUse: LONG_WHEN_STRESS, myWhenToUse: MY_WHEN_STRESS, source: 'created', state: 'live', version: '1.2.3', updated: '2026/10/07 14:32', category: 'doc', publicTags: ['pdf', 'batch'], myTags: ['client'] },
-  { name: 'commit-lint', namespace: 'dev', description: '按团队约定检查提交信息，不合规的给出改法。', whenToUse: '提交之前，想确认这一条信息团队读得懂的时候', source: 'created', state: 'live', version: '0.4.1', updated: '2026/09/18 09:06', category: 'dev', publicTags: ['review', 'efficiency'], myTags: ['team'] },
-  { name: 'changelog-writer', namespace: 'dev', description: '从提交历史里收拾出一份能给人看的更新日志。', whenToUse: '要发版，需要一份给人读的更新说明的时候', source: 'created', state: 'live', version: '1.0.0', updated: '2026/10/09 08:15', category: 'writing', publicTags: ['doc-gen', 'writing'], myTags: ['client', 'this-week'] },
-  { name: 'sql-review', namespace: 'dev', description: '读一遍要上线的 SQL，把会锁表、会走全表扫的那几句挑出来。', whenToUse: '一条 SQL 要上生产之前', source: 'created', state: 'offline', version: '0.1.0', updated: '2026/04/12 10:05', category: 'dev', publicTags: ['review', 'data'], myTags: [] },
-  { name: 'api-doc-writer', namespace: 'dev', description: '从路由定义里生成接口文档的草稿。', whenToUse: '接口改完，文档还没跟上的时候', source: 'created', state: 'live', version: '2.0.0', updated: '2026/08/30 17:41', category: 'doc', publicTags: ['doc-gen'], myTags: ['client'] },
-  { name: 'test-namer', namespace: 'dev', description: '给测试用例起一个能说明它在测什么的名字。', whenToUse: '写完一组测试，名字还是 test1 / test2 的时候', source: 'created', state: 'live', version: '1.0.2', updated: '2026/09/02 11:20', category: 'dev', publicTags: ['test'], myTags: ['team'] },
-  { name: 'log-triage', namespace: 'dev', description: '把一段日志按「值得看」和「噪音」分开。', whenToUse: '线上出了事，日志一次刷出几千行的时候', source: 'created', state: 'live', version: '0.9.0', updated: '2026/10/01 22:05', category: 'ops', publicTags: ['ops', 'logs'], myTags: ['this-week'] },
-  { name: 'regex-explainer', namespace: 'dev', description: '把一条正则拆成人话。', whenToUse: '接手一条看不懂的正则的时候', source: 'created', state: 'live', version: '1.1.0', updated: '2026/07/14 10:02', category: 'dev', publicTags: ['efficiency'], myTags: [] },
-  { name: 'dockerfile-review', namespace: 'dev', description: '检查 Dockerfile 里会拖慢构建或撑大镜像的写法。', whenToUse: '镜像越构建越慢、越做越大的时候', source: 'created', state: 'live', version: '0.3.0', updated: '2026/06/28 16:55', category: 'ops', publicTags: ['review', 'ops'], myTags: ['client'] },
-  { name: 'i18n-extract', namespace: 'dev', description: '从组件里把待翻译的字符串抽出来。', whenToUse: '一个页面要开始支持另一种语言的时候', source: 'created', state: 'live', version: '1.4.0', updated: '2026/09/25 13:12', category: 'writing', publicTags: ['translation'], myTags: [] },
+  { name: 'pdf-tools', namespace: 'dev', description: LONG_DESCRIPTIONS[1], whenToUse: LONG_WHEN_STRESS, myWhenToUse: MY_WHEN_STRESS, source: 'created', state: 'live', version: '1.2.3', updated: '2026/10/07 14:32', category: 'office-efficiency', publicTags: ['pdf', 'batch'], myTags: ['client'] },
+  { name: 'commit-lint', namespace: 'dev', description: '按团队约定检查提交信息，不合规的给出改法。', whenToUse: '提交之前，想确认这一条信息团队读得懂的时候', source: 'created', state: 'live', version: '0.4.1', updated: '2026/09/18 09:06', category: 'dev-programming', publicTags: ['review', 'efficiency'], myTags: ['team'] },
+  { name: 'changelog-writer', namespace: 'dev', description: '从提交历史里收拾出一份能给人看的更新日志。', whenToUse: '要发版，需要一份给人读的更新说明的时候', source: 'created', state: 'live', version: '1.0.0', updated: '2026/10/09 08:15', category: 'content-creation', publicTags: ['doc-gen', 'writing'], myTags: ['client', 'this-week'] },
+  { name: 'sql-review', namespace: 'dev', description: '读一遍要上线的 SQL，把会锁表、会走全表扫的那几句挑出来。', whenToUse: '一条 SQL 要上生产之前', source: 'created', state: 'offline', version: '0.1.0', updated: '2026/04/12 10:05', category: 'dev-programming', publicTags: ['review', 'data'], myTags: [] },
+  { name: 'api-doc-writer', namespace: 'dev', description: '从路由定义里生成接口文档的草稿。', whenToUse: '接口改完，文档还没跟上的时候', source: 'created', state: 'live', version: '2.0.0', updated: '2026/08/30 17:41', category: 'office-efficiency', publicTags: ['doc-gen'], myTags: ['client'] },
+  { name: 'test-namer', namespace: 'dev', description: '给测试用例起一个能说明它在测什么的名字。', whenToUse: '写完一组测试，名字还是 test1 / test2 的时候', source: 'created', state: 'live', version: '1.0.2', updated: '2026/09/02 11:20', category: 'dev-programming', publicTags: ['test'], myTags: ['team'] },
+  { name: 'log-triage', namespace: 'dev', description: '把一段日志按「值得看」和「噪音」分开。', whenToUse: '线上出了事，日志一次刷出几千行的时候', source: 'created', state: 'live', version: '0.9.0', updated: '2026/10/01 22:05', category: 'it-ops-security', publicTags: ['ops', 'logs'], myTags: ['this-week'] },
+  { name: 'regex-explainer', namespace: 'dev', description: '把一条正则拆成人话。', whenToUse: '接手一条看不懂的正则的时候', source: 'created', state: 'live', version: '1.1.0', updated: '2026/07/14 10:02', category: 'dev-programming', publicTags: ['efficiency'], myTags: [] },
+  { name: 'dockerfile-review', namespace: 'dev', description: '检查 Dockerfile 里会拖慢构建或撑大镜像的写法。', whenToUse: '镜像越构建越慢、越做越大的时候', source: 'created', state: 'live', version: '0.3.0', updated: '2026/06/28 16:55', category: 'it-ops-security', publicTags: ['review', 'ops'], myTags: ['client'] },
+  { name: 'i18n-extract', namespace: 'dev', description: '从组件里把待翻译的字符串抽出来。', whenToUse: '一个页面要开始支持另一种语言的时候', source: 'created', state: 'live', version: '1.4.0', updated: '2026/09/25 13:12', category: 'content-creation', publicTags: ['translation'], myTags: [] },
   { name: 'perf-budget', namespace: 'dev', description: '给前端包体定一个不许越过的预算，并在 CI 里守住。', whenToUse: '包体开始悄悄变大的时候', source: 'created', state: 'draft', version: null, updated: '2026/10/05 19:30', category: null, publicTags: ['frontend', 'performance'], myTags: ['this-week'] },
-  { name: 'incident-notes', namespace: 'yuhan', description: '把一次故障的排查过程整理成时间线。', whenToUse: '故障处理完，要写复盘的时候', source: 'shared', standing: 'write', state: 'live', version: '0.2.1', updated: '2026/05/19 08:47', category: 'ops', publicTags: ['ops', 'replay'], myTags: ['team'] },
-  { name: 'schema-diff', namespace: 'yuhan', description: '比较两份数据库结构，说清差在哪。', whenToUse: '迁移前后要核对结构的时候', source: 'shared', standing: 'write', state: 'offline', version: '1.0.0', updated: '2026/08/11 15:09', category: 'data', publicTags: ['data'], myTags: [] },
-  { name: 'css-token-audit', namespace: 'yuhan', description: '找出散落在样式里的颜色和间距，归并成令牌。', whenToUse: '设计系统要收口，样式里却散着一堆颜色的时候', source: 'shared', standing: 'browse', state: 'live', version: '0.7.0', updated: '2026/09/09 12:33', category: 'design', publicTags: ['design-system', 'frontend'], myTags: [] },
-  { name: 'flaky-test-hunter', namespace: 'yuhan', description: '从失败记录里找出反复摇摆的那些用例。', whenToUse: 'CI 红一阵绿一阵，说不清是哪条用例的时候', source: 'shared', standing: 'browse', state: 'offline', version: '0.2.0', updated: '2026/10/08 21:14', category: 'dev', publicTags: ['test'], myTags: ['evaluate'] },
-  { name: 'env-doc', namespace: 'hexu', description: '把 .env 里每一项的用途问出来并写成文档。', whenToUse: '接手一个项目，配置项没人说得清的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.0.3', updated: '2026/07/02 09:58', category: 'doc', publicTags: ['docs', 'ops'], myTags: ['client'] },
-  { name: 'migration-check', namespace: 'hexu', description: '上线前检查这条迁移会不会锁表。', whenToUse: '一条迁移要在业务高峰上线之前', source: 'joined', standing: 'invoke', state: 'live', version: '0.5.0', updated: '2026/08/22 18:26', category: 'data', publicTags: ['data', 'ops'], myTags: [] },
-  { name: 'prompt-lint', namespace: 'zhao', description: '检查提示词里的歧义与自相矛盾。', whenToUse: '一段提示词效果不稳，想找原因的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.2.0', updated: '2026/10/03 07:44', category: 'writing', publicTags: ['writing'], myTags: ['evaluate'] },
-  { name: 'sdk-snippet', namespace: 'zhao', description: '从接口定义生成各语言的最小调用示例。', whenToUse: '文档里要放一段能直接跑的示例的时候', source: 'joined', standing: 'invoke', state: 'live', version: '0.1.0', updated: '2026/04/30 14:11', category: 'doc', publicTags: ['doc-gen'], myTags: [] },
-  { name: 'dead-code', namespace: 'qian', description: '找出没人再引用的模块和导出。', whenToUse: '一个仓库越背越重、想删点什么的时候', source: 'joined', standing: 'invoke', state: 'pending', version: '1.0.0', pendingUntil: '2026/12/11', updated: '2026/06/06 11:37', category: 'dev', publicTags: ['efficiency'], myTags: [] },
-  { name: 'release-notes', namespace: 'qian', description: '把一版里的变更写给用户看，不是写给提交者看。', whenToUse: '要对外发一版的时候', source: 'joined', standing: 'browse', state: 'live', version: '2.1.0', updated: '2026/09/14 16:20', category: 'writing', publicTags: ['writing', 'docs'], myTags: ['client', 'team', 'evaluate', 'this-week', 'archive', 'design-group'] },
-  { name: 'proto-review', namespace: 'qian', description: '审一遍 .proto 的改动，看有没有破坏兼容性。', whenToUse: '接口定义要改，还在兼容期的时候', source: 'joined', state: 'offline', version: '0.6.0', updated: '2026/07/27 13:05', category: 'dev', publicTags: ['review'], myTags: ['archive'] },
+  { name: 'incident-notes', namespace: 'yuhan', description: '把一次故障的排查过程整理成时间线。', whenToUse: '故障处理完，要写复盘的时候', source: 'shared', standing: 'write', state: 'live', version: '0.2.1', updated: '2026/05/19 08:47', category: 'it-ops-security', publicTags: ['ops', 'replay'], myTags: ['team'] },
+  { name: 'schema-diff', namespace: 'yuhan', description: '比较两份数据库结构，说清差在哪。', whenToUse: '迁移前后要核对结构的时候', source: 'shared', standing: 'write', state: 'offline', version: '1.0.0', updated: '2026/08/11 15:09', category: 'data-analysis', publicTags: ['data'], myTags: [] },
+  { name: 'css-token-audit', namespace: 'yuhan', description: '找出散落在样式里的颜色和间距，归并成令牌。', whenToUse: '设计系统要收口，样式里却散着一堆颜色的时候', source: 'shared', standing: 'browse', state: 'live', version: '0.7.0', updated: '2026/09/09 12:33', category: 'design-media', publicTags: ['design-system', 'frontend'], myTags: [] },
+  { name: 'flaky-test-hunter', namespace: 'yuhan', description: '从失败记录里找出反复摇摆的那些用例。', whenToUse: 'CI 红一阵绿一阵，说不清是哪条用例的时候', source: 'shared', standing: 'browse', state: 'offline', version: '0.2.0', updated: '2026/10/08 21:14', category: 'dev-programming', publicTags: ['test'], myTags: ['evaluate'] },
+  { name: 'env-doc', namespace: 'hexu', description: '把 .env 里每一项的用途问出来并写成文档。', whenToUse: '接手一个项目，配置项没人说得清的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.0.3', updated: '2026/07/02 09:58', category: 'office-efficiency', publicTags: ['docs', 'ops'], myTags: ['client'] },
+  { name: 'migration-check', namespace: 'hexu', description: '上线前检查这条迁移会不会锁表。', whenToUse: '一条迁移要在业务高峰上线之前', source: 'joined', standing: 'invoke', state: 'live', version: '0.5.0', updated: '2026/08/22 18:26', category: 'data-analysis', publicTags: ['data', 'ops'], myTags: [] },
+  { name: 'prompt-lint', namespace: 'zhao', description: '检查提示词里的歧义与自相矛盾。', whenToUse: '一段提示词效果不稳，想找原因的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.2.0', updated: '2026/10/03 07:44', category: 'content-creation', publicTags: ['writing'], myTags: ['evaluate'] },
+  { name: 'sdk-snippet', namespace: 'zhao', description: '从接口定义生成各语言的最小调用示例。', whenToUse: '文档里要放一段能直接跑的示例的时候', source: 'joined', standing: 'invoke', state: 'live', version: '0.1.0', updated: '2026/04/30 14:11', category: 'office-efficiency', publicTags: ['doc-gen'], myTags: [] },
+  { name: 'dead-code', namespace: 'qian', description: '找出没人再引用的模块和导出。', whenToUse: '一个仓库越背越重、想删点什么的时候', source: 'joined', standing: 'invoke', state: 'pending', version: '1.0.0', pendingUntil: '2026/12/11', updated: '2026/06/06 11:37', category: 'dev-programming', publicTags: ['efficiency'], myTags: [] },
+  { name: 'release-notes', namespace: 'qian', description: '把一版里的变更写给用户看，不是写给提交者看。', whenToUse: '要对外发一版的时候', source: 'joined', standing: 'browse', state: 'live', version: '2.1.0', updated: '2026/09/14 16:20', category: 'content-creation', publicTags: ['writing', 'docs'], myTags: ['client', 'team', 'evaluate', 'this-week', 'archive', 'design-group'] },
+  { name: 'proto-review', namespace: 'qian', description: '审一遍 .proto 的改动，看有没有破坏兼容性。', whenToUse: '接口定义要改，还在兼容期的时候', source: 'joined', state: 'offline', version: '0.6.0', updated: '2026/07/27 13:05', category: 'dev-programming', publicTags: ['review'], myTags: ['archive'] },
   /* **地址最长的那一条**：命名空间 18 字、名字 57 字（服务端上限 64）。行里放不下会截，预览里折行、不截——
      两个同名 skill 靠全名分得开，所以那一格一个字都不能吞。
      它同时是**既没有分类、也没有标签**的那一态：预览里那两行整行不画。 */
   { name: 'vendor-screenshot-annotator-with-region-notes-and-tickets', namespace: 'design-system-team', description: '在截图上圈出要说的那几处、补上说明，并把它们按区域登记成工单。', whenToUse: '提 bug 或写说明，需要指给人看的时候', source: 'shared', standing: 'write', state: 'live', version: '0.2.0', updated: '2026/10/10 09:40', category: null, publicTags: ['screenshot', 'design'], myTags: [] },
-  { name: 'bundle-triage', namespace: 'sun', description: '说清这次包体涨的那 40 KB 是谁带来的。', whenToUse: '包体突然变大，要找出是谁带进来的时候', source: 'joined', standing: 'browse', state: 'live', version: '0.3.0', updated: '2026/10/06 23:51', category: 'dev', publicTags: ['frontend', 'performance'], myTags: ['this-week'] },
-  { name: 'cron-translator', namespace: 'sun', description: '把 cron 表达式翻译成一句人话，或者反过来。', whenToUse: '接手一条 cron，看不出它到底几点跑的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.0.0', updated: '2026/05/08 20:19', category: 'ops', publicTags: ['ops', 'efficiency'], myTags: [] },
+  { name: 'bundle-triage', namespace: 'sun', description: '说清这次包体涨的那 40 KB 是谁带来的。', whenToUse: '包体突然变大，要找出是谁带进来的时候', source: 'joined', standing: 'browse', state: 'live', version: '0.3.0', updated: '2026/10/06 23:51', category: 'dev-programming', publicTags: ['frontend', 'performance'], myTags: ['this-week'] },
+  { name: 'cron-translator', namespace: 'sun', description: '把 cron 表达式翻译成一句人话，或者反过来。', whenToUse: '接手一条 cron，看不出它到底几点跑的时候', source: 'joined', standing: 'invoke', state: 'live', version: '1.0.0', updated: '2026/05/08 20:19', category: 'it-ops-security', publicTags: ['ops', 'efficiency'], myTags: [] },
 ]
 
 /** 「已删除」只含我创建的软删除 skill；共享与加入没有这一态（PRD 做 #9）。 */
 export const DELETED: LibrarySkill[] = [
-  { name: 'pdf-stamp', namespace: 'dev', description: '在 PDF 的每一页角上盖一个日期。', whenToUse: '需要证明这份 PDF 是什么时候拿到的时候', source: 'created', state: 'live', version: '1.0.4', updated: '2026/08/19 15:40', deleted: '2026/10/11 09:20', category: 'doc', publicTags: ['pdf'], myTags: [] },
-  { name: 'slug-check', namespace: 'dev', description: '提交前检查目录名与 skill 名是不是同一个。', whenToUse: '打包上传前，担心名字对不上时', source: 'created', state: 'live', version: '2.1.0', updated: '2026/05/02 11:08', deleted: '2026/09/30 17:02', category: 'dev', publicTags: ['efficiency'], myTags: [] },
+  { name: 'pdf-stamp', namespace: 'dev', description: '在 PDF 的每一页角上盖一个日期。', whenToUse: '需要证明这份 PDF 是什么时候拿到的时候', source: 'created', state: 'live', version: '1.0.4', updated: '2026/08/19 15:40', deleted: '2026/10/11 09:20', category: 'office-efficiency', publicTags: ['pdf'], myTags: [] },
+  { name: 'slug-check', namespace: 'dev', description: '提交前检查目录名与 skill 名是不是同一个。', whenToUse: '打包上传前，担心名字对不上时', source: 'created', state: 'live', version: '2.1.0', updated: '2026/05/02 11:08', deleted: '2026/09/30 17:02', category: 'dev-programming', publicTags: ['efficiency'], myTags: [] },
 ]
 
 /**
@@ -481,47 +484,179 @@ export const DEMO_USAGE = { bucket: '100+', calls: '1k+', lastUsed: '2026-11-05'
 export const DISCOVER: DiscoverSkill[] = [
   /* **边界样本，常驻在默认数据里。** 名字 61 字符、描述 160+ 字、九个公开标签、`128万+` 调用量——
      打开发现页第一眼就能看见这些极端值怎么排，不必再加一个查询参数。 */
-  { name: 'quarterly-financial-report-assembler-with-multi-currency-2026', namespace: 'dev', description: '把各业务线交来的季度报表合并成一份可对外发布的文档：统一币种与口径、校验合计、重排章节，并把表格与图表按同一套模板对齐。适合需要反复改数、跨币种汇总与审计留痕的季度汇报；输出 Word 与可复核的计算附件，每一步改动都留版本记录。', whenToUse: '几条业务线的季度数据要合成一份对外报告，币种、口径与章节都要重排的时候', version: '@1.0.0', updated: '2026/11/04', category: 'office', publicTags: ['report', 'table', 'data', 'doc-gen', 'conversion', 'writing', 'docs', 'efficiency', 'database'], inLibrary: null, callsBucket: '128万+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 6 },
-  { name: 'pdf-tools', namespace: 'dev', description: '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。', whenToUse: '手里有 PDF，要拆页、合并或压缩的时候', version: '@1.2.3', updated: '2026/10/07', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: 'created', callsBucket: '1k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 45 },
-  { name: 'pdf-splitter', namespace: 'yuhan', description: '按页、按书签或按分隔符把一份 PDF 切开。', whenToUse: '一份几百页的 PDF 只需要其中几段的时候', version: '@0.4.0', updated: '2026/09/21', category: 'doc', publicTags: ['pdf', 'batch'], inLibrary: null, callsBucket: '10k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 12 },
-  { name: 'slide-maker', namespace: 'hexu', description: '把一段 Markdown 排成 16:9 的演示文稿。', whenToUse: '有一份写好的文档，要拿去讲的时候', version: '@2.1.0', updated: '2026/10/02', category: 'doc', publicTags: ['presentation', 'writing'], inLibrary: 'joined', sources: [{ kind: 'official', label: '官方' }], joins: 31 },
-  { name: 'doc-translate', namespace: 'zhao', description: '把一份技术文档翻成另一种语言，术语表优先。', whenToUse: '文档要给另一种语言的读者看的时候', version: '@1.0.2', updated: '2026/08/15', category: 'writing', publicTags: ['translation', 'docs'], inLibrary: null, callsBucket: '2k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 120, state: 'pending', pendingUntil: '2026/12/11' },
-  { name: 'csv-cleaner', namespace: 'qian', description: '找出 CSV 里的空列、重复行与格式不一致的日期。', whenToUse: '拿到一份来路不明的表格，先要看它干不干净的时候', version: '@0.9.1', updated: '2026/07/30', category: 'data', publicTags: ['data', 'table'], inLibrary: 'shared' },
-  { name: 'report-builder', namespace: 'sun', description: '把一组查询结果排成一份周报。', whenToUse: '每周要交一份数字的时候', version: '@1.3.0', updated: '2026/09/05', category: 'data', publicTags: ['data', 'report'], inLibrary: null },
-  { name: 'screenshot-annotator', namespace: 'li', description: '在截图上圈出要说的那几处，并配上说明。', whenToUse: '提 bug 或写说明，需要指给人看的时候', version: '@0.2.0', updated: '2026/06/18', category: 'media', publicTags: ['screenshot', 'design'], inLibrary: null },
-  { name: 'api-compat-check', namespace: 'zhou', description: '比较两版接口定义，标出会破坏调用方的改动。', whenToUse: '接口要改，想知道谁会被打断的时候', version: '@1.1.1', updated: '2026/10/11', category: 'dev', publicTags: ['review', 'interface'], inLibrary: null },
+  { name: 'quarterly-financial-report-assembler-with-multi-currency-2026', namespace: 'dev', description: '把各业务线交来的季度报表合并成一份可对外发布的文档：统一币种与口径、校验合计、重排章节，并把表格与图表按同一套模板对齐。适合需要反复改数、跨币种汇总与审计留痕的季度汇报；输出 Word 与可复核的计算附件，每一步改动都留版本记录。', whenToUse: '几条业务线的季度数据要合成一份对外报告，币种、口径与章节都要重排的时候', version: '@1.0.0', updated: '2026/11/04', category: 'office-efficiency', publicTags: ['report', 'table', 'data', 'doc-gen', 'conversion', 'writing', 'docs', 'efficiency', 'database'], inLibrary: null, callsBucket: '128万+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 6 },
+  { name: 'pdf-tools', namespace: 'dev', description: '把 PDF 拆页、合并与压缩。加载后可用 split 与 merge 两个动作。', whenToUse: '手里有 PDF，要拆页、合并或压缩的时候', version: '@1.2.3', updated: '2026/10/07', category: 'office-efficiency', publicTags: ['pdf', 'batch'], inLibrary: 'created', callsBucket: '1k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 45 },
+  { name: 'pdf-splitter', namespace: 'yuhan', description: '按页、按书签或按分隔符把一份 PDF 切开。', whenToUse: '一份几百页的 PDF 只需要其中几段的时候', version: '@0.4.0', updated: '2026/09/21', category: 'office-efficiency', publicTags: ['pdf', 'batch'], inLibrary: null, callsBucket: '10k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 12 },
+  { name: 'slide-maker', namespace: 'hexu', description: '把一段 Markdown 排成 16:9 的演示文稿。', whenToUse: '有一份写好的文档，要拿去讲的时候', version: '@2.1.0', updated: '2026/10/02', category: 'office-efficiency', publicTags: ['presentation', 'writing'], inLibrary: 'joined', sources: [{ kind: 'official', label: '官方' }], joins: 31 },
+  { name: 'doc-translate', namespace: 'zhao', description: '把一份技术文档翻成另一种语言，术语表优先。', whenToUse: '文档要给另一种语言的读者看的时候', version: '@1.0.2', updated: '2026/08/15', category: 'content-creation', publicTags: ['translation', 'docs'], inLibrary: null, callsBucket: '2k+', sources: [{ kind: 'github', label: 'GitHub · coreyhaines31/marketingskills', url: 'https://github.com/coreyhaines31/marketingskills' }], joins: 120, state: 'pending', pendingUntil: '2026/12/11' },
+  { name: 'csv-cleaner', namespace: 'qian', description: '找出 CSV 里的空列、重复行与格式不一致的日期。', whenToUse: '拿到一份来路不明的表格，先要看它干不干净的时候', version: '@0.9.1', updated: '2026/07/30', category: 'data-analysis', publicTags: ['data', 'table'], inLibrary: 'shared' },
+  { name: 'report-builder', namespace: 'sun', description: '把一组查询结果排成一份周报。', whenToUse: '每周要交一份数字的时候', version: '@1.3.0', updated: '2026/09/05', category: 'data-analysis', publicTags: ['data', 'report'], inLibrary: null },
+  { name: 'screenshot-annotator', namespace: 'li', description: '在截图上圈出要说的那几处，并配上说明。', whenToUse: '提 bug 或写说明，需要指给人看的时候', version: '@0.2.0', updated: '2026/06/18', category: 'design-media', publicTags: ['screenshot', 'design'], inLibrary: null },
+  { name: 'api-compat-check', namespace: 'zhou', description: '比较两版接口定义，标出会破坏调用方的改动。', whenToUse: '接口要改，想知道谁会被打断的时候', version: '@1.1.1', updated: '2026/10/11', category: 'dev-programming', publicTags: ['review', 'interface'], inLibrary: null },
   /* 下面十六条让「为你推荐」真的滚得下去：一批六张，四批到底。它们的日期都排在 2026/07–10。 */
-  { name: 'md2html', namespace: 'yuhan', description: '把一段 Markdown 转成干净的 HTML 片段。', whenToUse: '要把文档贴进一个只认 HTML 的地方的时候', version: '@1.2.0', updated: '2026/10/12', category: 'doc', publicTags: ['docs', 'conversion'], inLibrary: null },
-  { name: 'sql-explain', namespace: 'qian', description: '把 EXPLAIN 的输出翻成人话，指出哪一步最贵。', whenToUse: '一条查询突然变慢，想先看它在哪一步卡住的时候', version: '@0.8.0', updated: '2026/10/08', category: 'data', publicTags: ['data', 'database'], inLibrary: null },
-  { name: 'test-gap', namespace: 'hexu', description: '对着行为清单找出没有测试覆盖的路径。', whenToUse: '准备发版，想先看哪块没测过的时候', version: '@0.3.2', updated: '2026/09/29', category: 'dev', publicTags: ['test'], inLibrary: null },
-  { name: 'color-audit', namespace: 'li', description: '把界面里用到的颜色列出来，标出重复与偏色。', whenToUse: '设计系统要收口之前', version: '@1.0.1', updated: '2026/09/26', category: 'design', publicTags: ['design-system'], inLibrary: null },
-  { name: 'meeting-notes', namespace: 'zhao', description: '把会议记录整理成决定、待办与负责人。', whenToUse: '会开完了，没人说得清决定了什么的时候', version: '@2.0.0', updated: '2026/09/19', category: 'office', publicTags: ['meeting', 'efficiency'], inLibrary: null },
-  { name: 'log-to-metrics', namespace: 'sun', description: '从日志里抽出可以画成图的指标。', whenToUse: '只有日志、没有监控的时候', version: '@0.5.0', updated: '2026/09/12', category: 'ops', publicTags: ['ops', 'monitoring'], inLibrary: null },
-  { name: 'image-alt', namespace: 'zhou', description: '给一批图片写替代文字，先说图里有什么。', whenToUse: '页面要做无障碍检查的时候', version: '@0.4.1', updated: '2026/09/08', category: 'media', publicTags: ['accessibility'], inLibrary: null },
-  { name: 'threat-model', namespace: 'wu', description: '对着数据流画一遍威胁模型，列出要补的边界。', whenToUse: '新功能上线前，想先过一遍风险的时候', version: '@1.1.0', updated: '2026/09/01', category: 'security', publicTags: ['security'], inLibrary: null },
-  { name: 'survey-coder', namespace: 'qian', description: '把开放式问卷的回答归成几类，并给出例子。', whenToUse: '收回来一堆文字答案，要看出规律的时候', version: '@0.6.3', updated: '2026/08/28', category: 'research', publicTags: ['research', 'data'], inLibrary: null },
-  { name: 'commit-split', namespace: 'hexu', description: '把一坨改动拆成几条说得清的提交。', whenToUse: '一个分支上堆了太多改动，要整理成提交的时候', version: '@1.3.0', updated: '2026/08/20', category: 'dev', publicTags: ['efficiency', 'review'], inLibrary: null },
-  { name: 'chart-picker', namespace: 'li', description: '按数据的样子推荐一种图表，并说明为什么。', whenToUse: '有数要展示，却不知道该画成什么的时候', version: '@0.2.0', updated: '2026/08/12', category: 'data', publicTags: ['design', 'data'], inLibrary: null },
-  { name: 'doc-lint', namespace: 'zhao', description: '检查文档里的断链、过期示例与不一致的术语。', whenToUse: '文档很久没动，要发出去之前', version: '@1.0.0', updated: '2026/08/06', category: 'doc', publicTags: ['docs', 'writing'], inLibrary: null },
-  { name: 'k8s-manifest-review', namespace: 'sun', description: '审一遍 Kubernetes 清单，指出会拖垮集群的写法。', whenToUse: '清单要 apply 到生产之前', version: '@0.7.1', updated: '2026/07/28', category: 'ops', publicTags: ['ops', 'security'], inLibrary: null },
-  { name: 'transcript-cut', namespace: 'yuhan', description: '把一段录音转写里的口头语和重复句去掉。', whenToUse: '访谈转写要整理成能读的文字的时候', version: '@1.2.2', updated: '2026/07/20', category: 'media', publicTags: ['writing', 'audio'], inLibrary: null },
-  { name: 'privacy-check', namespace: 'wu', description: '扫一遍字段，指出哪些是个人信息、该不该收。', whenToUse: '一张新表或一个新表单要上线之前', version: '@0.9.0', updated: '2026/07/11', category: 'security', publicTags: ['security', 'privacy'], inLibrary: null },
-  { name: 'release-brief', namespace: 'qian', description: '把一次发版整理成一页能给非技术读者看的说明。', whenToUse: '要对外解释这次改了什么的时候', version: '@1.4.0', updated: '2026/07/02', category: 'writing', publicTags: ['writing', 'docs'], inLibrary: null },
+  { name: 'md2html', namespace: 'yuhan', description: '把一段 Markdown 转成干净的 HTML 片段。', whenToUse: '要把文档贴进一个只认 HTML 的地方的时候', version: '@1.2.0', updated: '2026/10/12', category: 'office-efficiency', publicTags: ['docs', 'conversion'], inLibrary: null },
+  { name: 'sql-explain', namespace: 'qian', description: '连上数据库，把 EXPLAIN 的输出翻成人话，指出哪一步最贵。', whenToUse: '一条查询突然变慢，想先看它在哪一步卡住的时候', version: '@0.8.0', updated: '2026/10/08', category: 'data-analysis', publicTags: ['data', 'database'], inLibrary: null },
+  { name: 'test-gap', namespace: 'hexu', description: '对着行为清单找出没有测试覆盖的路径。', whenToUse: '准备发版，想先看哪块没测过的时候', version: '@0.3.2', updated: '2026/09/29', category: 'dev-programming', publicTags: ['test'], inLibrary: null },
+  { name: 'color-audit', namespace: 'li', description: '把界面里用到的颜色列出来，标出重复与偏色。', whenToUse: '设计系统要收口之前', version: '@1.0.1', updated: '2026/09/26', category: 'design-media', publicTags: ['design-system'], inLibrary: null },
+  { name: 'meeting-notes', namespace: 'zhao', description: '把会议记录整理成决定、待办与负责人。', whenToUse: '会开完了，没人说得清决定了什么的时候', version: '@2.0.0', updated: '2026/09/19', category: 'office-efficiency', publicTags: ['meeting', 'efficiency'], inLibrary: null },
+  { name: 'log-to-metrics', namespace: 'sun', description: '从日志里抽出可以画成图的指标。', whenToUse: '只有日志、没有监控的时候', version: '@0.5.0', updated: '2026/09/12', category: 'it-ops-security', publicTags: ['ops', 'monitoring'], inLibrary: null },
+  { name: 'image-alt', namespace: 'zhou', description: '给一批图片写替代文字，先说图里有什么。', whenToUse: '页面要做无障碍检查的时候', version: '@0.4.1', updated: '2026/09/08', category: 'design-media', publicTags: ['accessibility'], inLibrary: null },
+  { name: 'threat-model', namespace: 'wu', description: '对着数据流画一遍威胁模型，列出要补的边界。', whenToUse: '新功能上线前，想先过一遍风险的时候', version: '@1.1.0', updated: '2026/09/01', category: 'it-ops-security', publicTags: ['security'], inLibrary: null },
+  { name: 'survey-coder', namespace: 'qian', description: '把开放式问卷的回答归成几类，并给出例子。', whenToUse: '收回来一堆文字答案，要看出规律的时候', version: '@0.6.3', updated: '2026/08/28', category: 'knowledge-management', publicTags: ['research', 'data'], inLibrary: null },
+  { name: 'commit-split', namespace: 'hexu', description: '把一坨改动拆成几条说得清的提交。', whenToUse: '一个分支上堆了太多改动，要整理成提交的时候', version: '@1.3.0', updated: '2026/08/20', category: 'dev-programming', publicTags: ['efficiency', 'review'], inLibrary: null },
+  { name: 'chart-picker', namespace: 'li', description: '按数据的样子推荐一种图表，并说明为什么。', whenToUse: '有数要展示，却不知道该画成什么的时候', version: '@0.2.0', updated: '2026/08/12', category: 'data-analysis', publicTags: ['design', 'data'], inLibrary: null },
+  { name: 'doc-lint', namespace: 'zhao', description: '检查文档里的断链、过期示例与不一致的术语。', whenToUse: '文档很久没动，要发出去之前', version: '@1.0.0', updated: '2026/08/06', category: 'office-efficiency', publicTags: ['docs', 'writing'], inLibrary: null },
+  { name: 'k8s-manifest-review', namespace: 'sun', description: '审一遍 Kubernetes 清单，指出会拖垮集群的写法。', whenToUse: '清单要 apply 到生产之前', version: '@0.7.1', updated: '2026/07/28', category: 'it-ops-security', publicTags: ['ops', 'security'], inLibrary: null },
+  { name: 'transcript-cut', namespace: 'yuhan', description: '把一段录音转写里的口头语和重复句去掉。', whenToUse: '访谈转写要整理成能读的文字的时候', version: '@1.2.2', updated: '2026/07/20', category: 'design-media', publicTags: ['writing', 'audio'], inLibrary: null },
+  { name: 'privacy-check', namespace: 'wu', description: '扫一遍字段，指出哪些是个人信息、该不该收。', whenToUse: '一张新表或一个新表单要上线之前', version: '@0.9.0', updated: '2026/07/11', category: 'it-ops-security', publicTags: ['security', 'privacy'], inLibrary: null },
+  { name: 'release-brief', namespace: 'qian', description: '把一次发版整理成一页能给非技术读者看的说明。', whenToUse: '要对外解释这次改了什么的时候', version: '@1.4.0', updated: '2026/07/02', category: 'content-creation', publicTags: ['writing', 'docs'], inLibrary: null },
 ]
 
-/** 公域只搜不列：有关键词或分类才返回结果，两个都没有时是空数组（PRD #8）。 */
-export function searchPublic(query: string, tags: string[]): DiscoverSkill[] {
-  if (query.trim() === '' && tags.length === 0) return []
+/**
+ * **v65：预期结果与属性标签的演示替身。**
+ *
+ * 产品里它们来自平台的标签模型（`label_definition` + `skill_label`，见 ADR 0192），
+ * 不写在 `SKILL.md` 里；演示件没有服务端，所以按名字挂一份。
+ * 没有 profile 的 skill 就是「预期结果为空、属性为空」——结果行回退原描述，信息页不画这两块。
+ */
+export type LabelGroup = 'language' | 'os' | 'tool' | 'credential' | 'pricing'
+
+export interface LabelValue {
+  key: string
+  value: string
+  /** 维度显示名，如「运行环境」。 */
+  dimension: string
+  /** 胶囊上的短名，如「Python」「API key」。 */
+  valueLabel: string
+  /** 完整语义，放 tooltip 与读屏，如「需要 Python」「仅 macOS」。 */
+  fullLabel: string
+  /** 颜色与图标的类别。 */
+  group: LabelGroup
+  /** 默认 true；false 是「可展示、不可筛」的词，胶囊画成不可点的样子（v65）。 */
+  filterable?: boolean
+}
+
+export interface SkillProfile {
+  outcome?: string
+  labels?: LabelValue[]
+}
+
+const label = (
+  key: string,
+  value: string,
+  dimension: string,
+  valueLabel: string,
+  group: LabelGroup,
+  fullLabel: string = valueLabel,
+): LabelValue => ({ key, value, dimension, valueLabel, fullLabel, group })
+
+export const PROFILES: Record<string, SkillProfile> = {
+  'quarterly-financial-report-assembler-with-multi-currency-2026': {
+    outcome: '一份可对外发布的季度报告，以及可复核的计算附件。',
+    labels: [
+      label('runtime', 'python', '运行环境', 'Python', 'language', '需要 Python'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+  'pdf-tools': {
+    outcome: '一份拆好的 PDF，以及每页对应的原文页码。',
+    labels: [
+      label('runtime', 'python', '运行环境', 'Python', 'language', '需要 Python'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+  'slide-maker': {
+    outcome: '一份 16:9 的演示文稿，按你写好的文档排好。',
+    labels: [
+      label('runtime', 'prompt-only', '运行环境', '纯提示词', 'language'),
+      label('pricing_type', 'paid', '定价', '付费', 'pricing'),
+    ],
+  },
+  'csv-cleaner': {
+    outcome: '一份清干净的 CSV，附一份问题清单。',
+    labels: [
+      label('runtime', 'python', '运行环境', 'Python', 'language', '需要 Python'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+  'screenshot-annotator': {
+    outcome: '一张标好重点的截图，说明文字贴在圈出的位置旁边。',
+    labels: [
+      label('runtime', 'node', '运行环境', 'Node.js', 'language', '需要 Node.js'),
+      label('runtime', 'python', '运行环境', 'Python', 'language', '需要 Python'),
+      label('runtime', 'browser', '运行环境', '浏览器', 'tool', '需要浏览器'),
+      label('runtime', 'macos', '运行环境', 'macOS', 'os', '仅 macOS'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+  /* **多个属性、跨类别的样本**（2026-11-13 用户要求造数据）：
+     SQL 优化同时要语言、凭据、工具与定价；开发兼容性检查要语言、系统与工具。 */
+  'sql-explain': {
+    outcome: '一段能直接照着改的 SQL 优化建议，以及每一处改动的理由。',
+    labels: [
+      label('runtime', 'python', '运行环境', 'Python', 'language', '需要 Python'),
+      label('runtime', 'api-key', '运行环境', 'API key', 'credential', '需要 API key'),
+      label('runtime', 'database', '运行环境', '数据库', 'tool', '需要连接数据库服务'),
+      label('runtime', 'online-service', '运行环境', '在线服务', 'tool', '需要在线服务'),
+      label('pricing_type', 'paid', '定价', '付费', 'pricing'),
+    ],
+  },
+  'api-compat-check': {
+    outcome: '一份会被这次改版破坏的调用方清单，以及每一处的不兼容点。',
+    labels: [
+      label('runtime', 'java', '运行环境', 'Java', 'language', '需要 Java'),
+      label('runtime', 'linux', '运行环境', 'Linux', 'os', '仅 Linux'),
+      label('runtime', 'docker', '运行环境', 'Docker', 'tool', '运行时需要 Docker 引擎'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+  'color-audit': {
+    outcome: '一份颜色使用清单，标出重复、偏色与不合规的地方。',
+    labels: [
+      label('runtime', 'macos', '运行环境', 'macOS', 'os', '仅 macOS'),
+      label('runtime', 'node', '运行环境', 'Node.js', 'language', '需要 Node.js'),
+      label('runtime', 'browser', '运行环境', '浏览器', 'tool', '需要浏览器'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+  'test-gap': {
+    outcome: '一份没有测试覆盖的行为清单，按风险排好。',
+    labels: [
+      label('runtime', 'python', '运行环境', 'Python', 'language', '需要 Python'),
+      label('pricing_type', 'free', '定价', '免费', 'pricing'),
+    ],
+  },
+}
+
+export function profileOf(name: string): SkillProfile {
+  return PROFILES[name] ?? {}
+}
+
+/** 信息页默认演示的是 `pdf-tools`；它也是结果行与信息页两处共用的那一份。 */
+export const DEMO_PROFILE: SkillProfile = PROFILES['pdf-tools'] ?? {}
+
+/** 公域只搜不列：有关键词、分类或属性标签才返回结果，三者都没有时是空数组（PRD #8）。 */
+export function searchPublic(query: string, tags: string[], labels: string[] = []): DiscoverSkill[] {
+  if (query.trim() === '' && tags.length === 0 && labels.length === 0) return []
   const asked = query.trim().toLowerCase()
   return DISCOVER.filter((skill) => {
     /* 筛选可以同时选几个货架，取「或」：放宽，不是收窄；每个 skill 自己只在一个货架上。 */
     const byTag = tags.length === 0 ||
       (skill.category !== null && tags.includes(skill.category))
     if (!byTag) return false
+    const profile = profileOf(skill.name)
+    /* 属性标签取「且」：每个 `key:value` 都要命中。 */
+    const byLabel = labels.every((entry) => {
+      const [key, value] = entry.split(':')
+      return (profile.labels ?? []).some((item) => item.key === key && item.value === value)
+    })
+    if (!byLabel) return false
     if (asked === '') return true
-    /* 多词取「且」；匹配 name / description / when_to_use，以及**作者的公开标签**——
-       公开标签就是召回词（PRD §公开标签），搜它就该搜到。分类词不参与。 */
+    /* 多词取「且」；匹配 name / description / when_to_use、**预期结果**、**属性标签的短名与完整语义**，
+       以及**作者的公开标签**——公开标签就是召回词（PRD §公开标签），搜它就该搜到。 */
     const haystack = skill.name + ' ' + skill.description + ' ' + skill.whenToUse + ' ' +
+      (profile.outcome ?? '') + ' ' +
+      (profile.labels ?? []).map((item) => item.valueLabel + ' ' + item.fullLabel).join(' ') + ' ' +
       skill.publicTags.map(publicTagName).join(' ')
     return asked.split(/\s+/).every((word) => haystack.toLowerCase().includes(word))
   })
@@ -531,7 +666,7 @@ export function searchPublic(query: string, tags: string[]): DiscoverSkill[] {
  * 库内搜索：同样是这些字段。多个我的标签、多个公开标签取「且」（收窄）；几个分类取「或」
  * （同一个 skill 只在一个货架上，选两个货架就是「这两个里都行」）。
  *
- * `publicTags` 只由公开标签管理页那条计数链接用（「用在 N 个 skill 上」→ 去库里看这几个）。
+ * `publicTags` 只由公开标签管理页那一行的「查看 skill」链接用（去库里看这几个）。
  * 库的筛选条上没有公开标签这一项：它是召回词，不是整理自己的库的那把尺子。
  */
 export function matchesLibrary(

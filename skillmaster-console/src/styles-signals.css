@@ -42,10 +42,6 @@
   font-size: 15px;
   border-radius: var(--radius);
 }
-.discover-search .count {
-  flex: none;
-  font-size: 13px;
-}
 
 /* 推荐段：一行标题 + 一句「这一块给你什么、下一步做什么」，不带数量。 */
 .picks {
@@ -110,7 +106,11 @@
   grid-template-columns: 36px minmax(0, 1fr) minmax(132px, max-content);
   gap: 0 16px;
   align-items: start;
-  padding: 9px 18px;
+  /* **6 rows + the pager at 900 high** (v65): the third line now carries attributes as well as
+     tags, and a row whose third line is empty floors at 106 so the list does not jump. The
+     design's own numbers. */
+  padding: 11px 20px;
+  min-height: 106px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: background-color var(--ease);
@@ -229,7 +229,7 @@ span.result-avatar {
 
 /* **一行只留一句「它做什么」**：封顶一行，完整描述在 `title` 里。 */
 .result-title {
-  margin: 2px 0 0;
+  margin: 6px 0 0;
   font-size: 14px;
   line-height: 1.45;
   color: var(--muted);
@@ -319,11 +319,13 @@ span.result-avatar {
 .result-actions {
   grid-column: 3;
   grid-row: 1;
-  align-self: start;
+  align-self: stretch;
   margin-top: -5px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  /* The source mark hangs at the bottom right of the taller row (v65). */
+  justify-content: space-between;
 }
 .result-action-row {
   display: flex;
@@ -475,4 +477,181 @@ a.result-source-badge:focus-visible {
 .result-inlibrary svg {
   width: 22px;
   height: 22px;
+}
+
+/* ------------------------------------------------------------------ v65 · 属性标签与结果页头 */
+
+/* **属性按类别着色**（2026-11-13 用户定）：胶囊上只写短名（`Python`、`API key`、`macOS`），
+   完整语义留在词表数据里。类别靠颜色 + 图标分开；同一套色用在结果行、浮层与信息页。 */
+:root {
+  --attr-language: #2563eb;
+  --attr-language-tint: #eef4ff;
+  --attr-os: #7c3aed;
+  --attr-os-tint: #f3edff;
+  --attr-tool: #0f766e;
+  --attr-tool-tint: #e6f5f2;
+  --attr-credential: #b45309;
+  --attr-credential-tint: #fdf1e1;
+  --attr-pricing: #59636e;
+  --attr-pricing-tint: #eef1f4;
+}
+/* **阻拦项**（需要 API key / 运行环境 / 付费）：强调色 + 图标，与中性灰的分类胶囊分得开。
+   只在有阻拦时画；没有阻拦的 skill 不画这一颗。 */
+.chip.is-blocker,
+.chip.is-attr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--attr-tint, var(--accent-tint));
+  color: var(--attr-color, var(--accent));
+}
+.chip.is-blocker svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+a.chip.is-blocker,
+a.chip.is-attr {
+  text-decoration: none;
+}
+a.chip.is-blocker:hover,
+a.chip.is-attr:hover {
+  filter: brightness(0.97);
+}
+a.chip.is-blocker:focus-visible,
+a.chip.is-attr:focus-visible {
+  outline: 2px solid var(--attr-color, var(--accent));
+  outline-offset: 2px;
+}
+.chip.is-blocker[data-group="language"],
+.chip.is-attr[data-group="language"] {
+  --attr-color: var(--attr-language);
+  --attr-tint: var(--attr-language-tint);
+}
+.chip.is-blocker[data-group="os"],
+.chip.is-attr[data-group="os"] {
+  --attr-color: var(--attr-os);
+  --attr-tint: var(--attr-os-tint);
+}
+.chip.is-blocker[data-group="tool"],
+.chip.is-attr[data-group="tool"] {
+  --attr-color: var(--attr-tool);
+  --attr-tint: var(--attr-tool-tint);
+}
+.chip.is-blocker[data-group="credential"],
+.chip.is-attr[data-group="credential"] {
+  --attr-color: var(--attr-credential);
+  --attr-tint: var(--attr-credential-tint);
+}
+.chip.is-blocker[data-group="pricing"],
+.chip.is-attr[data-group="pricing"] {
+  --attr-color: var(--attr-pricing);
+  --attr-tint: var(--attr-pricing-tint);
+}
+
+/* **第三行：左属性、右公开标签**（v65）。属性回答「跑起来缺什么」，公开标签回答「它为什么被搜到」。 */
+.result-bottom {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: 8px;
+  min-height: 22px;
+}
+.result-attrs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 22px;
+}
+.result-tags {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+/* 属性的浮层条目：完整列表在结果行之外展开，行高不变。 */
+.tags-pop-attr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-decoration: none;
+}
+.tags-pop-attr svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: currentColor;
+}
+a.tags-pop-attr:hover {
+  text-decoration: underline;
+}
+a.tags-pop-attr:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.tags-pop-attr[data-group="language"] {
+  color: var(--attr-language);
+}
+.tags-pop-attr[data-group="os"] {
+  color: var(--attr-os);
+}
+.tags-pop-attr[data-group="tool"] {
+  color: var(--attr-tool);
+}
+.tags-pop-attr[data-group="credential"] {
+  color: var(--attr-credential);
+}
+.tags-pop-attr[data-group="pricing"] {
+  color: var(--attr-pricing);
+}
+
+/* **结果页有自己的头**（v65）：标题与筛了什么放在搜索框左边，清除放在右边；不额外占一行，
+   六行的结果页仍装得下。 */
+.discover-result-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+}
+.discover-clear {
+  flex: none;
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.discover-clear:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* 公域分页条不报总数：没有左边那一段，页码仍靠右。 */
+.pager.is-countless {
+  justify-content: flex-end;
+}
+/* 信息页的属性行在最下、兼容性之后；与别的正文块同一个间距。 */
+.info-attributes-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 22px;
+}
+#infoOutcome .info-text {
+  line-height: 1.6;
+}
+/* 公开标签只留入口，不留次数：入口是一句动作，不是一枚数字。 */
+.tag-action {
+  font-size: 13px;
+  color: var(--accent);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.tag-action:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

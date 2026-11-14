@@ -14,10 +14,13 @@ import SourceMark from './SourceMark'
  * them.
  *
  * **Three lines, everything else on the skill page** (2026-11-05): the name with its category,
- * one line of description, and the author's public tags. The row's tail carries the call bucket,
- * the reserved favourite, the join bookmark and the library count. License, 更新时间, 适用场景 and
- * the version moved to the information page, so a 1440-wide screen scans seven rows instead of two
- * cards.
+ * one line of the author's description, and a third line that is **attributes on the left and
+ * public tags on the right** (v65). The row's tail carries the call bucket, the reserved favourite,
+ * the join bookmark and the library count. License, 更新时间, 适用场景 and the version moved to the
+ * information page, so a 1440-wide screen scans seven rows instead of two cards.
+ *
+ * **The expected result does not go on this row** (v65): the row answers "what is this", and the
+ * description does that better than a one-line claim. The outcome is on the information page.
  *
  * **The action is one icon at the row's tail.** Joining is a bookmark: outlined when absent,
  * filled and accent-coloured once joined; pressing a filled one takes it back. A row already in
@@ -26,6 +29,67 @@ import SourceMark from './SourceMark'
  * right: it says where the skill came from, never how popular it is.
  */
 export type JoinState = 'idle' | 'busy' | 'failed'
+
+/**
+ * v65: the attribute group's icon — terminal (language), screen (OS), tool (tools and resources),
+ * key (credentials), price tag (pricing). **The colour comes from `data-group` in CSS**; the icon is
+ * what tells the groups apart for a reader who does not see colour.
+ */
+function BlockerIcon({ kind }: { kind: 'key' | 'runtime' | 'os' | 'tool' | 'price' }) {
+  if (kind === 'key') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="8.2" cy="8.2" r="3.6" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10.8 10.8 19 19M15.2 15.2l2-2M17.2 17.2l2-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  if (kind === 'runtime') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4.8 7.2l4.6 4.8-4.6 4.8M12.4 16.8h6.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (kind === 'os') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="3.5" y="4.5" width="17" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8.5 20h7M12 16.5V20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  if (kind === 'tool') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14.5 6.2a4 4 0 0 0-5 5L4.8 15.9a1.8 1.8 0 0 0 2.5 2.5l4.7-4.7a4 4 0 0 0 5-5l-2.6 2.6-2.4-2.4 2.5-2.7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3.8 20 8v8l-8 4.2L4 16V8l8-4.2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9.5 9.5h5M12 9.5v6M9.8 12.2h4.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** The group decides the icon; the colour comes from CSS via `data-group`. */
+function iconKind(group: string): 'key' | 'runtime' | 'os' | 'tool' | 'price' {
+  if (group === 'credential') return 'key'
+  if (group === 'os') return 'os'
+  if (group === 'tool') return 'tool'
+  if (group === 'pricing') return 'price'
+  return 'runtime'
+}
+
+/**
+ * v65: how many attribute chips the row shows before the rest become `+N`.
+ *
+ * **Three is the design's number** (PRD A13): a row is read to rule candidates out, and a fourth
+ * chip costs a line without changing that decision. The information page shows every one.
+ */
+const ATTR_CHIPS = 3
 
 /** Copy one address. `file://` and some test environments have no Clipboard API; fall back. */
 function copyText(text: string): Promise<void> {
@@ -142,28 +206,50 @@ export default function ResultCard({
   const shownTags = skill.public_tags.slice(0, 3)
   const moreTags = skill.public_tags.length - shownTags.length
 
-  /* **`+N` opens the full tag list in a popover** (2026-11-05): the row keeps three lines, so the
-     expansion hangs off the body at the button's position; outside click or Esc closes it. */
-  const [tagsOpen, setTagsOpen] = useState(false)
-  const moreRef = useRef<HTMLButtonElement>(null)
-  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null)
-  const toggleTags = () => {
-    if (tagsOpen) {
-      setTagsOpen(false)
+  /* **v65: the third line is attributes on the left, public tags on the right.** The attributes
+     answer "what will I need to run it"; the tags answer "why was this found". Each chip filters
+     the public results by that one attribute — the same address shape a category chip uses. */
+  const attributeChips = (skill.labels ?? []).map((label) => ({
+    id: label.key + ':' + label.value,
+    href:
+      '/discover?label=' + encodeURIComponent(label.key + ':' + label.value),
+    label: label.label,
+    group: label.group,
+    kind: iconKind(label.group),
+    /* A display-only word (`filterable: false`) has no link: the server would refuse the filter
+       as an unknown label. An older server omits the field, which reads as filterable. */
+    filterable: label.filterable !== false,
+  }))
+  const shownAttrs = attributeChips.slice(0, ATTR_CHIPS)
+  const hiddenAttrs = attributeChips.slice(ATTR_CHIPS)
+
+  /* **`+N` opens the rest in a popover** (2026-11-05; v65 adds attributes): the row keeps three
+     lines, so the expansion hangs off the body at the button's position; outside click or Esc
+     closes it. */
+  const [openMore, setOpenMore] = useState<{
+    kind: 'tags' | 'attrs'
+    left: number
+    top: number
+  } | null>(null)
+  const tagsRef = useRef<HTMLButtonElement>(null)
+  const attrsRef = useRef<HTMLButtonElement>(null)
+  const toggleMore = (kind: 'tags' | 'attrs', ref: { current: HTMLButtonElement | null }) => {
+    if (openMore?.kind === kind) {
+      setOpenMore(null)
       return
     }
-    const rect = moreRef.current?.getBoundingClientRect()
+    const rect = ref.current?.getBoundingClientRect()
     if (rect === undefined) {
       return
     }
-    setPopoverPos({
+    setOpenMore({
+      kind,
       left: Math.max(12, Math.min(rect.left, window.innerWidth - 356)),
       top: rect.bottom + 6,
     })
-    setTagsOpen(true)
   }
   useEffect(() => {
-    if (!tagsOpen) {
+    if (openMore === null) {
       return
     }
     const onDown = (event: MouseEvent) => {
@@ -174,11 +260,11 @@ export default function ResultCard({
       ) {
         return
       }
-      setTagsOpen(false)
+      setOpenMore(null)
     }
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setTagsOpen(false)
+        setOpenMore(null)
       }
     }
     document.addEventListener('mousedown', onDown)
@@ -187,7 +273,7 @@ export default function ResultCard({
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [tagsOpen])
+  }, [openMore])
 
   /* The library count: the joins already in the library; a row joined on this screen counts one
      more immediately, without waiting for the next read. */
@@ -276,9 +362,42 @@ export default function ResultCard({
         <p className="result-title" title={skill.description}>
           {skill.description}
         </p>
-        {/* **The third line is only the public tags** (2026-11-05): source and account count moved
-            to the information page; this line answers "why was this found". */}
+        {/* **v65: the third line is attributes on the left, public tags on the right**
+            (2026-11-13 用户定). The two answer different questions, so they no longer share one
+            `#` run. Source and account count stay on the information page. */}
         <div className="result-bottom">
+          <div className="result-attrs" aria-label="属性">
+            {shownAttrs.map((chip) =>
+              chip.filterable ? (
+                <a
+                  className="chip is-blocker"
+                  key={chip.id}
+                  href={chip.href}
+                  data-group={chip.group}
+                >
+                  <BlockerIcon kind={chip.kind} />
+                  {chip.label}
+                </a>
+              ) : (
+                <span className="chip is-blocker" key={chip.id} data-group={chip.group}>
+                  <BlockerIcon kind={chip.kind} />
+                  {chip.label}
+                </span>
+              ),
+            )}
+            {hiddenAttrs.length > 0 ? (
+              <button
+                type="button"
+                ref={attrsRef}
+                className="result-more"
+                aria-expanded={openMore?.kind === 'attrs'}
+                title={'显示全部 ' + attributeChips.length + ' 个属性'}
+                onClick={() => toggleMore('attrs', attrsRef)}
+              >
+                {'+' + hiddenAttrs.length}
+              </button>
+            ) : null}
+          </div>
           <div className="result-tags">
             {shownTags.map((tag) => (
               <span className="result-tag" key={tag.key}>
@@ -288,11 +407,11 @@ export default function ResultCard({
             {moreTags > 0 ? (
               <button
                 type="button"
-                ref={moreRef}
+                ref={tagsRef}
                 className="result-more"
-                aria-expanded={tagsOpen}
+                aria-expanded={openMore?.kind === 'tags'}
                 title={'显示全部 ' + skill.public_tags.length + ' 个公开标签'}
-                onClick={toggleTags}
+                onClick={() => toggleMore('tags', tagsRef)}
               >
                 {'+' + moreTags}
               </button>
@@ -308,26 +427,54 @@ export default function ResultCard({
           </p>
         ) : null}
       </div>
-      {tagsOpen && popoverPos !== null
-        ? createPortal(
+      {openMore === null
+        ? null
+        : createPortal(
             <div
               className="tags-pop"
               role="dialog"
-              aria-label="全部公开标签"
-              style={{ left: popoverPos.left, top: popoverPos.top }}
+              aria-label={openMore.kind === 'tags' ? '全部公开标签' : '全部属性'}
+              style={{ left: openMore.left, top: openMore.top }}
             >
-              <p className="tags-pop-head">{'公开标签 · ' + skill.public_tags.length}</p>
-              <div className="tags-pop-list">
-                {skill.public_tags.map((tag) => (
-                  <span className="tags-pop-tag" key={tag.key}>
-                    {'#' + tag.name}
-                  </span>
-                ))}
-              </div>
+              {openMore.kind === 'tags' ? (
+                <>
+                  <p className="tags-pop-head">{'公开标签 · ' + skill.public_tags.length}</p>
+                  <div className="tags-pop-list">
+                    {skill.public_tags.map((tag) => (
+                      <span className="tags-pop-tag" key={tag.key}>
+                        {'#' + tag.name}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="tags-pop-head">{'属性 · ' + attributeChips.length}</p>
+                  <div className="tags-pop-list">
+                    {attributeChips.map((chip) =>
+                      chip.filterable ? (
+                        <a
+                          className="tags-pop-attr"
+                          key={chip.id}
+                          href={chip.href}
+                          data-group={chip.group}
+                        >
+                          <BlockerIcon kind={chip.kind} />
+                          {chip.label}
+                        </a>
+                      ) : (
+                        <span className="tags-pop-attr" key={chip.id} data-group={chip.group}>
+                          <BlockerIcon kind={chip.kind} />
+                          {chip.label}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </>
+              )}
             </div>,
             document.body,
-          )
-        : null}
+          )}
       {/* **Three cells at the row's tail, each count under its icon** (2026-11-05): calls → the
           reserved favourite → join. The first two are facts; join is the action, and the source
           mark hangs at the bottom right. */}

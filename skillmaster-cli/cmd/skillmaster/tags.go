@@ -53,9 +53,12 @@ func tableCell(value string) string {
 
 // categoriesCmd prints the platform vocabulary in its own order.
 //
-// **The order is the vocabulary's, not this command's**: the ten words have a fixed position, and a
-// listing that re-sorted them by count would move a word every time somebody tagged a skill. That is
-// the difference between this table and `public-tags`, which is ordered by usage.
+// **The order is the vocabulary's, not this command's**: the thirteen words have a fixed position,
+// and a listing that re-sorted them by count would move a word every time somebody tagged a skill.
+// That is the difference between this table and `public-tags`, which is ordered by usage.
+//
+// **No public count** (v65): how large the public corpus is is an internal signal, and the console
+// stopped drawing these numbers in the same version. The table keeps one column.
 func categoriesCmd(ctx context.Context, args []string) error {
 	noLogin := false
 	for _, arg := range args {
@@ -85,9 +88,44 @@ func categoriesCmd(ctx context.Context, args []string) error {
 			// every row would be a column that says 「启用」 nine times (PRD §CLI 命令面).
 			name += "（停用）"
 		}
-		table = append(table, []string{name, strconv.Itoa(row.PublicTotal)})
+		table = append(table, []string{name})
 	}
-	printTable([]string{"分类", "公域"}, table)
+	printTable([]string{"分类"}, table)
+	return nil
+}
+
+// labelsCmd prints the attribute vocabulary (v65): one row per `dimension:value`, with the short name
+// a search result draws and the full sentence the extractor recorded.
+//
+// **This is the reader the `--label` filter points at.** The key column is the exact string
+// `skills search --label` takes, so the vocabulary and the filter cannot drift into two spellings.
+// No public count, for the same reason `categories` has none.
+func labelsCmd(ctx context.Context, args []string) error {
+	noLogin := false
+	for _, arg := range args {
+		switch arg {
+		case "--no-login":
+			noLogin = true
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return unknownFlag("skills labels", arg)
+			}
+			return usagef("skills labels 不接受参数；属性词表总是全部列出。%s", usageAt("skills labels"))
+		}
+	}
+
+	rows, err := authenticatedWith(ctx, noLogin, func(client api.Client) ([]api.LabelRow, error) {
+		return client.Labels(ctx)
+	})
+	if err != nil {
+		return v14Error(err)
+	}
+
+	table := make([][]string, 0, len(rows))
+	for _, row := range rows {
+		table = append(table, []string{row.DimensionName, row.Key, row.Short, row.Full})
+	}
+	printTable([]string{"维度", "键", "短名", "完整语义"}, table)
 	return nil
 }
 

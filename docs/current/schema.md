@@ -58,6 +58,12 @@
 | `my_skill_when_to_use` | M12 |
 | `my_skill_when_to_use_embedding` | M13 |
 | `user_feedback` | M18 |
+| `skill_category_mapping` | M12 |
+| `skill_category_assignment_snapshot` | M12 |
+| `label_definition` | M12 |
+| `label_extraction_run` | M12 |
+| `skill_label` | M12 |
+| `label_audit_sample` | M12 |
 
 ## `app_user`
 
@@ -195,6 +201,14 @@
 - `ever_published_at` — TEXT
 - `offline_pending_at` — TEXT
 - `offline_due_at` — TEXT
+- `outcome` — TEXT
+- `outcome_source` — TEXT
+- `outcome_confidence` — NUMERIC(3,2)
+- `outcome_evidence` — JSONB
+- `outcome_model` — TEXT
+- `outcome_model_version` — TEXT
+- `outcome_evaluated_version_id` — TEXT REFERENCES skill_version(id)
+- `outcome_updated_at` — TEXT
 
 ## `skill_version`
 
@@ -584,3 +598,71 @@
 - `archive_key` — TEXT
 - `archived_at` — TEXT
 - `created_at` — TEXT NOT NULL
+
+## `skill_category_mapping`
+
+- `old_key` — TEXT PRIMARY KEY
+- `new_key` — TEXT NOT NULL
+- `old_state` — TEXT NOT NULL
+- `old_sort_order` — INTEGER NOT NULL
+- `note` — TEXT
+
+## `skill_category_assignment_snapshot`
+
+- `skill_id` — TEXT PRIMARY KEY REFERENCES skill(id) ON DELETE CASCADE
+- `old_key` — TEXT NOT NULL
+- `migrated_at` — TIMESTAMPTZ NOT NULL
+
+## `label_definition`
+
+- `id` — TEXT PRIMARY KEY
+- `dimension_key` — TEXT NOT NULL
+- `dimension_name` — TEXT NOT NULL
+- `value` — TEXT NOT NULL
+- `label_short` — TEXT NOT NULL
+- `label_full` — TEXT NOT NULL
+- `group_key` — TEXT NOT NULL
+- `filterable` — BOOLEAN NOT NULL DEFAULT true
+- `state` — TEXT NOT NULL DEFAULT 'enabled'
+- `sort_order` — INTEGER NOT NULL
+- `created_at` — TEXT NOT NULL
+
+## `label_extraction_run`
+
+- `id` — TEXT PRIMARY KEY
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `version_id` — TEXT NOT NULL REFERENCES skill_version(id) ON DELETE CASCADE
+- `trigger` — TEXT NOT NULL
+- `status` — TEXT NOT NULL
+- `model` — TEXT
+- `model_version` — TEXT
+- `vocabulary_version` — TEXT
+- `started_at` — TEXT
+- `finished_at` — TEXT
+- `labels_written` — INTEGER
+- `error` — TEXT
+
+## `skill_label`
+
+- `id` — TEXT PRIMARY KEY
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `definition_id` — TEXT NOT NULL REFERENCES label_definition(id)
+- `run_id` — TEXT REFERENCES label_extraction_run(id) ON DELETE SET NULL
+- `source` — TEXT NOT NULL
+- `confidence` — NUMERIC(3,2) NOT NULL
+- `evidence` — JSONB NOT NULL
+- `model` — TEXT
+- `model_version` — TEXT
+- `vocabulary_version` — TEXT NOT NULL
+- `review_state` — TEXT NOT NULL DEFAULT 'auto'
+- `evaluated_version_id` — TEXT REFERENCES skill_version(id)
+- `created_at` — TEXT NOT NULL
+- `updated_at` — TEXT NOT NULL
+
+## `label_audit_sample`
+
+- `id` — TEXT PRIMARY KEY
+- `week` — TEXT NOT NULL
+- `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
+- `definition_id` — TEXT NOT NULL REFERENCES label_definition(id) ON DELETE CASCADE
+- `sampled_at` — TEXT NOT NULL

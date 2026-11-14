@@ -73,6 +73,35 @@ final class SqlFilters {
         return clauses.toString();
     }
 
+    /**
+     * "All of these platform attributes", addressed by definition id (v65).
+     *
+     * <p>The same read-model rule as the cards: only auto/confirmed claims count, and an agent
+     * claim counts only while it evaluates the current version. Only an operator's confirmed
+     * claim outlives versions.
+     */
+    static String labels(List<String> definitionIds, Map<String, Object> params) {
+        if (definitionIds == null || definitionIds.isEmpty()) {
+            return "";
+        }
+        StringBuilder clauses = new StringBuilder();
+        for (int i = 0; i < definitionIds.size(); i++) {
+            String name = "labelId" + i;
+            params.put(name, definitionIds.get(i));
+            // **The same rule the read model shows** (v65): a filter that can select a row the
+            // card never displays would be a silent lie. Agent claims speak for the version they
+            // evaluated; only an operator's confirmed decision outlives versions.
+            clauses.append(" AND EXISTS (SELECT 1 FROM skill_label l")
+                    .append(" WHERE l.skill_id = s.id AND l.definition_id = :").append(name)
+                    .append(" AND l.review_state IN ('auto','confirmed')")
+                    .append(" AND l.source IN ('agent','operator')")
+                    .append(" AND ((l.source = 'operator' AND l.review_state = 'confirmed')")
+                    .append(" OR (l.source = 'agent'")
+                    .append(" AND l.evaluated_version_id = s.current_version_id)))");
+        }
+        return clauses.toString();
+    }
+
     /** "All of these private tags", addressed by definition id; owner checked in the same clause. */
     static String myTags(List<String> definitionIds, Map<String, Object> params) {
         if (definitionIds == null || definitionIds.isEmpty()) {

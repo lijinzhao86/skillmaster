@@ -73,6 +73,8 @@ var refusedPerCommand = map[string]map[string]string{
 		"--limit":    "列表按一页 50 条读",
 		"--semantic": "列表不是检索",
 		"--exclude":  "排除只用于检索",
+		// v65: the attribute filter is a search question; the listing stays an inventory.
+		"--label": "属性筛只用于检索",
 	},
 	// **No page-action entry here any more** (v37). `--bump` belongs to `version publish` alone, and
 	// the other page actions reach the shared parser, which never mentions it: an unknown flag is

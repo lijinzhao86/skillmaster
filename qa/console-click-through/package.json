@@ -1,0 +1,12 @@
+{
+  "name": "console-click-through",
+  "private": true,
+  "type": "module",
+  "description": "v65 控制台点选验收：真实前端 + 真实服务端",
+  "scripts": {
+    "start": "node click-through.mjs"
+  },
+  "dependencies": {
+    "puppeteer-core": "25.17.0"
+  }
+}

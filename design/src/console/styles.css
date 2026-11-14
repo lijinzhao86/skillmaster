@@ -55,6 +55,19 @@
   --on-accent:#ffffff;
   --accent-tint:#eef4ff;
 
+  /* **属性标签按类别着色**（2026-11-13 用户定）：胶囊上只写短词（`Python`、`API key`、
+     `macOS`），完整语义放 tooltip / 读屏；类别靠颜色 + 图标分开。类别与词表见 ADR 0192。 */
+  --attr-language:#2563eb;
+  --attr-language-tint:#eef4ff;
+  --attr-os:#7c3aed;
+  --attr-os-tint:#f3edff;
+  --attr-tool:#0f766e;
+  --attr-tool-tint:#e6f5f2;
+  --attr-credential:#b45309;
+  --attr-credential-tint:#fdf1e1;
+  --attr-pricing:#59636e;
+  --attr-pricing-tint:#eef1f4;
+
   --danger:#b42318;
   --danger-tint:#fef3f2;
   /* 危险区域的边框：危险色的一档浅色。它是「这块有风险」的边界，不是一句提示，所以不跟着
@@ -525,7 +538,9 @@ code{font-family:var(--mono);font-size:0.92em}
    the end. */
 /* 「发现」与「我的标签」也是文档页：推荐段与标签列表都可能长过一屏，最后一行的下面要留出
    演示带的高度，滚到底时不会被它压住。 */
-#page-skill,#page-account,#page-discover,#page-my-tags{padding-bottom:64px}
+/* v65：信息页多了属性胶囊行与预期结果，页底呼吸从 64px 收到 24px，让这一页仍能一屏放下。 */
+#page-skill{padding-bottom:24px}
+#page-account,#page-discover,#page-my-tags{padding-bottom:64px}
 
 /* The list page's inset is not about the strip — it is where the pager lands, and the pager is the
    content column's foot in the same way the account block is the sidebar's. So it is set to put the
@@ -1040,6 +1055,19 @@ a.preview-name:hover{color:var(--accent);text-decoration:underline;text-underlin
 .chip .dot{width:6px;height:6px;border-radius:999px;background:currentColor;flex:none}
 .chip.is-live{background:var(--ok-tint);color:var(--ok)}
 .chip.is-plain{background:var(--wash);color:var(--muted)}
+/* **v65：阻拦项**（需要 API key / 运行环境 / 付费）：强调色 + 图标，与中性灰的分类胶囊分得开。
+   只在有阻拦时画；没有阻拦的 skill 不画这一颗。 */
+.chip.is-blocker,.chip.is-attr{display:inline-flex;align-items:center;gap:4px;background:var(--attr-tint,var(--accent-tint));color:var(--attr-color,var(--accent))}
+.chip.is-blocker svg{width:13px;height:13px;flex:none}
+/* 属性胶囊和分类胶囊同一套：可点、可发地址；悬停与键盘焦点都留回执。 */
+a.chip.is-blocker,a.chip.is-attr{text-decoration:none}
+a.chip.is-blocker:hover,a.chip.is-attr:hover{filter:brightness(.97)}
+a.chip.is-blocker:focus-visible,a.chip.is-attr:focus-visible{outline:2px solid var(--attr-color,var(--accent));outline-offset:2px}
+.chip.is-blocker[data-group="language"],.chip.is-attr[data-group="language"]{--attr-color:var(--attr-language);--attr-tint:var(--attr-language-tint)}
+.chip.is-blocker[data-group="os"],.chip.is-attr[data-group="os"]{--attr-color:var(--attr-os);--attr-tint:var(--attr-os-tint)}
+.chip.is-blocker[data-group="tool"],.chip.is-attr[data-group="tool"]{--attr-color:var(--attr-tool);--attr-tint:var(--attr-tool-tint)}
+.chip.is-blocker[data-group="credential"],.chip.is-attr[data-group="credential"]{--attr-color:var(--attr-credential);--attr-tint:var(--attr-credential-tint)}
+.chip.is-blocker[data-group="pricing"],.chip.is-attr[data-group="pricing"]{--attr-color:var(--attr-pricing);--attr-tint:var(--attr-pricing-tint)}
 
 /* ----------------------------------------------------------------- pager */
 
@@ -1064,6 +1092,8 @@ a.preview-name:hover{color:var(--accent);text-decoration:underline;text-underlin
   font-size:13px;
   color:var(--faint);
 }
+/* 公域分页条不报总数：没有左边那一段，页码仍靠右。 */
+.pager.is-countless{justify-content:flex-end}
 /* **每页几条（2026-10-31 用户定，与 WorkBuddy 的表格脚同一个排法）。** 计数在左、撑开整行；
    每页条数紧挨着页码，一起靠右。控件比页头的那些小一号：它是这条脚注上的一个数，不是筛选项。 */
 .pager .pager-size{
@@ -1501,6 +1531,8 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    所以四个标签看起来是一套东西；右栏是页面地面上的一行注释，没有边框、没有底色。
    两个栏因此不需要垂直分隔线，也不需要给右栏一个标题——物体与注释的差别本身就够了。 */
 .info-main{
+  --info-gap:22px;
+  --info-label-gap:6px;
   flex:1 1 460px;
   min-width:min(460px,100%);
   max-width:calc(68ch + 48px);
@@ -1564,9 +1596,14 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
    它们不该一个有装饰、一个没有——标题让读的人知道自己在读哪一项，也让以后加第三块时有位置可依。 */
 /* `~` 而不是 `+`：标签那个槽位在两者之间，虽然是空的，但它仍然是一个兄弟节点。 */
 .info-block ~ .info-block{margin-top:26px}
-/* **标题与正文之间要有一条看得见的分界。** 两块都是「一行小标题 + 一段正文」之后，整页看下来还是
-   一片字——小标题和正文只差四个字距，眼睛扫过去会连成一段。加一个标记，标题就有了一个起点；
-   标记用强调色，是这一页唯一的颜色，也是它和下面那条事实条分开的地方。 */
+/* **信息页的正文块只有一个间距**（2026-11-13 用户定）：描述、两个适用场景、预期结果、
+   兼容性与最后的属性胶囊都按同一个 `--info-gap` 分隔。预期结果不再单独收紧，两个适用场景
+   也不再单独 12px——节奏一致，比「每块看起来都差一点」更好读。 */
+.info-main > .info-block + .info-block,
+.info-main > .info-block + .info-attributes-row,
+.info-main > .info-attributes-row + .info-block{margin-top:var(--info-gap)}
+/* 标题与正文的默认间距是 10px；信息页用 `.info-main` 的 `--info-label-gap` 覆写成 6px，
+   让「组内紧、组间松」只发生在信息页，版本详情等别的页面保持原样。 */
 .info-label{
   display:flex;
   align-items:center;
@@ -1577,6 +1614,10 @@ a.pager-step:hover,a.pager-page:hover{color:var(--ink);background:var(--wash);te
   letter-spacing:0.04em;
   color:var(--muted);
 }
+.info-main .info-label{margin-bottom:var(--info-label-gap)}
+/* 我的适用场景的标题行自己有下间距；里面的 `.info-label` 不再重复加。 */
+.info-main .info-label-row{margin-bottom:var(--info-label-gap)}
+.info-main .info-label-row .info-label{margin-bottom:0}
 .info-icon{width:16px;height:16px;flex:0 0 auto;color:var(--accent)}
 .info-text{
   margin:0;
@@ -4165,6 +4206,14 @@ select.control{
   font-variant-numeric:tabular-nums;
   white-space:nowrap;
 }
+/* 公开标签只留入口，不留次数：入口是一句动作，不是一枚数字。 */
+.tag-action{
+  font-size:13px;
+  color:var(--accent);
+  white-space:nowrap;
+  text-decoration:none;
+}
+.tag-action:hover{text-decoration:underline;text-underline-offset:3px}
 .tag-acts{display:flex;align-items:center;gap:14px}
 .link-button.is-danger{color:var(--danger)}
 .link-button.is-danger:hover{color:var(--ink)}
@@ -4308,12 +4357,22 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
 }
 /* 下排：左边分类词、右边结果数。词多的时候横向滚，不换行、不把页头撑高。 */
 .discover-search form{flex:1 1 auto;min-width:0;display:flex}
-.discover-search .count{flex:none;font-size:13px}
 /* 推荐段：一行标题 + 一句「为什么是这些」，下面是同一张列表。 */
 .picks{margin-top:24px}
 .picks-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 .picks-title{font-size:19px;font-weight:600;line-height:1.35;color:var(--ink);letter-spacing:0.01em}
 .picks-note{margin:0;font-size:13px;line-height:1.6;color:var(--faint)}
+/* 搜索后的结果状态：标题与筛了什么放在搜索框左边，清除放在右边；它们不额外占一行，
+   结果页因此仍能在 900 高里装下六行。 */
+.discover-result-meta{display:flex;align-items:baseline;gap:8px;flex:none;min-width:0}
+.discover-clear{
+  flex:none;
+  font-size:13px;
+  color:var(--accent);
+  text-decoration:none;
+  white-space:nowrap;
+}
+.discover-clear:hover{text-decoration:underline;text-underline-offset:3px}
 .picks .results{margin-top:16px}
 /* 下一批：滑到底自动来，没有按钮——那一条既是取数的哨兵，也是加载中与到底这两句唯一的落点。 */
 .picks-more{display:flex;justify-content:center;min-height:40px;padding:24px 0 0}
@@ -4339,7 +4398,10 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
   grid-template-columns:36px minmax(0,1fr) minmax(132px,max-content);
   gap:0 16px;
   align-items:start;
-  padding:9px 18px;
+  /* **6 行 + 分页条 + 演示带在 900 高下的上限。** 第三行内容少时 min-height 兜到 106，
+     同一份列表的行高不跟着标签多少跳（v65，2026-11-13 用户定 6 行密度）。 */
+  padding:11px 20px;
+  min-height:106px;
   border-bottom:1px solid var(--line);
   cursor:pointer;
   transition:background-color var(--ease);
@@ -4382,7 +4444,7 @@ span.result-avatar{
 /* **一行只留一句「它做什么」**：封顶一行，完整的描述在 `title` 里。适用场景、版本号、加入数
    都移到 skill 信息页——它们回答的是点开之后的事。 */
 .result-title{
-  margin-top:2px;
+  margin-top:6px;
   font-size:14px;
   line-height:1.45;
   color:var(--muted);
@@ -4391,9 +4453,11 @@ span.result-avatar{
   -webkit-line-clamp:1;
   overflow:hidden;
 }
-/* **第三行只有公开标签**，从名字那条竖线开始；来源与账号数在信息页。 */
-.result-bottom{display:flex;align-items:baseline;gap:6px 20px;margin-top:2px;flex-wrap:wrap}
-.result-tags{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0}
+/* **第三行：左属性、右公开标签**（2026-11-13 用户定）。属性回答「跑起来缺什么」，
+   公开标签回答「它为什么被搜到」；两组各占一端，来源与账号数仍在信息页。 */
+.result-bottom{display:flex;align-items:center;justify-content:space-between;gap:8px 20px;margin-top:8px;flex-wrap:wrap;min-width:0;min-height:22px}
+.result-attrs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;min-height:22px}
+.result-tags{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0;margin-left:auto;justify-content:flex-end}
 .result-tag,.result-more{font-size:12px;line-height:1.4;color:var(--muted)}
 .result-more{
   padding:0;border:0;border-radius:3px;background:none;font:inherit;font-size:12px;line-height:1.4;
@@ -4410,13 +4474,23 @@ span.result-avatar{
 .tags-pop-head{margin:0;font-size:12px;color:var(--faint)}
 .tags-pop-list{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px;max-width:320px}
 .tags-pop-tag{font-size:12px;line-height:1.5;color:var(--muted)}
+.tags-pop-attr{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1.5;color:var(--muted)}
+.tags-pop-attr svg{width:13px;height:13px;flex:none;color:currentColor}
+a.tags-pop-attr{text-decoration:none}
+a.tags-pop-attr:hover{text-decoration:underline}
+a.tags-pop-attr:focus-visible{outline:2px solid currentColor;outline-offset:2px;border-radius:3px}
+.tags-pop-attr[data-group="language"]{color:var(--attr-language)}
+.tags-pop-attr[data-group="os"]{color:var(--attr-os)}
+.tags-pop-attr[data-group="tool"]{color:var(--attr-tool)}
+.tags-pop-attr[data-group="credential"]{color:var(--attr-credential)}
+.tags-pop-attr[data-group="pricing"]{color:var(--attr-pricing)}
 .result-category{margin-left:0;text-decoration:none}
 .result-category:hover{background:var(--wash);color:var(--ink)}
 /* 行尾三格：收藏（占位）· 累计调用量（只读）· 入库，数量都在图标正下方。
    来源标识折到右下角，最后一个的右边缘与入库那一格对齐。 */
 .result-actions{
-  grid-column:3;grid-row:1;align-self:start;margin-top:-5px;
-  display:flex;flex-direction:column;align-items:flex-end;
+  grid-column:3;grid-row:1;align-self:stretch;margin-top:-5px;
+  display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;
 }
 .result-action-row{display:flex;justify-content:flex-end;gap:10px}
 /* 来源标识是动作列的最下面一行，**在流里并保留高度**：行没有标签、高度只有两行时，
@@ -4508,6 +4582,10 @@ a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offs
 }
 .info-tags .filter-x:hover{color:var(--danger)}
 .info-group .info-tags{margin-top:0}
+#infoOutcome .info-text{line-height:1.6}
+/* **v65：属性在左栏最下、兼容性之后**（2026-11-13 用户定）：先读正文，最后看跑起来要什么。
+   它的上间距与别的正文块同一个 `--info-gap`，由上面的相邻选择器给。 */
+.info-attributes-row{display:flex;flex-wrap:wrap;gap:6px}
 .info-empty{margin:0;font-size:13px;color:var(--faint)}
 .info-note{margin:18px 0 0;font-size:13px;line-height:1.7;color:var(--muted)}
 
@@ -4604,6 +4682,10 @@ a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offs
   #page-discover .page-actions{width:100%}
   .discover-search{flex-wrap:wrap}
   .discover-search .search{flex:1 1 100%;max-width:none}
+  /* 结果状态先占一行：标题 / 筛了什么在左，清除在右；搜索框落到下一行。 */
+  .discover-result-meta{order:1;flex:1 1 auto}
+  .discover-clear{order:2;margin-left:auto}
+  .discover-search form{order:3;flex:1 1 100%}
   /* 窄屏：第三行的信号与标签各占一行，动作仍在右上；不横向滚。 */
   .result{grid-template-columns:32px minmax(0,1fr) minmax(108px,max-content);gap:0 10px}
   .result-avatar{width:32px;height:32px;border-radius:8px}

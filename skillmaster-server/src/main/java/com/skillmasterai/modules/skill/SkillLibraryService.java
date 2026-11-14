@@ -78,7 +78,10 @@ public final class SkillLibraryService {
      * @param offset used by the browser's page-number listing; the API passes null and a cursor
      */
     public record Query(String q, List<String> namespaceIds, List<String> categoryKeys,
-            List<String> myTagIds, List<String> publicTagKeys, List<String> sources, String show,
-            boolean byName, List<String> afterKey, Integer offset, int limit) {
+            List<String> myTagIds, List<String> publicTagKeys,
+            /** v65: attribute definitions, already resolved from `dimension:value` to ids. */
+            List<String> labelDefinitionIds,
+            List<String> sources, String show, boolean byName, List<String> afterKey,
+            Integer offset, int limit) {
     }
 }

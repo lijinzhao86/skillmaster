@@ -1783,7 +1783,7 @@ const chipOne = await chipsAt('?page=skills&sel=dev/changelog-writer')
 check(
   '预览：分类与我的标签各一行、各带自己的名字，都不再画状态与来源',
   chipOne.state === 0 && chipOne.categories.length === 1 &&
-    chipOne.categories[0] === '写作与翻译' &&
+    chipOne.categories[0] === '内容创作' &&
     chipOne.captions.join('|') === '分类|我的标签' &&
     chipOne.separate === true &&
     chipOne.tags.join(',') === '客户项目,这周要用',
@@ -2183,7 +2183,7 @@ check(
 
 /* **一个货架加一个我的标签，取「且」**（PRD #25）。每个 skill 只在一个货架上，所以分类那一侧
    是单值的；地址里写 id、界面上写名字。 */
-const tagged = await listAt('?page=skills&tag=doc&my-tag=client')
+const tagged = await listAt('?page=skills&tag=office-efficiency&my-tag=client')
 check(
   '筛选：公开分类与我的标签取「且」',
   tagged.names.join(',') === 'pdf-tools,api-doc-writer,env-doc',
@@ -2191,7 +2191,7 @@ check(
 )
 check(
   '筛选：两个条件各是一枚可去掉的胶囊',
-  tagged.filters.join(',') === '文档与演示,客户项目',
+  tagged.filters.join(',') === '办公效率,客户项目',
   tagged.filters.join(','),
 )
 check(
@@ -2209,10 +2209,10 @@ check(
 )
 
 /* 标签被删掉之后，旧地址仍然打得开：胶囊写「已删除的标签」，结果为空，清除入口还在。 */
-/* **公开标签只从管理页那条计数链接进来**：它是召回词，不是库的筛选条上的第三把下拉。 */
+/* **公开标签只从管理页那一行的入口进来**：它是召回词，不是库的筛选条上的第三把下拉。 */
 const publicFiltered = await listAt('?page=skills&public-tag=review')
 check(
-  '公开标签：管理页的计数链接筛出那几个 skill，含一个已下线的',
+  '公开标签：管理页的入口筛出那几个 skill，含一个已下线的',
   publicFiltered.names.join(',') === 'commit-lint,dockerfile-review,sql-review' &&
     publicFiltered.filters.join(',') === '#代码审查' &&
     publicFiltered.filterSelects.filter((label) => label === '我的标签').length === 1,
@@ -2227,14 +2227,14 @@ check(
 )
 
 /* **已删除那一份没有标签可筛**：`show=deleted` 时两组筛选整块不画。 */
-const deletedFilters = await listAt('?page=skills&show=deleted&tag=doc')
+const deletedFilters = await listAt('?page=skills&show=deleted&tag=office-efficiency')
 check(
   '已删除：标签筛选不画',
   deletedFilters.filterSelects.length === 0 && deletedFilters.filters.length === 0 && !deletedFilters.emptyShown,
   `${deletedFilters.filterSelects.length} 个控件 · ${deletedFilters.filters.length} 枚胶囊`,
 )
 /* **不生效的条件不留在地址里**（PRD #9）：三类标签参数一起清掉，链接分享出去不带死的筛选。 */
-await page.goto(base + '?page=skills&show=deleted&tag=doc&my-tag=client&public-tag=review', { waitUntil: 'load' })
+await page.goto(base + '?page=skills&show=deleted&tag=office-efficiency&my-tag=client&public-tag=review', { waitUntil: 'load' })
 await settle()
 const deletedAddress = await page.evaluate(() => {
   const query = new URLSearchParams(window.location.search)
@@ -2693,6 +2693,35 @@ const skillAt = async (query) => {
       return `${term} ${value}`
     }),
     infoTags: [...document.querySelectorAll('#infoTags .chip')].map((chip) => chip.textContent),
+    /* **v65：预期结果与属性标签**。预期结果排在适用场景之后；属性标签在右栏，每个值可点。 */
+    outcomeText: document.getElementById('infoOutcomeText')?.textContent?.trim() ?? null,
+    outcomeAfterWhen: (() => {
+      const when = document.getElementById('infoWhen')
+      const outcome = document.getElementById('infoOutcome')
+      return when !== null && outcome !== null && !outcome.hidden &&
+        Boolean(when.compareDocumentPosition(outcome) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })(),
+    attributes: [...document.querySelectorAll('.info-attributes-row .chip')].map((chip) => ({
+      value: chip.textContent ?? '',
+      href: chip.getAttribute('href'),
+      group: chip.dataset.group,
+    })),
+    attributesInMain: document.querySelector('.info-main .info-attributes-row') !== null,
+    attributesInRail: document.getElementById('infoAttributes') !== null,
+    attributesAtBottom: (() => {
+      const attrs = document.querySelector('.info-main .info-attributes-row')
+      const before = document.getElementById('infoEnv') ?? document.getElementById('infoMyWhen') ?? document.getElementById('infoOutcome')
+      return attrs !== null && before !== null &&
+        Boolean(before.compareDocumentPosition(attrs) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })(),
+    twoWhenAdjacent: (() => {
+      const when = document.getElementById('infoWhen')
+      const myWhen = document.getElementById('infoMyWhen')
+      const outcome = document.getElementById('infoOutcome')
+      return when !== null && myWhen !== null && outcome !== null &&
+        Boolean(when.compareDocumentPosition(myWhen) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+        Boolean(myWhen.compareDocumentPosition(outcome) & Node.DOCUMENT_POSITION_FOLLOWING)
+    })(),
     /* **三层词是三件事**（v14；公开标签 2026-10-23 画进设计稿）：公开分类给所有能看见这个
        skill 的人看，公开标签也公开、但只有作者能改，我的标签只在库条目生效时才有那一区。
        编辑入口各一个，且只在该出现的时候出现。 */
@@ -4126,7 +4155,7 @@ check(
 /* 「信息」回答的是「要不要用它」：做什么、什么时候用、跑不跑得动、会动用什么、哪一版。
    许可、digest、`metadata` 的原文不在这里——它们是作者要的细节，在 设置 › 详细信息。 */
 check(
-  '调用：「信息」左栏读、右栏瞥——描述 / 适用场景 / 我的适用场景 / 运行环境，两块同档',
+  '调用：「信息」左栏读、右栏瞥——描述 / 适用场景 / 我的适用场景 / 兼容性，两块同档',
   asInvoke.infoDesc.startsWith('把 PDF 拆页、合并与压缩。') &&
     /* 我写的那段是 200 字（贴着产品上限），不是作者的 341 字。 */
     asInvoke.infoMyWhen?.startsWith('当我说「循环审计」「过一遍合同」') &&
@@ -4144,10 +4173,12 @@ check(
   !/Bash|Read/.test(asInvoke.infoText),
   asInvoke.infoText.slice(0, 60),
 )
-/* 左栏共四段，同一种排法：标记 + 小标题 + 正文。两块适用场景同档，作者那块不是附注。 */
+/* 左栏共五段，同一种排法：标记 + 小标题 + 正文。两个适用场景相邻，预期结果在它们之后；
+   兼容性最后一段；属性胶囊在兼容性之后、没有小标题。 */
 check(
-  '左栏四段各有小标题，排法一致',
-  asInvoke.infoLabels.join(',') === '描述,适用场景,我的适用场景,运行环境',
+  '左栏五段各有小标题，两个适用场景相邻，预期结果在它们之后',
+  asInvoke.infoLabels.join(',') === '描述,适用场景,我的适用场景,预期结果,兼容性' &&
+    asInvoke.twoWhenAdjacent,
   asInvoke.infoLabels.join(','),
 )
 /* **没写过与正在写**（v59）：空态要给一个「添加」，点开是卡片里的 textarea——不是弹窗；
@@ -4344,8 +4375,23 @@ check(
    我的标签是第三个容器，只在库条目生效时出现。 */
 check(
   '公开分类：能看见这个 skill 的人都看得到，调用档没有添加入口',
-  asInvoke.infoTags.join(',') === '文档与演示' && !asInvoke.railTagsHidden && !asInvoke.editCategories,
+  asInvoke.infoTags.join(',') === '办公效率' && !asInvoke.railTagsHidden && !asInvoke.editCategories,
   `${asInvoke.infoTags.join(',')} · 添加入口 ${asInvoke.editCategories}`,
+)
+check(
+  '信息页：预期结果排在适用场景之后，显示一句主张',
+  asInvoke.outcomeText !== null && asInvoke.outcomeText.includes('拆好的 PDF') && asInvoke.outcomeAfterWhen,
+  `${asInvoke.outcomeText} · 在适用场景之后 ${asInvoke.outcomeAfterWhen}`,
+)
+check(
+  '信息页：属性在左栏最下、兼容性之后，右栏不再重复；只画短名，默认值不画',
+  asInvoke.attributesInMain && !asInvoke.attributesInRail && asInvoke.attributesAtBottom &&
+    asInvoke.attributes.length === 1 &&
+    asInvoke.attributes[0].value === 'Python' &&
+    asInvoke.attributes[0].group === 'language' &&
+    asInvoke.attributes[0].href === '?page=discover&label=runtime:python' &&
+    !asInvoke.attributes.some((row) => row.value === '纯提示词' || row.value === '免费'),
+  asInvoke.attributes.map((row) => `${row.value}/${row.group}`).join(' · '),
 )
 const ownerInfo = await skillAt('?page=skill')
 check(
@@ -4404,17 +4450,18 @@ const catMenu = await page.evaluate(() => ({
   options: [...document.querySelectorAll('#page-skill .menu-list:not([hidden]) .menu-item:not(.menu-clear)')].length,
   checked: [...document.querySelectorAll('#page-skill .menu-list:not([hidden]) .menu-item[aria-selected="true"] .menu-label')]
     .map((el) => el.textContent),
+  numbers: document.querySelectorAll('#page-skill .menu-list:not([hidden]) .menu-number').length,
   multiselect: document.querySelector('#page-skill .menu-list:not([hidden])')
     ?.getAttribute('aria-multiselectable') ?? null,
   dialog: document.querySelector('#categoriesDialog') !== null,
   stoppedDisabled: document.querySelector('#page-skill .menu-list:not([hidden]) .menu-item[data-value="ops"]')?.disabled ?? null,
 }))
 check(
-  '公开分类：点「+」开单选菜单（不是弹窗、不多选），词表十条、已经贴着的带勾',
-  catMenu.expanded === 'true' && catMenu.options === 10 &&
-    catMenu.checked.join(',') === '文档与演示' && !catMenu.dialog &&
+  '公开分类：点「+」开单选菜单（不是弹窗、不多选），词表十四条（13 + 1 停用旧词）、不显示公域计数、已经贴着的带勾',
+  catMenu.expanded === 'true' && catMenu.options === 14 &&
+    catMenu.checked.join(',') === '办公效率' && catMenu.numbers === 0 && !catMenu.dialog &&
     !catMenu.multiselect,
-  `${catMenu.options} 条 · 勾 ${catMenu.checked.join(',')} · 多选 ${catMenu.multiselect}`,
+  `${catMenu.options} 条 · 勾 ${catMenu.checked.join(',')} · 计数 ${catMenu.numbers} · 多选 ${catMenu.multiselect}`,
 )
 /* 停用的词不可新增：它不在这一行里，所以是禁用而不是隐藏。 */
 check(
@@ -4434,19 +4481,19 @@ check(
   stoppedCurrent.chip === '运维与云' && stoppedCurrent.disabled === false,
   `${stoppedCurrent.chip} · 禁用 ${stoppedCurrent.disabled}`,
 )
-await page.click('#page-skill .menu-list:not([hidden]) .menu-item[data-value="doc"]')
+await page.click('#page-skill .menu-list:not([hidden]) .menu-item[data-value="office-efficiency"]')
 await settle()
 const stoppedReplaced = await page.evaluate(() =>
   document.querySelector('#infoTags .chip')?.textContent.trim() ?? '')
 check(
   '公开分类：停用词可以换成另一个货架（换走不是清除）',
-  stoppedReplaced === '文档与演示',
+  stoppedReplaced === '办公效率',
   stoppedReplaced,
 )
 /* 换走之后菜单已经关上；回到原来那条流程，把它重新打开。 */
 await page.click('#editCategories')
 await settle()
-await page.click('#page-skill .menu-list:not([hidden]) .menu-item[data-value="data"]')
+await page.click('#page-skill .menu-list:not([hidden]) .menu-item[data-value="data-analysis"]')
 await settle()
 const catPicked = await page.evaluate(() => ({
   chips: [...document.querySelectorAll('#infoTags .chip')].map((el) => el.textContent.trim()).join(','),
@@ -4455,20 +4502,20 @@ const catPicked = await page.evaluate(() => ({
 }))
 check(
   '公开分类：单选——点另一个就替换掉原来的，菜单随即关上',
-  catPicked.chips === '数据与分析' && !catPicked.menuOpen && catPicked.trigger === 'data',
+  catPicked.chips === '数据分析' && !catPicked.menuOpen && catPicked.trigger === 'data-analysis',
   JSON.stringify(catPicked),
 )
 await page.click('#editCategories')
 await settle()
 const catAgain = await page.evaluate(() => {
-  document.querySelector('#page-skill .menu-list:not([hidden]) .menu-item[data-value="data"]')?.click()
+  document.querySelector('#page-skill .menu-list:not([hidden]) .menu-item[data-value="data-analysis"]')?.click()
   return true
 })
 await settle()
 check(
   '公开分类：点已经选着的那一个不会把它拿掉（单选，不是开关）',
   (await page.evaluate(() =>
-    [...document.querySelectorAll('#infoTags .chip')].map((el) => el.textContent.trim()).join(','))) === '数据与分析',
+    [...document.querySelectorAll('#infoTags .chip')].map((el) => el.textContent.trim()).join(','))) === '数据分析',
   String(catAgain),
 )
 await page.click('#editCategories')
@@ -4612,7 +4659,7 @@ check(
   (await skillAt('?page=skill&tab=settings&sub=details')).details.map((r) => r.split(' ')[0]).join(','),
 )
 /* 许可与来源在 v49 回到了信息页，但只在右栏那一条默认收起的「来源与许可」里；调用档读到的
-   仍是描述、适用场景、运行环境三块散文，digest 也仍然只在作者面。 */
+   仍是描述、适用场景、兼容性三块散文，digest 也仍然只在作者面。 */
 check(
   '调用：「信息」里没有 digest；许可只在右栏那一条收起的展开里',
   !/sha256/.test(asInvoke.infoText) && asInvoke.sourceOpen === false,
@@ -7693,10 +7740,21 @@ discoverGroup: {
         nameHref: card.querySelector('.result-name')?.getAttribute('href') ?? null,
         copyLabel: card.querySelector('.result-copy')?.getAttribute('aria-label') ?? null,
         title: card.querySelector('.result-title')?.textContent ?? '',
+        blocker: card.querySelector('.chip.is-blocker')?.textContent.trim() ?? '',
+        blockers: [...card.querySelectorAll('.chip.is-blocker')].map((el) => el.textContent.trim()),
+        headBlockers: card.querySelectorAll('.result-head .chip.is-blocker').length,
+        attrsInBottom: card.querySelectorAll('.result-bottom .result-attrs .chip.is-blocker').length,
+        attrGroups: [...card.querySelectorAll('.result-bottom .result-attrs .chip.is-blocker')].map((el) => el.dataset.group),
+        attrHrefs: [...card.querySelectorAll('.result-bottom .result-attrs .chip.is-blocker')].map((el) => el.getAttribute('href')),
+        tagsInBottom: card.querySelectorAll('.result-bottom .result-tags .result-tag').length,
+        attrsMore: card.querySelector('.result-attrs .result-more')?.textContent.trim() ?? null,
         tags: [...card.querySelectorAll('.result-head .result-category')].map((chip) => chip.textContent),
         categoryHref: card.querySelector('.result-head .result-category')?.getAttribute('href') ?? null,
+        outcomeLabel: card.querySelector('.result-outcome-label')?.textContent.trim() ?? '',
+        outputChip: card.querySelector('.result-output')?.textContent.trim() ?? '',
+        outputHref: card.querySelector('.result-output')?.getAttribute('href') ?? null,
         publicTags: [...card.querySelectorAll('.result-tags .result-tag')].map((el) => el.textContent),
-        moreTags: card.querySelector('.result-more')?.textContent.trim() ?? null,
+        moreTags: card.querySelector('.result-tags .result-more')?.textContent.trim() ?? null,
         rowHeight: Math.round(card.getBoundingClientRect().height),
         nameHeight: Math.round(card.querySelector('.result-name').getBoundingClientRect().height),
         inLibrary: card.querySelector('.result-inlibrary .visually-hidden')?.textContent.replace(/\s+/g, ' ').trim() ?? null,
@@ -7764,14 +7822,19 @@ discoverGroup: {
       heroButton: document.querySelector('#page-discover .discover-search .button') !== null,
       heroIcon: document.querySelector('#page-discover .discover-search .search > svg') !== null,
       heroInHead: document.querySelector('#page-discover .page-head #discoverQuery') !== null,
-      heroCount: document.querySelector('#page-discover .discover-search .count')?.textContent.trim() ?? null,
       note: document.querySelector('#discoverPicks .picks-note')?.textContent.trim() ?? '',
       /* v19：结果区自己的那一行说明（降级时说的），以及分页条在不在。 */
       resultNote: document.querySelector('#discoverNote')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
+      headTitle: document.querySelector('#discoverResultsHead .picks-title')?.textContent.trim() ?? null,
+      headNote: document.querySelector('#discoverResultsHead .picks-note')?.textContent.trim() ?? null,
+      headClear: document.querySelector('#page-discover .discover-clear')?.getAttribute('href') ?? null,
       pager: document.querySelector('#page-discover .pager') !== null,
+      pagerCount: document.querySelector('#discoverPager .pager-count')?.textContent.trim() ?? null,
       picks: [...document.querySelectorAll('#discoverPicks .result')].map((card) => ({
         name: card.querySelector('.result-name').textContent.replace(/\s+/g, ' ').trim(),
         nameHref: card.querySelector('.result-name')?.getAttribute('href') ?? null,
+        title: card.querySelector('.result-title')?.textContent ?? '',
+        outcomeLabel: card.querySelector('.result-outcome-label')?.textContent.trim() ?? '',
         joinAction: card.querySelector('.result-actions .result-join')?.textContent.trim() ?? null,
         inLibrary: card.querySelector('.result-inlibrary') !== null,
       })),
@@ -7791,9 +7854,21 @@ discoverGroup: {
     `${first.title}${first.titleHidden ? '（只给读屏）' : ''} · 搜索在页头 ${first.heroInHead} · 推荐 ${first.picks.length}`,
   )
   check(
+    '发现：推荐列表第二行用作者描述，不显示「预期结果」',
+    first.picks.length > 0 &&
+      first.picks.every((card) => card.outcomeLabel === '') &&
+      first.picks[0].title.includes('把各业务线'),
+    `${first.picks.length} 张 · ${first.picks[0]?.title.slice(0, 34)}`,
+  )
+  check(
     '发现：分类不再铺成筛选项',
     first.hasRail === false,
     `分类栏 ${first.hasRail}`,
+  )
+  check(
+    '发现：推荐页没有结果头，只有结果页才有',
+    first.headTitle === null && first.headNote === null && first.headClear === null,
+    `${first.headTitle} / ${first.headNote} / ${first.headClear}`,
   )
   /* **推荐是一条可以往下走的流**：只挑还没在库里的，按最近更新倒序，一批六张；六张铺不满一屏
      时首屏立刻补齐第二批——否则推荐会在下面停住、整块页面空着。 */
@@ -7911,12 +7986,12 @@ discoverGroup: {
     results.cards.length === 2 &&
       results.cards[0].name === 'dev/pdf-tools' &&
       results.cards[0].copyLabel === '复制地址' &&
-      results.cards[0].tags.join(',') === '文档与演示' &&
-      results.cards[0].categoryHref === '?page=discover&tag=doc' &&
+      results.cards[0].tags.join(',') === '办公效率' &&
+      results.cards[0].categoryHref === '?page=discover&tag=office-efficiency' &&
       results.cards[0].nameHref === '?page=skill&in=created' &&
       results.cards[1].nameHref === '?page=skill&in=visible' &&
       results.cards[0].publicTags.join(',') === '#PDF,#批量处理' &&
-      results.cards[0].title.includes('把 PDF') &&
+      results.cards[0].title.includes('拆页、合并与压缩') &&
       results.cards[0].hasSourceLine === false &&
       results.cards[0].avatarText === 'P' && results.cards[0].avatarTone === '2' &&
       results.cards[1].avatarText === 'P' && results.cards[1].avatarTone === '4' &&
@@ -7924,6 +7999,23 @@ discoverGroup: {
       results.cards[0].favoriteOff && results.cards[0].favoriteCount === '—' &&
       results.cards[0].libraryCount === '45',
     `${results.cards.length} 行 · ${results.cards[0]?.name} · 标签 ${results.cards[0]?.publicTags.join(' ')} · 入库 ${results.cards[0]?.libraryCount}`,
+  )
+  check(
+    '发现：结果行只显示作者描述，不再出现「预期结果」标签',
+    results.cards[0].outcomeLabel === '' &&
+      results.cards[0].title.includes('拆页、合并与压缩') &&
+      results.cards[0].outputChip === '' &&
+      results.cards[0].outputHref === null &&
+      results.cards[0].blockers.join(',') === 'Python' &&
+      !results.cards[0].blockers.includes('免费') &&
+      results.cards[0].headBlockers === 0 &&
+      results.cards[0].attrsInBottom === 1 &&
+      results.cards[0].attrHrefs.join(',') === '?page=discover&label=runtime:python' &&
+      results.cards[0].tagsInBottom === 2 &&
+      results.cards[1].outcomeLabel === '' &&
+      results.cards[1].blocker === '' &&
+      results.cards[1].title.includes('按页、按书签'),
+    `${results.cards[0].outcomeLabel} · ${results.cards[0].title} · ${results.cards[1].outcomeLabel} · ${results.cards[1].title}`,
   )
   check(
     '发现：行尾一格是调用量、收藏、入库；调用量在收藏左边且不像控件',
@@ -7951,7 +8043,12 @@ discoverGroup: {
       rampCard.cards[0].joinAction === null,
     JSON.stringify({ chips: rampCard.cards[0]?.chips, join: rampCard.cards[0]?.joinAction }),
   )
-  check('发现：结果数量在标题旁边', results.count === '2 个结果', results.count)
+  check(
+    '发现：结果页有自己的头，说明这是搜索结果，并给「清除」出口；不报结果条数',
+    results.count === '' && results.headTitle === '搜索结果' &&
+      results.headNote === '按相关度排序' && results.headClear === '?page=discover',
+    `${results.headTitle} · ${results.headNote} · 清除 ${results.headClear} · 计数 ${results.count}`,
+  )
 
   /* **整行可点**：点在说明这种非控件的位置，走名字那条路进 skill 页。 */
   await Promise.all([
@@ -8012,6 +8109,7 @@ discoverGroup: {
       edge.cards[0].publicTags.join(',') === '#报表,#表格,#数据' &&
       edge.cards[0].moreTags === '+6' &&
       edge.cards[0].callsCount === '128万+' &&
+      edge.cards[0].blocker === 'Python' &&
       edge.cards[0].nameHeight <= 24 &&
       Math.abs(edge.cards[0].rowHeight - results.cards[0].rowHeight) <= 2,
     `${edge.cards[0].nameHeight}px 名字 · ${edge.cards[0].moreTags} · ${edge.cards[0].callsCount} · ` +
@@ -8019,7 +8117,7 @@ discoverGroup: {
   )
 
   /* **`+6` 点开是全部标签的浮层**：不换行、不撑高；Esc 关上。 */
-  await page.click('#discoverResults .result .result-more')
+  await page.click('#discoverResults .result .result-tags .result-more')
   await until(() => document.querySelector('.tags-pop') !== null)
   const tagsPop = await page.evaluate(() => {
     const pop = document.querySelector('.tags-pop')
@@ -8087,12 +8185,124 @@ discoverGroup: {
     byPublicTag.cards.map((card) => card.name).join(','),
   )
 
+  /* **v65：属性标签可以筛选**；发现页不新增筛选栏，筛选入口是结果行/信息页上的胶囊。 */
+  const byLabel = await discoverAt('?page=discover&label=pricing_type:paid')
+  check(
+    '发现：属性标签可以筛选（pricing_type:paid），并落到结果页而不是推荐段',
+    byLabel.cards.length === 2 &&
+      byLabel.cards.every((card) => card.outcomeLabel === '') &&
+      !byLabel.landing &&
+      byLabel.count === '' && byLabel.headTitle === '筛选结果' && byLabel.headNote === '付费',
+    `${byLabel.cards.map((card) => card.name).join(',')} · 推荐段 ${byLabel.landing} · 计数 ${byLabel.count} · ${byLabel.headTitle} ${byLabel.headNote}`,
+  )
+  /* **运行环境是多选**：同一维度下有多个值就画多枚，不按优先级只留一枚。 */
+  const multiRuntime = await discoverAt('?page=discover&q=screenshot-annotator&label=runtime:node')
+  check(
+    '发现：运行环境第三行左、最多三枚，第四枚起收成 +N；第一行不再放属性',
+    multiRuntime.cards.length === 1 &&
+      multiRuntime.cards[0].name === 'li/screenshot-annotator' &&
+      multiRuntime.cards[0].blockers.join(',') === 'Node.js,Python,浏览器' &&
+      multiRuntime.cards[0].attrGroups.join(',') === 'language,language,tool' &&
+      multiRuntime.cards[0].attrHrefs.join(',') === '?page=discover&label=runtime:node,?page=discover&label=runtime:python,?page=discover&label=runtime:browser' &&
+      multiRuntime.cards[0].attrsMore === '+1' &&
+      multiRuntime.cards[0].headBlockers === 0 &&
+      multiRuntime.cards[0].attrsInBottom === 3 &&
+      !multiRuntime.landing &&
+      multiRuntime.count === '' && multiRuntime.headTitle === '搜索结果' &&
+      multiRuntime.headNote === 'Node.js',
+    `${multiRuntime.cards.length} 行 · ${multiRuntime.cards[0]?.blockers.join(' · ')} · ${multiRuntime.cards[0]?.attrsMore} · 推荐段 ${multiRuntime.landing} · 计数 ${multiRuntime.count} · ${multiRuntime.headTitle} ${multiRuntime.headNote}`,
+  )
+  /* **`+N` 点开是全部属性**：两枚在行上，另外两枚在浮层里，四枚都在；浮层也按类别着色。 */
+  await page.click('#discoverResults .result .result-attrs .result-more')
+  await until(() => document.querySelector('.tags-pop') !== null)
+  const attrPop = await page.evaluate(() => ({
+    head: document.querySelector('.tags-pop-head')?.textContent.trim() ?? null,
+    items: [...document.querySelectorAll('.tags-pop-attr')].map((el) => ({
+      text: el.textContent.trim(),
+      group: el.dataset.group,
+      href: el.getAttribute('href'),
+    })),
+  }))
+  check(
+    '发现：属性 +N 展开全部四枚，只写短名，类别色与筛选地址都在',
+    attrPop.head === '属性 · 4' &&
+      attrPop.items.map((item) => item.text).join(',') === 'Node.js,Python,浏览器,macOS' &&
+      attrPop.items.map((item) => item.group).join(',') === 'language,language,tool,os' &&
+      attrPop.items.map((item) => item.href).join(',') ===
+        '?page=discover&label=runtime:node,?page=discover&label=runtime:python,?page=discover&label=runtime:browser,?page=discover&label=runtime:macos',
+    `${attrPop.head} · ${attrPop.items.map((item) => `${item.text}/${item.group}`).join(' · ')}`,
+  )
+  /* **浮层里的隐藏属性也可点**：点和分类一样落到该标签的筛选结果。 */
+  await Promise.all([
+    page.waitForNavigation({ waitUntil: 'load' }),
+    page.click('.tags-pop-attr[data-group="tool"]'),
+  ])
+  const attrClick = await page.evaluate(() => ({
+    search: location.search,
+    count: document.querySelector('#page-discover .count')?.textContent.trim() ?? '',
+    landing: (() => {
+      const el = document.getElementById('discoverLanding')
+      return el !== null && !el.hidden
+    })(),
+    cards: document.querySelectorAll('#discoverResults .result').length,
+  }))
+  check(
+    '发现：+N 浮层里的属性可点，和分类一样落到该标签的筛选结果',
+    (attrClick.search.includes('label=runtime%3Abrowser') || attrClick.search.includes('label=runtime:browser')) &&
+      attrClick.count === '' && !attrClick.landing && attrClick.cards === 2,
+    `${attrClick.search} · 计数 ${attrClick.count} · 推荐段 ${attrClick.landing}`,
+  )
+  /* **多个属性、跨类别的样本**：SQL 优化要语言 + 凭据 + 工具 + 定价，前两枚 +3。 */
+  const mixed = await discoverAt('?page=discover&q=sql-explain')
+  check(
+    '发现：多属性跨类别，前三枚 +N，颜色按类别',
+    mixed.cards.length === 1 &&
+      mixed.cards[0].name === 'qian/sql-explain' &&
+      mixed.cards[0].blockers.join(',') === 'Python,API key,数据库' &&
+      mixed.cards[0].attrGroups.join(',') === 'language,credential,tool' &&
+      mixed.cards[0].attrsMore === '+2' &&
+      !mixed.landing &&
+      mixed.count === '',
+    `${mixed.cards.length} 行 · ${mixed.cards[0]?.blockers.join(' · ')} · ${mixed.cards[0]?.attrsMore} · ${mixed.cards[0]?.attrGroups.join(',')} · 计数 ${mixed.count}`,
+  )
+  await page.click('#discoverResults .result .result-attrs .result-more')
+  await until(() => document.querySelector('.tags-pop') !== null)
+  const mixedPop = await page.evaluate(() => ({
+    head: document.querySelector('.tags-pop-head')?.textContent.trim() ?? null,
+    items: [...document.querySelectorAll('.tags-pop-attr')].map((el) => ({
+      text: el.textContent.trim(),
+      group: el.dataset.group,
+    })),
+  }))
+  check(
+    '发现：多属性 +N 展开五枚，四类颜色都在',
+    mixedPop.head === '属性 · 5' &&
+      mixedPop.items.map((item) => item.text).join(',') === 'Python,API key,数据库,在线服务,付费' &&
+      mixedPop.items.map((item) => item.group).join(',') === 'language,credential,tool,tool,pricing',
+    `${mixedPop.head} · ${mixedPop.items.map((item) => `${item.text}/${item.group}`).join(' · ')}`,
+  )
+  await page.keyboard.press('Escape')
+  /* **默认值不画**：纯提示词不画运行环境，免费不画定价；付费反而要画。 */
+  const promptOnlyPaid = await discoverAt('?page=discover&label=runtime:prompt-only')
+  check(
+    '发现：纯提示词与免费不画，付费单独一枚',
+    promptOnlyPaid.cards.length === 1 &&
+      promptOnlyPaid.cards[0].name === 'hexu/slide-maker' &&
+      promptOnlyPaid.cards[0].blockers.join(',') === '付费' &&
+      !promptOnlyPaid.landing &&
+      promptOnlyPaid.count === '',
+    `${promptOnlyPaid.cards.length} 行 · ${promptOnlyPaid.cards[0]?.blockers.join(' · ')} · 推荐段 ${promptOnlyPaid.landing} · 计数 ${promptOnlyPaid.count}`,
+  )
+
   /* **多个公开分类取「或」**（PRD §多选语义）：公域那一侧是放宽，不是收窄。 */
-  const bothCategories = await discoverAt('?page=discover&tag=doc&tag=data')
+  const bothCategories = await discoverAt('?page=discover&tag=office-efficiency&tag=data-analysis')
   check(
     '发现：多个公开分类取「或」',
-    bothCategories.count === '9 个结果' && bothCategories.cards.length === 6,
-    `${bothCategories.count} · ${bothCategories.cards.length} 张`,
+    bothCategories.cards.length === 6 && bothCategories.pager &&
+      bothCategories.pagerCount === null &&
+      bothCategories.headTitle === '筛选结果' &&
+      bothCategories.headNote === '办公效率 · 数据分析',
+    `${bothCategories.cards.length} 张 · 分页条 ${bothCategories.pager ? '在' : '不在'} · 总数 ${bothCategories.pagerCount} · ${bothCategories.headTitle} ${bothCategories.headNote}`,
   )
   /* **本版没有官方图标**（v49 prd 不做 #12）：每一行都画默认头像，没有一行是图片。 */
   check(
@@ -8120,8 +8330,10 @@ discoverGroup: {
     '发现：没有结果是自己的状态',
     noResults.cards.length === 0
       && noResults.empty.includes('没有足够相关的 skill')
-      && noResults.count === '0 个结果',
-    noResults.empty,
+      && noResults.count === ''
+      && noResults.headTitle === '搜索结果'
+      && noResults.headNote === '按相关度排序',
+    `${noResults.empty} · 计数 ${noResults.count} · ${noResults.headTitle} ${noResults.headNote}`,
   )
 
   /* **有 q 就是按意思找（v19）**：十条为止、不画分页条——相似度不是页边界。
@@ -8130,17 +8342,20 @@ discoverGroup: {
   const semanticMany = await discoverAt('?page=discover&q=的')
   check(
     '发现：按意思找给十条为止，且不画分页条',
-    semanticMany.cards.length === 10 && !semanticMany.pager && semanticMany.count === '10 个结果',
-    `${semanticMany.cards.length} 张 / 分页条 ${semanticMany.pager ? '在' : '不在'} / ${semanticMany.count}`,
+    semanticMany.cards.length === 10 && !semanticMany.pager && semanticMany.count === '' &&
+      semanticMany.headTitle === '搜索结果' && semanticMany.headNote === '按相关度排序',
+    `${semanticMany.cards.length} 张 / 分页条 ${semanticMany.pager ? '在' : '不在'} / 计数 ${semanticMany.count} / ${semanticMany.headTitle} ${semanticMany.headNote}`,
   )
 
   /* 反方向的对照：同一个词按字面找（只选分类那一档）就该有分页条。两条一起才证明"有没有分页条"
      是形状决定的，不是条数决定的。 */
-  const pagedMany = await discoverAt('?page=discover&tag=doc&tag=data')
+  const pagedMany = await discoverAt('?page=discover&tag=office-efficiency&tag=data-analysis')
   check(
-    '发现：按字面找同一批时不只画六条，还有分页条',
-    pagedMany.cards.length === 6 && pagedMany.pager,
-    `${pagedMany.cards.length} 张 / 分页条 ${pagedMany.pager ? '在' : '不在'}`,
+    '发现：按字面找同一批时不只画六条，还有分页条；分页条不报总数',
+    pagedMany.cards.length === 6 && pagedMany.pager && pagedMany.pagerCount === null &&
+      pagedMany.headTitle === '筛选结果' &&
+      pagedMany.headNote === '办公效率 · 数据分析',
+    `${pagedMany.cards.length} 张 / 分页条 ${pagedMany.pager ? '在' : '不在'} / 总数 ${pagedMany.pagerCount} · ${pagedMany.headTitle} ${pagedMany.headNote}`,
   )
 
   /* 普通语义结果上不该出现那行说明——把说明写成"始终显示"也能骗过只看降级态的检查。 */
@@ -8351,8 +8566,9 @@ myTagsGroup: {
         .filter((row) => row.offsetParent !== null)
         .map((row) => ({
           name: row.querySelector('.tag-name')?.textContent ?? '',
+          action: row.querySelector('a.tag-action')?.textContent.trim() ?? '',
           count: row.querySelector('.tag-count')?.textContent ?? '',
-          href: row.querySelector('a.tag-count')?.getAttribute('href') ?? null,
+          href: row.querySelector('a.tag-action')?.getAttribute('href') ?? null,
         })),
       note: document.getElementById('publicTagNote')?.textContent.replace(/\s+/g, ' ').trim() ?? '',
       none: document.getElementById('publicTagNone')?.hidden === false
@@ -8364,14 +8580,16 @@ myTagsGroup: {
   }
 
   const publicReady = await publicAt('?page=my-tags&tab=public')
+  const publicNames = publicReady.rows.map((row) => row.name)
   check(
-    '公开标签：列出我在自己 skill 上用过的词，计数降序、同数按名字，显示成 #名字',
+    '公开标签：列出我在自己 skill 上用过的词，按名字排，显示成 #名字；不显示次数，只留入口',
     publicReady.current === '公开标签' && publicReady.rows.length === 13 &&
-      publicReady.rows[0].name === '#代码审查' &&
-      publicReady.rows[0].count === '用在 3 个 skill 上' &&
-      publicReady.rows[0].href === '?page=skills&public-tag=review' &&
+      publicNames.join(',') === [...publicNames].sort().join(',') &&
+      publicReady.rows.every((row) => row.action === '查看 skill' && row.count === '') &&
+      publicReady.rows[0].name === '#PDF' &&
+      publicReady.rows[0].href === '?page=skills&public-tag=pdf' &&
       publicReady.count === '13 个',
-    `${publicReady.rows.length} 行 · ${publicReady.rows[0]?.name} ${publicReady.rows[0]?.count}`,
+    `${publicReady.rows.length} 行 · ${publicReady.rows[0]?.name} ${publicReady.rows[0]?.action} · 计数 ${publicReady.rows[0]?.count}`,
   )
   check(
     '公开标签：贴与摘不在这里——没有新建按钮，并说清入口在 skill 的信息页',
@@ -8381,10 +8599,12 @@ myTagsGroup: {
   )
   const publicSearched = await publicAt('?page=my-tags&tab=public&q=' + encodeURIComponent('代码'))
   check(
-    '公开标签：搜索按名字筛，计数跟着筛后的清单走',
+    '公开标签：搜索按名字筛，入口跟着筛后的清单走；次数仍不显示',
     publicSearched.rows.length === 1 && publicSearched.rows[0].name === '#代码审查' &&
+      publicSearched.rows[0].action === '查看 skill' && publicSearched.rows[0].count === '' &&
+      publicSearched.rows[0].href === '?page=skills&public-tag=review' &&
       publicSearched.count === '1 个',
-    `${publicSearched.rows.map((row) => row.name).join(',')} · ${publicSearched.count}`,
+    `${publicSearched.rows.map((row) => row.name).join(',')} · ${publicSearched.count} · 计数 ${publicSearched.rows[0]?.count}`,
   )
   const publicNothing = await publicAt('?page=my-tags&tab=public&q=zzz')
   check(
@@ -8526,7 +8746,7 @@ myTagsGroup: {
       renameRow.count === '用在 2 个 skill 上',
     JSON.stringify(renameRow),
   )
-  await type('#tagName', '文档与演示')
+  await type('#tagName', '办公效率')
   await page.keyboard.press('Enter')
   await settle()
   const renameError = await page.$eval('#tagList [data-tag="evaluate"] .tag-edit-error', (el) => el.textContent.trim())
@@ -8716,8 +8936,8 @@ myTagsGroup: {
   /* 一级项里有链接也有折叠项（`<button>`），所以这里读的是所有的 `.nav-label`。 */
   const nav = await page.$$eval('.sidenav .nav-label', (els) => els.map((el) => el.textContent))
   check(
-    '导航：SKILL 组是「发现 / 我的 skill / 管理」',
-    nav.slice(0, 3).join(',') === '发现,我的 skill,管理',
+    '导航：SKILL 组是「发现 / 我的 skill / 使用记录 / 管理」',
+    nav.slice(0, 4).join(',') === '发现,我的 skill,使用记录,管理',
     nav.join(','),
   )
   const manageChildren = await page.$$eval('.sidenav a[data-page]',

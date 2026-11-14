@@ -37,7 +37,10 @@ type queryArgs struct {
 	categories   []string
 	myTags       []string
 	publicTags   []string
-	sources      []string
+	// labels are attribute definitions in their `dimension:value` form (v65), repeated and ANDed.
+	// The words are the server's vocabulary; this parser only carries them.
+	labels  []string
+	sources []string
 	// excludes are the addresses the caller has already seen (v30), deduplicated and in the order
 	// they were typed. Only `skills search` accepts them.
 	excludes []string
@@ -169,6 +172,24 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			}
 			options.publicTags = append(options.publicTags, item)
 			i++
+		case "--label":
+			// **A listing is an inventory, not a question** (v65 TD §CLI): `skills list` keeps its
+			// shape, and the attribute filter lives on `skills search --scope library --label`.
+			if !search {
+				return queryArgs{}, usagef("skills list 不接受 --label；按属性筛库内 skill 用 skills search --scope library --label。%s", usageAt(path))
+			}
+			// Only the shape is checked here — `dimension:value`, which is also the key the
+			// vocabulary prints — and never the words themselves. Whether a value exists is the
+			// server's answer, and its 400 names the word (`unknown label 'runtime:nope'`).
+			item, err := value(i, args[i])
+			if err != nil {
+				return queryArgs{}, err
+			}
+			if dimension, word, ok := strings.Cut(item, ":"); !ok || dimension == "" || word == "" {
+				return queryArgs{}, usagef("--label 要写 <维度>:<值>，收到 %q。%s", item, usageAt(path))
+			}
+			options.labels = append(options.labels, item)
+			i++
 		case "--exclude":
 			if !search {
 				return queryArgs{}, usagef("skills list 不接受 --exclude；它只用于检索。%s", usageAt(path))
@@ -244,8 +265,9 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 	if options.show == "deleted" {
 		// The deleted view is the author's own rows: three tag filters cannot apply to it, and a
 		// source other than created describes a row that is not there (PRD §CLI 命令面 列表视图).
-		if len(options.categories) > 0 || len(options.myTags) > 0 || len(options.publicTags) > 0 {
-			return queryArgs{}, usagef("--show deleted 不看标签：去掉 --category / --my-tag / --public-tag。%s", usageAt(path))
+		if len(options.categories) > 0 || len(options.myTags) > 0 || len(options.publicTags) > 0 ||
+			len(options.labels) > 0 {
+			return queryArgs{}, usagef("--show deleted 不看分类与标签：去掉 --category / --my-tag / --public-tag / --label。%s", usageAt(path))
 		}
 		for _, source := range options.sources {
 			if source != "created" {
@@ -255,8 +277,8 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 		}
 	}
 	if search && options.query == "" && len(options.categories) == 0 && len(options.publicTags) == 0 &&
-		len(options.myTags) == 0 {
-		return queryArgs{}, usagef("skills search 要给关键词、--category、--public-tag 或 --my-tag 至少一个。%s", usageAt(path))
+		len(options.myTags) == 0 && len(options.labels) == 0 {
+		return queryArgs{}, usagef("skills search 要给关键词、--category、--public-tag、--my-tag 或 --label 至少一个。%s", usageAt(path))
 	}
 	// `all` is the union of two result sets and only a semantic search can answer it — and only
 	// around a question, because a filter alone has no neighbour to look for. Both refusals are
@@ -329,6 +351,7 @@ func queryOptionsFrom(options queryArgs) api.QueryOptions {
 		Categories: options.categories,
 		MyTags:     options.myTags,
 		PublicTags: options.publicTags,
+		Labels:     options.labels,
 		Sources:    options.sources,
 		Sort:       options.sort,
 		Show:       options.show,
@@ -358,6 +381,9 @@ func filterHints(options queryArgs) []string {
 	}
 	if len(options.publicTags) > 0 {
 		hints = append(hints, "（公开标签的名字以 skmr skills public-tags 为准。）")
+	}
+	if len(options.labels) > 0 {
+		hints = append(hints, "（属性的键以 skmr skills labels 为准。）")
 	}
 	return hints
 }

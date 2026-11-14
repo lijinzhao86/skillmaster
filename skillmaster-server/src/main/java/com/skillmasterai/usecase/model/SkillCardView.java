@@ -45,17 +45,22 @@ public record SkillCardView(
         String offlinePendingUntil,
         Category category,
         List<PublicTag> publicTags,
-        List<MyTag> myTags) {
+        List<MyTag> myTags,
+        /** v65: the platform's one-line expected result, or null. Never a replacement for description. */
+        String outcome,
+        /** v65: displayed platform attributes, short names only; empty when none. */
+        List<com.skillmasterai.modules.skill.LabelValue> labels) {
 
     public SkillCardView {
         publicTags = List.copyOf(publicTags);
         myTags = List.copyOf(myTags);
+        labels = List.copyOf(labels);
     }
 
     public SkillCardView withMyWhenToUseMatched(boolean matched) {
         return new SkillCardView(id, namespace, name, description, whenToUse, myWhenToUse, matched,
                 source, standing, state, version, updatedAt, deletedAt, offlinePendingUntil,
-                category, publicTags, myTags);
+                category, publicTags, myTags, outcome, labels);
     }
 
     public record Category(String key, String name) {

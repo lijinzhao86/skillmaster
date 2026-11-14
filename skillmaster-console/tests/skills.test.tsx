@@ -109,7 +109,7 @@ describe('one skill: the sections a rung can reach', () => {
 })
 
 describe('one skill: 信息', () => {
-  it('reads the description, the when-to-use sentence and the environment', async () => {
+  it('reads the description, both when-to-use sentences, the outcome and the compatibility note', async () => {
     const { container } = await showSkill(SKILL)
 
     const blocks = [...container.querySelectorAll('.info-block')]
@@ -119,8 +119,12 @@ describe('one skill: 信息', () => {
     expect(text(blocks[1])).toContain('需要拆分或合并 PDF 时')
     expect(text(blocks[2])).toContain('我的适用场景')
     expect(text(blocks[2])).toContain('搜索时先按你的说法找')
-    expect(text(blocks[3])).toContain('运行环境')
-    expect(text(blocks[3])).toContain('需要 ghostscript')
+    // v65: 预期结果 after the two 适用场景 blocks, then the author's 「兼容性」 (renamed from 运行环境).
+    expect(text(blocks[3])).toContain('预期结果')
+    expect(text(blocks[3])).toContain('一份拆好的 PDF，以及每页对应的原文页码。')
+    expect(text(blocks[4])).toContain('兼容性')
+    expect(text(blocks[4])).toContain('需要 ghostscript')
+    expect(container.textContent).not.toContain('运行环境')
     expect(text(container.querySelector('.info-rail-value'))).toBe('@1.0.0')
   })
 
@@ -248,6 +252,8 @@ describe('one skill: 信息', () => {
       ...SKILL,
       when_to_use: null,
       compatibility: null,
+      outcome: null,
+      labels: [],
       frontmatter: { name: 'pdf-tools' },
     })
 
@@ -388,7 +394,7 @@ describe('one skill: 信息', () => {
 
 describe('one skill: the three word groups (v14)', () => {
   const TAGS = {
-    category: { key: 'doc', name: '文档与演示' },
+    category: { key: 'office-efficiency', name: '办公效率' },
     public_tags: [{ key: 'pdf', name: 'PDF' }],
     my_tags: {
       readable: true,
@@ -407,7 +413,7 @@ describe('one skill: the three word groups (v14)', () => {
       'infoPublicTags',
       'infoMyTags',
     ])
-    expect(text(groups[0]?.querySelector('.chip'))).toBe('文档与演示')
+    expect(text(groups[0]?.querySelector('.chip'))).toBe('办公效率')
     expect(text(groups[1]?.querySelector('.chip'))).toBe('#PDF')
     expect(text(groups[2]?.querySelector('.chip'))).toBe('客户项目')
   })
@@ -416,27 +422,27 @@ describe('one skill: the three word groups (v14)', () => {
     const { container } = await showSkill(SKILL, { tags: () => json(200, TAGS) })
     const post = stubFetch(
       () => new Response(null, { status: 204 }),
-      () => json(200, { ...TAGS, category: { key: 'data', name: '数据与分析' } }),
+      () => json(200, { ...TAGS, category: { key: 'data-analysis', name: '数据分析' } }),
     )
 
     fireEvent.click(container.querySelector('#editCategories') as HTMLButtonElement)
     expect(
-      (container.querySelector('.menu-item[data-value="ops"]') as HTMLButtonElement).disabled,
+      (container.querySelector('.menu-item[data-value="it-ops-security"]') as HTMLButtonElement).disabled,
     ).toBe(true)
-    // The count beside a word is the public skills on that shelf (`public_total`).
+    // v65: the menu is a picker, not a report — no public count beside a word.
     expect(
-      text(container.querySelector('.menu-item[data-value="doc"] .menu-number')),
-    ).toBe('4')
+      container.querySelector('.menu-item[data-value="office-efficiency"] .menu-number'),
+    ).toBeNull()
     // A selected category has a way to no category at all.
     expect(container.querySelector('.menu-clear')).not.toBeNull()
 
-    fireEvent.click(container.querySelector('.menu-item[data-value="data"]') as HTMLButtonElement)
+    fireEvent.click(container.querySelector('.menu-item[data-value="data-analysis"]') as HTMLButtonElement)
     await settle()
 
     expect(post.requests[0]?.path).toBe('/web/skills/demo-user/pdf-tools/category')
     expect(post.requests[0]?.method).toBe('PUT')
-    expect(post.requests[0]?.body).toEqual({ key: 'data' })
-    expect(text(container.querySelector('#infoCategories .chip'))).toBe('数据与分析')
+    expect(post.requests[0]?.body).toEqual({ key: 'data-analysis' })
+    expect(text(container.querySelector('#infoCategories .chip'))).toBe('数据分析')
   })
 
   it('clears the category through the menu', async () => {
@@ -654,7 +660,7 @@ describe('one skill: the three word groups (v14)', () => {
     const dormant = await showSkill(SKILL, {
       tags: () =>
         json(200, {
-          category: { key: 'doc', name: '文档与演示' },
+          category: { key: 'office-efficiency', name: '办公效率' },
           public_tags: [],
           my_tags: { readable: false, reason: 'dormant', tags: [] },
           library: { source: 'joined', active: false, joinable: false, can_remove: true },

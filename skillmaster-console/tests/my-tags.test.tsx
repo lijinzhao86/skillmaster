@@ -39,8 +39,8 @@ function tag(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 /** `GET /web/categories`: read beside the list, for the "this is a category" pre-check. */
 const CATEGORY_VOCABULARY = {
   categories: [
-    { key: 'doc', name: '文档与演示', state: 'enabled', public_total: 3 },
-    { key: 'ops', name: '运维与云', state: 'stopped', public_total: 0 },
+    { key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 3 },
+    { key: 'it-ops-security', name: 'IT 运维与安全', state: 'stopped', public_total: 0 },
   ],
 }
 
@@ -268,7 +268,10 @@ describe('editing in place', () => {
 })
 
 describe('the public list', () => {
-  it('is read-only, orders by count, and links each count into the library', async () => {
+  it('is read-only, orders by name, and offers a way to the skills', async () => {
+    /* v65: the row no longer carries a public count — the public corpus size is internal — so the
+       order cannot be "by count" either. 查看 skill is the row's action, and it filters the
+       library by that word. */
     const { container } = await showTags(
       '?tab=public',
       // The private list is read on mount even when the public tab is open.
@@ -276,8 +279,8 @@ describe('the public list', () => {
       () =>
         json(200, {
           tags: [
-            { key: 'one', name: '只用一个', used_in: 1 },
             { key: 'two', name: '用两个', used_in: 2 },
+            { key: 'one', name: '只用一个', used_in: 1 },
           ],
         }),
     )
@@ -286,9 +289,10 @@ describe('the public list', () => {
     expect(container.querySelector('#createTag')).toBeNull()
     expect(container.querySelector('.tag-name.is-editable')).toBeNull()
     const rows = [...container.querySelectorAll('#publicTagList li')]
-    expect(text(rows[0]?.querySelector('.tag-name'))).toBe('#用两个')
-    expect(text(rows[0]?.querySelector('.tag-count'))).toBe('用在 2 个 skill 上')
-    expect(rows[0]?.querySelector('a.tag-count')?.getAttribute('href')).toBe('/?public-tag=two')
+    expect(text(rows[0]?.querySelector('.tag-name'))).toBe('#只用一个')
+    expect(rows[0]?.querySelector('.tag-count')).toBeNull()
+    expect(text(rows[0]?.querySelector('a.tag-action'))).toBe('查看 skill')
+    expect(rows[0]?.querySelector('a.tag-action')?.getAttribute('href')).toBe('/?public-tag=one')
   })
 
   it('has its own empty sentence', async () => {

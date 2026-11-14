@@ -13,6 +13,9 @@
  * 留着是为了「换档」那一个动作，可一页就装下时那一排页码与两个箭头全都动不了——
  * 上一页是禁用态、页码只有一个「1」。这条脚的判据因此是一句话：**只放还能动的控件**，
  * 所以那一态剩下左边的计数和右边的每页条数。
+ *
+ * **公域结果不报总数**（2026-11-14 用户定）：`showTotal={false}` 只留页码，不写「共 N 个」。
+ * 库内分页条仍报总数（那是自己的库，不是公域规模）。
  */
 
 import MenuSelect from './MenuSelect'
@@ -28,6 +31,7 @@ export default function Pager({
   pageSize = PAGE_SIZE_DEFAULT,
   sizeOptions = SIZE_OPTIONS_DEFAULT,
   onPageSize,
+  showTotal = true,
   id,
 }: {
   total: number
@@ -39,6 +43,8 @@ export default function Pager({
   /** 每页几条可选的那几档。只有给了 `onPageSize` 时才画这个控件。 */
   sizeOptions?: number[]
   onPageSize?: (size: number) => void
+  /** 公域结果传 false：只留页码，不报「共 N 个」。库内保持默认。 */
+  showTotal?: boolean
   /** 一页一份，检查脚本按它读这一页的分页条。 */
   id?: string
 }) {
@@ -71,10 +77,12 @@ export default function Pager({
     )
 
   return (
-    <nav className="pager" id={id} aria-label="分页">
-      <span className={onPageSize === undefined ? 'pager-count' : 'pager-count is-with-size'}>
-        {'共 ' + total + ' 个，第 ' + (start + 1) + '–' + (start + shown) + ' 个'}
-      </span>
+    <nav className={'pager' + (showTotal ? '' : ' is-countless')} id={id} aria-label="分页">
+      {showTotal && (
+        <span className={onPageSize === undefined ? 'pager-count' : 'pager-count is-with-size'}>
+          {'共 ' + total + ' 个，第 ' + (start + 1) + '–' + (start + shown) + ' 个'}
+        </span>
+      )}
       {onPageSize === undefined ? null : (
         <span className="pager-size">
           <span aria-hidden="true">每页</span>
