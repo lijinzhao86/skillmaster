@@ -108,12 +108,14 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		return api.Client{}, &credentialError{message: fmt.Sprintf("本机没有凭据，--no-login 不会发起登录。先运行 skmr login，"+
 			"或把一把控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
 	}
-	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() && !sandbox.Detect().Sandboxed {
-		// **A sandbox can have `open` and still not be able to open a browser.** The command that
-		// waits for a callback nobody can produce sits there for the full five minutes; an agent
-		// cannot relay the URL while it is blocked. So a detectable sandbox takes the no-browser
-		// path below and names the API key instead. An explicit `skmr login` still tries, because
-		// the person may be able to open the printed URL themselves.
+	if errors.Is(err, auth.ErrNotSignedIn) && browserAvailable() &&
+		!sandbox.Detect().Sandboxed && os.Getenv("CI") == "" {
+		// **A command does not start a login nobody asked for in a sandbox, in CI, or on a machine with
+		// nothing to open a link in.** Since v68 the login itself works in all three — the link can be
+		// opened on a phone — but here it would be this command blocking for up to ten minutes on a
+		// step whose URL nobody has seen. `CI` is the one environment variable that means "no person
+		// is watching"; an explicit `skmr login` still does it anywhere, because there the person
+		// asked and the link is the command's own answer.
 		// On stderr, because it is a notice and not the command's answer: `--json` promises that
 		// stdout carries exactly one object, and a line printed while the browser opens would be a
 		// second one.
@@ -131,15 +133,11 @@ func clientFor(ctx context.Context, noLogin bool) (api.Client, error) {
 		// one caller that deliberately turns this into the credential class, because for it the
 		// refusal *is* the answer.
 		//
-		// **A detectable sandbox names the terminal it has to be run in.** `skmr login` in the same
-		// sandbox hits the blocked `open` and waits out the callback timeout — the sentence must not
-		// send a person back into the wait this branch exists to avoid.
-		if sandbox.Detect().Sandboxed {
-			return api.Client{}, fmt.Errorf("%w。请在沙箱外的终端运行 skmr login；"+
-				"无人值守把一把控制台签发的 API key 放进 %s（help auth）。",
-				errNoBrowserNoCredential, config.ApiKeyEnv)
-		}
-		return api.Client{}, fmt.Errorf("%w。有浏览器就运行 skmr login；"+
+		// **The way through is one command, and since v68 it works here too.** `skmr login` prints a
+		// link this machine does not have to be able to open — a phone will do — so a sandbox is told
+		// to run it rather than sent outside. Only a machine with nobody behind it gets the key
+		// instead, because a key is the one shape that needs no person at all.
+		return api.Client{}, fmt.Errorf("%w。运行 skmr login，把打印的链接在任意浏览器里打开批准；"+
 			"无人值守把一把控制台签发的 API key 放进 %s（help auth）。",
 			errNoBrowserNoCredential, config.ApiKeyEnv)
 	}

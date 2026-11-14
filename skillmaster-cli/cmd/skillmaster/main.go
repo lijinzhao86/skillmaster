@@ -24,14 +24,38 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/updater"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/version"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 func main() {
-	if err := run(context.Background(), os.Args[1:]); err != nil {
+	ctx, stop := rootContext()
+	defer stop()
+	// **The first Ctrl-C cancels; the second one always ends the process.** A few paths block on
+	// something that does not watch the context (reading standard input, a download with its own
+	// context). With only `NotifyContext` installed, a signal there would be swallowed and the
+	// command would sit forever. Restoring the default disposition as soon as the first signal
+	// arrives keeps the old guarantee: Ctrl-C twice always gets you out.
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+	if err := run(ctx, os.Args[1:]); err != nil {
 		os.Exit(reportError(err))
 	}
+}
+
+// rootContext is what Ctrl-C reaches.
+//
+// **Without this, the whole cancellation path is dead code.** Go's default SIGINT handling ends the
+// process on the spot, so `login`'s wait never returns through its own code — and since v68 the
+// waiting process is the only one that can tell the server the person gave up. A pending question
+// left behind can still be approved from the link for ten minutes, which is exactly what PRD 验收 #3
+// forbids. SIGTERM is included because a stopped container sends that rather than SIGINT.
+func rootContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }
 
 func run(ctx context.Context, args []string) (err error) {

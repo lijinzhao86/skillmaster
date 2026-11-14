@@ -30,7 +30,6 @@
 | `oauth_authorization` | M2 |
 | `skill_grant` | M12 |
 | `api_key` | M2 |
-| `cli_sign_in_code` | M2 |
 | `skill_access_request` | M12 |
 | `skill_library_join` | M12 |
 | `skill_public_tag` | M12 |
@@ -58,6 +57,7 @@
 | `my_skill_when_to_use` | M12 |
 | `my_skill_when_to_use_embedding` | M13 |
 | `user_feedback` | M18 |
+| `cli_device_sign_in` | M2 |
 
 ## `app_user`
 
@@ -324,15 +324,6 @@
 - `revoked_at` — TEXT
 - `created_at` — TEXT NOT NULL
 
-## `cli_sign_in_code`
-
-- `code_hash` — TEXT PRIMARY KEY
-- `authorization_id` — TEXT NOT NULL
-- `code_challenge` — TEXT NOT NULL
-- `expires_at` — TEXT NOT NULL
-- `used_at` — TEXT
-- `created_at` — TEXT NOT NULL
-
 ## `skill_access_request`
 
 - `skill_id` — TEXT NOT NULL REFERENCES skill(id) ON DELETE CASCADE
@@ -584,3 +575,20 @@
 - `archive_key` — TEXT
 - `archived_at` — TEXT
 - `created_at` — TEXT NOT NULL
+
+## `cli_device_sign_in`
+
+- `ticket_hash` — TEXT PRIMARY KEY
+- `device_secret_hash` — TEXT NOT NULL
+- `client_id` — TEXT NOT NULL
+- `scopes` — TEXT NOT NULL
+- `code_challenge` — TEXT NOT NULL
+- `name` — TEXT NOT NULL
+- `address` — TEXT
+- `created_at` — TEXT NOT NULL
+- `expires_at` — TEXT NOT NULL
+- `last_polled_at` — TEXT
+- `approved_at` — TEXT
+- `authorization_id` — TEXT
+- `denied_at` — TEXT
+- `consumed_at` — TEXT

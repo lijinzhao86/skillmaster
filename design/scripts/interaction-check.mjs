@@ -552,7 +552,11 @@ const SCOPE_QUERY = '?client_id=skillmaster-cli&state=abc123&scope=skills:read%2
    off this machine** (`name`, prd 做 #1). The demo has no CLI, so the value is written into the link
    the same way the CLI writes it into its own — which is the only difference between this and the
    fallback case below. */
-const NAMED_QUERY = SCOPE_QUERY + '&name=' + encodeURIComponent('我的 MacBook') + '&who=dev'
+const NAMED_QUERY = SCOPE_QUERY + '&name=' + encodeURIComponent('我的 MacBook') + '&who=dev' +
+  '&from=47.117.36.14&age=1'
+/* The same address after the link stopped being a question — answered, cancelled, or out of time.
+   The demo says so with `expired=1`; the product says so when the pending sign-in is gone. */
+const EXPIRED_QUERY = NAMED_QUERY + '&expired=1'
 
 await openWith(NAMED_QUERY)
 await settle()
@@ -614,6 +618,15 @@ check(
   scopeCopy.slice(0, 90),
 )
 check('已知客户端不显示那句警告', !(await visible('#consentUnknownClient')))
+/* **The one mistake this screen can still prevent.** Since v68 the CLI is reached by a link that
+   anybody could forward; approving it with another account binds the waiting machine to that
+   account, not to the person who was asked. The sentence is on the card because the agent's
+   warning is not always read. */
+check(
+  '写明了这条链接只能批准一次、别转发',
+  (await page.$eval('#consentLinkOnly', (el) => el.textContent?.trim())) ===
+    '这条链接只能批准一次登录，不要转发给别人。',
+)
 /* **No × on this screen, in any of its states** (2026-10-16): the card is the whole page, so the
    control would have nowhere to send anybody. Asserted beside the other "this is the whole page"
    check above rather than with the result page's, because it is the same fact. */
@@ -656,6 +669,14 @@ check(
 check(
   '预填之后「同意并继续」直接可点',
   !(await page.$eval('#consentAgree', (el) => el.disabled)),
+)
+/* **The machine fact the CLI cannot invent.** The name above is reported by the CLI; this line is
+   where the request came from and how long ago, as the server observed it. It is what a person
+   checks against the server they just ran the command on — and what a forwarded link gives away. */
+check(
+  '写明请求来自哪台机器、多久前发起',
+  (await page.$eval('#consentOrigin', (el) => el.textContent?.trim())) ===
+    '请求来自 47.117.36.14，1 分钟前发起。',
 )
 /* **The scope line, and the two words that were wrong in it.** It said the tool could 「发布」 — but
    publishing exists only on the browser plane (`WebSkillRoutes.PUBLISH`, ADR 0031 §决定 2), so a
@@ -712,10 +733,10 @@ await atStep('授权成功')
 await settle()
 check('同意后落到「授权成功」', (await title()) === '授权成功', await title())
 check(
-  '成功那句是 CLI 的原话',
-  (await page.$eval('#consentDoneNote', (el) => el.textContent)).includes('回到终端继续'),
+  '成功那句是 控制台结果态的原话',
+  (await page.$eval('#consentDoneNote', (el) => el.textContent)).includes('那台设备会继续'),
 )
-/* **The result page has no close button** (design/README.md §授权结果): it is the CLI's own page
+/* **The result page has no close button** (design/README.md §授权结果): it is the console page's own result state
    standing alone, there is nothing behind it to dismiss, and the CLI could not draw one anyway. */
 check('结果页不画关闭按钮', !(await visible('#closeBtn')))
 /* **And it says nothing about closing itself.** This card used to carry a second line — a
@@ -726,7 +747,7 @@ check('结果页不画关闭按钮', !(await visible('#closeBtn')))
    what happened. **So what is asserted now is the exact copy**: one sentence, and not one word about
    the page. The attempt is still made, and the block at the end of this section watches it happen. */
 const doneCard = await page.$eval('#consentDoneView', (el) => el.innerText)
-check('结果页只有那一句，不承诺自己会关掉', doneCard.trim() === '请关闭此页面回到终端继续。', doneCard)
+check('结果页只有那一句，不承诺自己会关掉', doneCard.trim() === '请关闭此页面，那台设备会继续。', doneCard)
 await shot('13-consent-agreed.png')
 
 await openWith(NAMED_QUERY)
@@ -736,7 +757,7 @@ await atStep('授权未完成')
 await settle()
 check('拒绝后落到「授权未完成」', (await title()) === '授权未完成', await title())
 const refuseCopy = await page.$eval('#consentDoneNote', (el) => el.textContent)
-check('拒绝那句是 CLI 的原话', refuseCopy.includes('你拒绝了这次授权请求'), refuseCopy)
+check('拒绝那句是 控制台结果态的原话', refuseCopy.includes('你拒绝了这次授权请求'), refuseCopy)
 /* **What the person did, and nothing after it.** This sentence was wrong twice on 2026-10-16, both
    times by owing an instruction the card does not owe: 「回到终端查看原因」 sends somebody to look up
    a reason they *are*, and 「可以回到终端重新登录」 answers a person who has just said no by inviting
@@ -825,6 +846,20 @@ check('未知 scope：明说不知道它的含义', unknownCopy.includes('我们
    that shows whether either of them breaks the card's rhythm. It was measured by hand twice before
    anybody noticed there was no picture of it. */
 await shot('15-consent-unknown.png')
+
+/* **The link that is no longer a question.** Every parameter is still there, so the ordinary card
+   would render a working button; this state exists so the button is not offered at all. */
+await openWith(EXPIRED_QUERY)
+await settle()
+check('失效链接：仍是「授权请求」', (await title()) === '授权请求', await title())
+const expiredCopy = await page.$eval('#consentExpiredView p', (el) => el.textContent.replace(/\s+/g, ' '))
+check(
+  '失效链接：说清已用过或过期，并指出回那台设备重跑',
+  expiredCopy.includes('已经用过或过期') && expiredCopy.includes('那台设备') && expiredCopy.includes('skmr login'),
+  expiredCopy,
+)
+check('失效链接：不提供「同意」', !(await visible('#consentAgree')))
+await shot('12c-consent-expired.png')
 
 await openWith('')
 await settle()

@@ -134,8 +134,12 @@ class UsageHistoryIT extends AbstractIT {
     @Test
     void theWindowKeepsTheNinetyDayBoundaryInclusive() {
         String actor = "01M3HTG7GCCVBGRPAFFSVSF12Y";
-        ensurePartitionAt(now.minus(91, ChronoUnit.DAYS));
-        ensurePartitionAt(now);
+        // **One partition per instant written, not per window chosen by hand.** 89/90/91 days ago can
+        // straddle a Monday, so the week that holds one of them is not the week that holds the others;
+        // naming only two weeks happened to work on most dates and failed on this one (2026-11-14).
+        for (int days : new int[] {89, 90, 91}) {
+            ensurePartitionAt(now.minus(days, ChronoUnit.DAYS));
+        }
         repository.recordSearch(new SearchActivity(actor, "eighty-nine", Map.of(), 1L,
                 List.of(new SearchHit("skill", "demo/skill")), false,
                 atDaysAgo(89)));

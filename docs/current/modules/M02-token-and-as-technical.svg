@@ -2,7 +2,7 @@
      fill="#1f2328" color="#1f2328"
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
   <title>M02 令牌与 AS：模块边界与邻接面</title>
-  <desc>入站三条竖箭头：两组客户端（浏览器里的同意页、CLI 的 loopback PKCE）打到协议面的端点——/oauth/authorize、/oauth/token、/oauth/revoke 与两个发现端点（RFC 8414 与 RFC 9728；DCR 与 jwks 不做），跨模块的事务（重置密码连带撤销令牌）由用例层编排，落到 M2 的边界内。没有第三组：无人值守那个场景今天由一把 API key 承担，而它不走这一面——它由一次浏览器会话签出，此后在 /api/v1/* 上由 M3 验。M2 拥有 oauth_client、oauth_authorization、auth_code、access_token、refresh_token、框架的同意表、api_key 与 cli_sign_in_code 八张表，不变量若干，以及两个对外契约：实现 M3 的 TokenValidator 接缝，并给用例层一个「撤销这个人的全部令牌」。右侧是邻接面：M2 的箭头指向 M1（读会话主体、用 AuthThrottle 限流）、M3（实现 TokenValidator 接缝）与 M10（写审计）。</desc>
+  <desc>入站三条竖箭头：两组客户端（浏览器里的同意页、CLI 的设备登录轮询（票根 + 设备密钥 + PKCE））打到协议面的端点——/oauth/authorize、/oauth/token、/oauth/revoke、两个发现端点（RFC 8414 与 RFC 9728；DCR 与 jwks 不做）以及 v68 的 /cli-device-sign-ins（发起、页面读取、轮询、取消），跨模块的事务（重置密码连带撤销令牌）由用例层编排，落到 M2 的边界内。没有第三组：无人值守那个场景今天由一把 API key 承担，而它不走这一面——它由一次浏览器会话签出，此后在 /api/v1/* 上由 M3 验。M2 拥有 oauth_client、oauth_authorization、auth_code、access_token、refresh_token、框架的同意表、api_key 与 cli_device_sign_in 八张表，不变量若干，以及两个对外契约：实现 M3 的 TokenValidator 接缝，并给用例层一个「撤销这个人的全部令牌」。右侧是邻接面：M2 的箭头指向 M1（读会话主体、用 AuthThrottle 限流）、M3（实现 TokenValidator 接缝）与 M10（写审计）。</desc>
 
   <!--
     Colours are written as presentation attributes so the light theme renders even
@@ -51,7 +51,7 @@
 
   <rect class="t2 s2" x="570" y="160" width="466" height="46" rx="8" fill="#f5f0ff" stroke="#ddd0fd"/>
   <text class="c2" fill="#7c3aed" x="584" y="180" font-size="13" font-weight="600">CLI（一方客户端）</text>
-  <text class="mono mu" fill="#59636e" x="584" y="197" font-size="11">loopback + PKCE（S256）· 预注册</text>
+  <text class="mono mu" fill="#59636e" x="584" y="197" font-size="11">设备链接 + 轮询（ticket + device_secret + PKCE）</text>
 
   <path d="M377 220 L377 250" fill="none" stroke="currentColor" stroke-width="1.5"
         opacity="0.45" marker-end="url(#m2t-arrow)"/>
@@ -68,6 +68,12 @@
   <text class="mono mu" fill="#59636e" x="430" y="326" font-size="11.5">oauth-authorization-server（RFC 8414）</text>
   <text class="mono mu" fill="#59636e" x="430" y="344" font-size="11.5">oauth-protected-resource（RFC 9728）</text>
   <text class="mu" fill="#59636e" x="430" y="368" font-size="11.5">MCP 要求 PRM 必做，AS 元数据二选一</text>
+
+  <text fill="#1f2328" x="760" y="304" font-size="12.5" font-weight="600">设备登录（v68，匿名）</text>
+  <text class="mono mu" fill="#59636e" x="760" y="326" font-size="11">POST /cli-device-sign-ins</text>
+  <text class="mono mu" fill="#59636e" x="760" y="342" font-size="11">GET  …/{ticket}</text>
+  <text class="mono mu" fill="#59636e" x="760" y="358" font-size="11">POST …/{ticket}/token</text>
+  <text class="mono mu" fill="#59636e" x="760" y="374" font-size="11">POST …/{ticket}/cancel</text>
 
   <text fill="#1f2328" x="790" y="304" font-size="12.5" font-weight="600">不做</text>
   <text class="mono mu" fill="#59636e" x="790" y="326" font-size="11.5">POST /oauth/register（DCR）</text>
@@ -116,8 +122,8 @@
   <text class="mono mu" fill="#59636e" x="242" y="656" font-size="11">oauth2_authorization_consent</text>
   <rect class="pn bd" x="480" y="638" width="84"  height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
   <text class="mono mu" fill="#59636e" x="488" y="656" font-size="11">api_key</text>
-  <rect class="pn bd" x="570" y="638" width="136" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
-  <text class="mono mu" fill="#59636e" x="578" y="656" font-size="11">cli_sign_in_code</text>
+  <rect class="pn bd" x="570" y="638" width="160" height="26" rx="6" fill="#ffffff" stroke="#d8dee4"/>
+  <text class="mono mu" fill="#59636e" x="578" y="656" font-size="10.5">cli_device_sign_in</text>
 
   <text class="mu" fill="#59636e" x="92" y="684" font-size="11.5" font-weight="600">不变量</text>
   <text fill="#1f2328" x="92" y="706" font-size="12.5">只存 sha256 哈希——明文令牌只在响应里出现那一次（ADR 0007）</text>

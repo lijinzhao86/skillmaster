@@ -72,14 +72,15 @@ public final class ModuleMap {
             // authorization, consent or refresh chain for the validator's parent-row EXISTS to
             // find. Same module, because one seam above them validates both.
             //
-            // V14 added `cli_sign_in_code` (ADR 0028): the one-time code that carries an
-            // already-minted credential back to the CLI, so the credential itself never travels in a
-            // URL. Here rather than in M1, because what it delivers is a token and the row it names
-            // is this module's `oauth_authorization`.
+            // V14 added `cli_sign_in_code` (ADR 0028), which V53 removed: a one-time code carried a
+            // credential back to a loopback listener, and the listener is gone (ADR 0190). V53 adds
+            // `cli_device_sign_in` in its place — the question a link asks, waiting to be answered.
+            // Here rather than in M1, because what it becomes is a token and the row it names is this
+            // module's `oauth_authorization`.
             new Module("M2", "token", MODULES_PACKAGE + ".token",
                     Set.of("oauth_client", "oauth_authorization", "auth_code", "access_token",
                             "refresh_token", "oauth2_authorization_consent", "api_key",
-                            "cli_sign_in_code")),
+                            "cli_device_sign_in")),
             new Module("M3", "auth", MODULES_PACKAGE + ".auth", Set.of()),
             new Module("M4", "namespace", MODULES_PACKAGE + ".namespace",
                     Set.of("namespace", "namespace_member")),

@@ -21,6 +21,7 @@ import type { RegisterStep } from './flows/useRegisterFlow'
 import { useResetFlow } from './flows/useResetFlow'
 import type { ResetStep } from './flows/useResetFlow'
 import ConsentDoneView from './views/ConsentDoneView'
+import ConsentExpiredView from './views/ConsentExpiredView'
 import ConsentIncompleteView from './views/ConsentIncompleteView'
 import ConsentView from './views/ConsentView'
 import LoginView from './views/LoginView'
@@ -77,6 +78,8 @@ const EMPTY_CONSENT: ConsentEntry = {
   knownClient: false,
   who: '',
   name: '',
+  from: '',
+  ageMinutes: null,
   scopes: [],
 }
 
@@ -213,6 +216,14 @@ export default function AuthOverlay({
     setConsentName(entry.name)
     setConsentAgreed(true)
     appliedConsent.current = consentKey
+    /* **A link that is no longer a question.** The demo reaches this state with `expired=1`; the
+       product reaches it when the pending sign-in is gone — answered, cancelled, or out of time.
+       Checked before `complete`, because an expired link still has every parameter and would
+       otherwise render a working button. */
+    if (consent?.get('expired') === '1') {
+      show('consentExpired')
+      return
+    }
     /* Either half missing is a link that cannot work. The source's `openConsent` answered "not a
        consent entry" when the address carried neither parameter; a host that asks for this view
        anyway gets the card that says so rather than an empty request. */
@@ -364,7 +375,7 @@ export default function AuthOverlay({
   const title = current === 'consentDone'
     ? (consentAgreed ? '授权成功' : '授权未完成')
     : VIEW_TITLE[current]
-  const consentDoneNote = consentAgreed ? '请关闭此页面回到终端继续。' : '你拒绝了这次授权请求。'
+  const consentDoneNote = consentAgreed ? '请关闭此页面，那台设备会继续。' : '你拒绝了这次授权请求。'
 
   return (
     <div
@@ -467,6 +478,8 @@ export default function AuthOverlay({
         />
 
         <ConsentIncompleteView active={current === 'consentIncomplete'} />
+
+        <ConsentExpiredView active={current === 'consentExpired'} />
 
         <ConsentDoneView active={current === 'consentDone'} note={consentDoneNote} />
 

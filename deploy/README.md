@@ -214,8 +214,14 @@ java.lang.IllegalStateException: no oauth_client row for 'skillmaster-cli' —
 this deployment cannot start a login. Seed it (see the server README).
 ```
 
-— which the consent page can only report as 服务暂时不可用. Seeded by hand, once per deployment, and
-the redirect URI has to match the CLI's fixed loopback port exactly (ADR 0028):
+— which reaches the person as `错误：服务端没能发起这次登录（HTTP 500）` before any link is printed.
+Seeded by hand, once per deployment. Since v68 the login has no redirect URI at all (the loopback
+callback is gone,
+[ADR 0190](../docs/decisions/0190-cloud-device-login-approves-on-a-web-page.md) §决定 1), but the
+columns stay: **`grant_types` has to be non-empty**, because `ClientRegistry` reads every row into
+the authorization server's `RegisteredClient`, whose builder refuses an empty set with
+`IllegalArgumentException: authorizationGrantTypes cannot be empty` — a 500 at the same place.
+`metadata.scopes` is what a login's requested scopes are intersected with.
 
 ```sql
 INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,

@@ -4,13 +4,13 @@
 
 ![M02 令牌与 AS 在产品的哪一格](M02-token-and-as-product.svg)
 
-**怎么读**：令牌的一生分**三个时刻**，而只有第一个时刻里有人。**① 一次·人**：`skmr login` 打开浏览器里的一页，上面写着 `SkillMaster CLI` 想要 `skills:read` 与 `skills:write`、以及用的是哪个账号，人点「同意」→ 回调到本机一个临时端口 → 令牌进 keychain。这是产品里**第二次需要人亲自出面**的地方（第一次是 M01 的注册/登录），也是最后一次——**一次同意换来一个长期凭据**，所以它只发生一次，不是每次登录。**② 每次·静默**：此后每个任务都由 agent 拿 `Authorization: Bearer` 直接调接口，令牌短命、过期了就静默换一个，人看不到任何一次登录；**这条路上没有 M2**——令牌早就签好了，验它的是 M3。**③ 无人**：CI 与服务器上没有人，所以它走的是**另一条凭据**——控制台里签出的一把 API key（`login --with-key`，或 `SKILLMASTER_API_KEY`）。它不经过这一页的任何一条路：key 由**一次浏览器会话**签出来，此后只在 `/api/v1/*` 上被 M3 验证（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1、[ADR 0044](../../decisions/0044-the-cli-serves-desktops-and-servers.md) §决定 1）。
+**怎么读**：令牌的一生分**三个时刻**，而只有第一个时刻里有人。**① 一次·人**：`skmr login` 打印一条一次性链接，人在**任意**浏览器里打开控制台的「授权请求」页——上面写着 `SkillMaster CLI` 想要 `skills:read` 与 `skills:write`、用的是哪个账号、请求从哪台机器发起——人点「同意并继续」→ 那台机器**轮询**取回令牌 → 令牌默认写状态目录里的 0600 文件，`--keyring` 才进钥匙串（[ADR 0185](../../decisions/0185-credentials-default-to-a-file.md)；[v68 技术设计](../../versions/v68-cloud-device-login/technical-design.md)、[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)）。这是产品里**第二次需要人亲自出面**的地方（第一次是 M01 的注册/登录），也是最后一次——**一次同意换来一个长期凭据**，所以它只发生一次，不是每次登录。**② 每次·静默**：此后每个任务都由 agent 拿 `Authorization: Bearer` 直接调接口，令牌短命、过期了就静默换一个，人看不到任何一次登录；**这条路上没有 M2**——令牌早就签好了，验它的是 M3。**③ 无人**：CI 与服务器上没有人，所以它走的是**另一条凭据**——控制台里签出的一把 API key（`SKILLMASTER_API_KEY`）。它不经过这一页的任何一条路：key 由**一次浏览器会话**签出来，此后只在 `/api/v1/*` 上被 M3 验证（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1；按「服务器上走 API key」分流的 [ADR 0044](../../decisions/0044-the-cli-serves-desktops-and-servers.md) §决定 1 已被 [ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md) 取代——只有**无人值守**才走 key，与有没有浏览器无关）。
 
 ## 技术架构
 
 ![M02 令牌与 AS：模块边界与邻接面](M02-token-and-as-technical.svg)
 
-**怎么读**：左边三条竖箭头是**入站**——两组客户端（浏览器里的同意页、CLI 的 loopback PKCE）打到**协议面**的端点上（`/oauth/authorize`、`/oauth/token`、`/oauth/revoke` 与两个发现端点；**路径是我们选的，但客户端不硬编码它**——它们从元数据文档里读），跨模块的事务（重置密码连带撤销令牌）由用例层编排，最后落进 M2 的边界内。**没有第三组**：无人值守那个场景今天由一把 API key 承担，而它不经过这一面（见 §无人）。右侧是**邻接面**，**箭头的方向就是依赖的方向**：M2 指向 M1（读会话主体、用 `AuthThrottle` 限流）、M2 指向 M3（实现 `TokenValidator` 接缝）、M2 指向 M10（写审计）。**没有邻居反向依赖 M2**；它与 M1 之间读会话那一段走的是**框架契约、不是 M1 的 API**。
+**怎么读**：左边三条竖箭头是**入站**——两组客户端（浏览器里的同意页、CLI 的设备链接 + 轮询）打到**协议面**与设备登录端点上（`/oauth/authorize`、`/oauth/token`、`/oauth/revoke`、两个发现端点，以及 v68 的 `/cli-device-sign-ins` 四条（发起、页面读取、轮询、取消）；**协议面的路径是我们选的，但客户端不硬编码它**——它们从元数据文档里读；设备登录那四条都不在元数据里：发起、轮询、取消由 CLI 内置常量定位，页面读取那条由控制台定位），跨模块的事务（重置密码连带撤销令牌）由用例层编排，最后落进 M2 的边界内。**没有第三组**：无人值守那个场景今天由一把 API key 承担，而它不经过这一面（见 §无人）。右侧是**邻接面**，**箭头的方向就是依赖的方向**：M2 指向 M1（读会话主体、用 `AuthThrottle` 限流）、M2 指向 M3（实现 `TokenValidator` 接缝）、M2 指向 M10（写审计）。**没有邻居反向依赖 M2**；它与 M1 之间读会话那一段走的是**框架契约、不是 M1 的 API**。
 
 两张图都是本文的**渲染**，不是第二份权威——二者不一致时以正文为准，`.svg` 为手写源，**改图请连同正文一起改**。
 
@@ -31,11 +31,11 @@
 | **M1 账号登录** | M1 结束时**浏览器会话**已建立。M2 的 `/oauth/authorize` 需要知道「现在登录的是谁」，但**不需要向 M1 要**：Spring Session 把 `SecurityContext` 存进会话，M2 读它、调 `getName()` 就拿到 userId（[ADR 0014](../../decisions/0014-browser-session-via-spring-session.md)）。**令牌的签发、刷新、撤销是 M2 的事**；反过来 M1 的重置密码要在**同一个用例**里调 M2 撤销该用户全部令牌——编排在用例层，不在 M1 里。 |
 | **M3 请求鉴权** | M3 拥有 `TokenValidator` 这个接缝与 401/403 的 MCP 形状；**M2 提供它的第二个实现**（P0 的实现是「从配置里解析一个静态令牌」）。请求路径上只有 M3——`/api/v1/*` 的每一次调用都不经 M2，这是接缝存在的全部意义。 |
 | **M10 审计与统计** | 令牌的**签发与撤销要留痕**（§3.5 的清单里有这两项）。M2 调 `AuditLog.record(AuditEvent)`：在用例编排的路径上与那次变更**同事务**；令牌端点没有外层事务，见 §已知的不精确——表不是 M2 的。 |
-| **OAuth 客户端**（外部） | CLI 是一方、预注册的客户端，`client_id` 随 CLI 发布。第三方客户端要等 **P2 的 CIMD** 才接得进来；**DCR 从不启用**。它们只认协议面，不认 `/web/*`。**API key 不是这里的客户端**：它没有 `client_id`、没有回调，也不走协议面——它是 M2 拥有的另一张表，而验证在 M3（见 §无人）。**签发出的令牌落到客户端本机哪里，是客户端的事**：CLI 是 keychain 优先、明文文件兜底并告知（[ADR 0025](../../decisions/0025-cli-credential-storage.md)）——M2 不管这件事，也不该管。 |
+| **OAuth 客户端**（外部） | CLI 是一方、预注册的客户端，`client_id` 随 CLI 发布。第三方客户端要等 **P2 的 CIMD** 才接得进来；**DCR 从不启用**。它们只认协议面，不认 `/web/*`。**API key 不是这里的客户端**：它没有 `client_id`、没有回调，也不走协议面——它是 M2 拥有的另一张表，而验证在 M3（见 §无人）。**签发出的令牌落到客户端本机哪里，是客户端的事**：CLI 默认写 0600 文件，`--keyring` 才写钥匙串（[ADR 0185](../../decisions/0185-credentials-default-to-a-file.md)，修订了 [ADR 0025](../../decisions/0025-cli-credential-storage.md)）——M2 不管这件事，也不该管。 |
 
 ## 拥有的表
 
-**表清单见 [`system.md`](../system.md) 的 M2 行**。来历：`V1__baseline.sql` 建了基线那几张——P0 就把它们当基线 schema 的一部分建了出来，尽管当时一行 Java 都没有；`V5` 加的一张**框架的同意表**；`V6` 加的**一次授权那一行**；`V13` 加的 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)，见 §无人）；`V14` 加的 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V9` 没有加表，只给那一行加了一列（见 §撤销）。理由写在 `ModuleMap` 的注释里：不列出来的话，「`access_token` 归谁」就无人可答，而 `TableOwnershipTest` 要求迁移建出来的每个表都得有主。
+**表清单见 [`system.md`](../system.md) 的 M2 行**。来历：`V1__baseline.sql` 建了基线那几张——P0 就把它们当基线 schema 的一部分建了出来，尽管当时一行 Java 都没有；`V5` 加的一张**框架的同意表**；`V6` 加的**一次授权那一行**；`V13` 加的 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)，见 §无人）；`V53` 加的 `cli_device_sign_in`（[v68 技术设计](../../versions/v68-cloud-device-login/technical-design.md)）。`V9` 没有加表，只给那一行加了一列（见 §撤销）。理由写在 `ModuleMap` 的注释里：不列出来的话，「`access_token` 归谁」就无人可答，而 `TableOwnershipTest` 要求迁移建出来的每个表都得有主。
 
 | 表 | 为什么属于这里 |
 |---|---|
@@ -46,7 +46,7 @@
 | `refresh_token` | 长命凭据，**用一次换一个**。`rotated_from` 把整条链串起来——窗口外重放任何一个祖先就整链撤销。 |
 | `oauth2_authorization_consent` | 同意记录，**从框架那儿拿的**（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)）。它由框架的 `OAuth2AuthorizationConsentService` 用，**我们不重写它**——那一块不与任何已有决定冲突（不涉及令牌哈希，也不涉及寿命分层）。它仍要进 `ModuleMap`，因为**每个迁移建出来的表都必须有主**，而那个断言是双向的。 |
 | `api_key` | 账号签发给自己的凭据（`V13`），无人值守那一条路就落在这里。**它在 M2 是因为接缝在这里**：两类凭据由一个 `TokenValidator` 实现验，所以存储归同一个模块——而它**没有**授权行、同意记录或刷新链，这也是它只能另立一张表的原因（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）。设计权威在 [v2 技术设计](../../versions/v2-credentials/technical-design.md)，这一页不复述。 |
-| `cli_sign_in_code` | 一次性码：把已经铸好的凭据交回 CLI 的 loopback 回调（`V14`），凭据本身不进 URL。归 M2 是因为它命中的是 `oauth_authorization` 这一行，且交付物就是令牌；设计权威在 [v4 技术设计](../../versions/v4-cli-login/technical-design.md)。 |
+| `cli_device_sign_in` | 一次待批准的登录请求（`V53`）：票根、设备密钥、PKCE challenge、建议名称、发起地址与时间，以及批准后写下的授权行。CLI 按票根轮询取回令牌，凭据不进 URL；批准只写授权行，不铸令牌。归 M2 是因为它命中的是 `oauth_authorization` 这一行，且交付物就是令牌；设计权威在 [v68 技术设计](../../versions/v68-cloud-device-login/technical-design.md)，理由见 [ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)。 |
 
 ### 「一次授权」那一行（`V6` 补上的）
 
@@ -70,14 +70,12 @@
 
 ## 不变量与规则
 
-### 授权码（人这一次）
+### 授权码（未来第三方客户端；第一方 CLI 已改走设备登录）
+
+**这一节的规则仍然描述服务端**：`/oauth/authorize` 与 `/oauth/token` 没有退役，只是**第一方 CLI 不再走它**——v68 起 CLI 用「一次性链接 + 网页批准 + 轮询」（[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)）。下面凡是写着「CLI」的行为，都应读作**将来接进来的第三方客户端**；第一方 CLI 那一侧已经没有回环监听，也不再携带 `state`。
 
 - **PKCE 是必需的，且只接受 `S256`**（`auth_code.method` 的注释就是这么写的）。CLI 是公共客户端，没有 `client_secret`——PKCE 是它唯一的、也是规范要求的证明。
-- `redirect_uri` **必须与注册时那个逐字相同**（`oauth_client.redirect_uris` 是 JSON 数组，token 请求里的那个必须是其中之一）。不做前缀匹配、不做规范化——回调地址上带着授权码，近似匹配就是把码送到别人手里。**唯一的例外是 loopback 的端口**（见下）。
-- **loopback 的端口必须放开，这是规范要求**：CLI 向操作系统要的是一个**临时端口**，每次都不一样，所以逐字比对会让它永远对不上。[RFC 8252](https://www.rfc-editor.org/rfc/rfc8252.html) §8.4 的原话是 loopback 重定向「**除了端口那一部分，其余精确匹配**」。所以规则要分两条：
-  - **非 loopback**：逐字相同。
-  - **loopback**（`http://127.0.0.1:<任意端口>/callback`）：比 scheme + host + path，**端口任意**。
-  - 附带一条：用 IP 字面量 `127.0.0.1` / `[::1]`，**不用 `localhost`**（RFC 8252 §8.3 明确不推荐）。
+- `redirect_uri` **必须与注册时那个逐字相同**（`oauth_client.redirect_uris` 是 JSON 数组，token 请求里的那个必须是其中之一）。不做前缀匹配、不做规范化——回调地址上带着授权码，近似匹配就是把码送到别人手里。**没有端口例外**：框架逐字比对，这是 [ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md) 记录的现状；第一方 CLI 已经不使用回环（[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)），第三方客户端将来若要随机端口的回环，得先解决这一条。
 - **一次一码**：`used_at` 非空即已消费，第二次使用是**攻击而不是重试**。核销与签发在**同一个事务**里，否则并发两次兑换能各拿到一张令牌。
 - `resource` 是 RFC 8707 的 audience，客户端要了才记；**要了就必校验**（见下）。
 - 授权码是**分钟级**的。它的寿命只需要覆盖「回调到本机端口」那一次往返。
@@ -86,18 +84,20 @@
 **协议面上的实现细节**（按规范，没有分叉，记在这里免得实现时重新推）：
 
 - **AS 那条链必须声明 `securityMatcher`**（`/oauth/**` + `/.well-known/**`）。**这不是洁癖，是启动条件**：不声明它就吃掉每一个请求，而 Spring Security 7 会**拒绝启动**并抛 `UnreachableFilterChainException`，明说后面那条链永远不会被走到。spike 里踩到过一次——顺带证明了框架宁可启动失败也不静默地让第一条链赢。
-- **CLI 必须校验 `state`**：它自己生成、回调时逐字比对。这是 loopback 回调那道防线——没有它，别人可以让你的 CLI 拿着**他的**授权码去换令牌（你替他登录）。
-- **未登录的落点是 `/login?return_to=<原始请求>`**，`return_to` 由 `TokenSecurityConfig` 里那个 entry point 拼出来（框架的 `LoginUrlAuthenticationEntryPoint` 只跳到页面、不带回来的路）。**参数名不是我们随便取的**：`LoginPage.vue` 早就在读它，并且按 **origin** 校验目的地（不是看开头几个字符——浏览器把 `\` 读成 `/`，`/\evil.example` 能骗过前缀检查）。没有它，人登录完落在首页，而 CLI 在 loopback 上等一个永远不来的回调。
-- **loopback 监听要收紧**：只绑 `127.0.0.1`（**不是 `0.0.0.0`**，否则同网段的人都能打进来）、只接受第一个请求、验完 `state` 就关掉、加一个超时兜底（RFC 8252 §8 的做法）。临时端口只在这次请求期间开着。
+- **走回环的客户端必须校验 `state`**：自己生成、回调时逐字比对——没有它，别人可以让你拿着**他的**授权码去换令牌（你替他登录）。第一方 CLI 已不走这条路。
+- **未登录的落点是 `/login?return_to=<原始请求>`**，`return_to` 由 `TokenSecurityConfig` 里那个 entry point 拼出来（框架的 `LoginUrlAuthenticationEntryPoint` 只跳到页面、不带回来的路）。**参数名不是我们随便取的**：`LoginPage.vue` 早就在读它，并且按 **origin** 校验目的地（不是看开头几个字符——浏览器把 `\` 读成 `/`，`/\evil.example` 能骗过前缀检查）。没有它，人登录完落在首页，而等回调的客户端在那边永远等不到人回来（第一方 CLI 已不走回调，见上）。
+- **将来接回环的客户端要收紧监听**：只绑 `127.0.0.1`（**不是 `0.0.0.0`**）、只接受第一个请求、验完 `state` 就关掉、加超时兜底（RFC 8252 §8）。第一方 CLI 没有监听。
 - **PKCE 的 `code_verifier` 要校验形状**（RFC 7636：43–128 个字符、`[A-Za-z0-9-._~]`）——不校验的话，一个短 verifier 会让 `S256` 的强度名不副实。
 - **`/oauth/token` 要限流**（按调用方地址，另按 `client_id`）：**本版未做**，见 §还没做的；M1 的 `auth_throttle` 是现成的，加两条规则即可。授权码本身熵足够高、猜不出来，但端点不该是一个免费的枚举入口。
 - **`audience` 的具体取值是本服务的 public base URL**（[`skillmaster.public-base-url`](../config.md) 同一个值）——两个地方用同一个数，就不该写两遍。
 
 ### 同意（人这一次）
 
+**这一节的「被记住」说的是框架的授权码流程**（将来的第三方客户端）。**v68 的设备批准不记同意**：每一张新链接都要人在页面上再点一次「同意并继续」，而且换来的是一张只有 access token 的凭据（`CliSignIn.Credential`）——没有 refresh token，也就不存在「凭据过期后静默续期」这件事。
+
 - **为什么要有这一步。** v1 只有我们自己的 CLI 一个客户端，而且是一方客户端，所以同意今天看起来有点像多余的动作。它仍然必须有，理由按分量排：
   1. **它是产品里唯一一次告诉用户「你交出去的是什么」的地方。** `skills:write` 意味着「这个 CLI 能以你的名义发布 skill」，而**用户点了 `skmr login` 不等于他知道这件事**。所以同意页要写清后果，不是一句「是否授权」。
-  2. **更关键的是：它是「被记住」的那个对象。** 同意被存下来之后，第一次是「登录 → 同意 → 凭据」，**此后每次重新授权（凭据过期、换机器、重装）都是「登录 → 直接成功」**。所以「不需要第二次」这件事，恰恰是因为有第一次的同意被记下来了——**去掉这一步不是省了一步，是把摩擦换个地方收**。
+  2. **更关键的是（对授权码流程而言）：它是「被记住」的那个对象。** 同意被存下来之后，第一次是「登录 → 同意 → 凭据」，**此后每次重新授权（凭据过期、换机器、重装）都是「登录 → 直接成功」**。所以「不需要第二次」这件事，恰恰是因为有第一次的同意被记下来了——**去掉这一步不是省了一步，是把摩擦换个地方收**。
   3. **它让 P2 不必重写一条安全关键路径。** 第三方客户端（CIMD）进来时同意是硬要求。现在建好，将来只是多一行数据；将来才建，动的就是授权流程本身。同一条论证见「客户端查找从第一天就走 `RegisteredClientRepository`」。
 - **同意的维度是「用户」不是「用户 + 设备」**：键是 `(client_id, userId)`，也就是 `oauth2_authorization_consent` 的主键 `(registered_client_id, principal_name)`——正好是框架那张表，不用动它（判据同 [ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md)：只在冲突处自研）。
   - **「设备维度」不是一层安全控制，是假的**：设备标识只能由客户端自报（CLI 自己在本地生成一个 ID），所以攻击者要么**声称自己是已知设备**，要么干脆**点一下那个同意按钮**——因为驱动浏览器的就是他本人。它对诚实的用户加一次点击，对攻击者零成本。
@@ -108,6 +108,8 @@
 
 ### 刷新（此后每一次静默）
 
+**这一节描述的是框架的授权码流程**——将来的第三方客户端仍然走它。**第一方 CLI 自 v68 起不拿 refresh token**（`CliSignIn.Credential` 只有 access token），所以下面提到「CLI 每次按需刷新」与「本机加一把锁」的句子，是 v4 之前的形状，留作历史（**刷新链、锁与竞态窗口是 v4 随「不再发 refresh token」一起删掉的**，v68 只换了登录的取回路径）。
+
 - **刷新即轮换**：每次刷新签发一个新的 refresh token，并把它要替换的那个写进 `rotated_from`。旧的随即失效。**这不是可选项**——[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) §2.2.2 对公共客户端是 MUST（sender-constrained 或轮换，二选一；CLI 没有 `client_secret`，所以只剩轮换）。
 - **旧 token 被再次使用，分两段判**（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)）：
   - **轮换后一个短暂窗口内**（`skillmaster.tokens.refresh-replay-grace`，默认值见 [`config.md`](../config.md)）→ 算**竞态**，按正常刷新发一对新的，不撤销任何东西。
@@ -116,20 +118,20 @@
   - **两段都在 `TokenStore` 里判，因为框架一个字都不做。** 框架的 refresh provider 对一个失效的 refresh token 只做一件事——抛 `invalid_grant`，既不撤销也不碰整条链。所以「窗口外撤销整条链」必须落在接口的这一侧（[ADR 0023](../../decisions/0023-spring-authorization-server-with-our-own-storage.md) 说规则归存储），而且**必须在它放弃之前**，因为它之后不会再回调我们。
   - **窗口只在家族还活着时生效。** 竞态总留下一个活的继任者；家族里一个活的都没有，说明这是**有人有意结束的**（`POST /oauth/revoke`、登出、`TokenRevocation.revokeAllFor`），窗口不得把它救回来。少了这个条件，一次登出之后的重试会拿到一对能用的新令牌——**一次只持续到那个窗口结束的登出**。这个条件是写完之后被既有那条「撤销后刷新必须被拒」的 IT 当场逼出来的。
   - **撤销的范围是整条授权，不是沿 `rotated_from` 走一遍。** ADR 0024 要的是「别按 `(client_id, user_id)` 一锅端」，而一次轮换不改 `authorization_id`、一次授权就是一台设备上的一次登录——所以两者只在一个地方不同：窗口放行会造成**分叉**，而按授权撤销把两支一起收掉才是对的。理由写在 `TokenStore.revokeAuthorization`。
-- **为什么会有竞态**：刷新是**每个 CLI 进程按需做**的，而 agent 一个任务会调 CLI 好几次（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）。两个进程同时看到过期、拿同一个 refresh token 各换一次——一个赢，另一个递的是已轮换掉的旧 token。
-- **客户端另加一把锁**让竞态变稀（keychain 旁边），但窗口是兜底、不是可省的。锁只解决**同机**并发，而那正是我们的场景。
+- **为什么会有竞态**（v4 之前的第一方 CLI 形状）：刷新是**每个 CLI 进程按需做**的，而 agent 一个任务会调命令行好几次（[ADR 0011](../../decisions/0011-server-and-cli-stack.md)）。两个进程同时看到过期、拿同一个 refresh token 各换一次——一个赢，另一个递的是已轮换掉的旧 token。
+- **v4 之前的客户端另加过一把锁**让竞态变稀（keychain 旁边）；链、锁与竞态窗口随 v4 一起删除，这一条只对将来带 refresh token 的客户端成立。
 - **窗口内的盗用不会被发现**——这是买那几秒容错的价钱。
 - **允许分叉**：窗口内放过的那次会再发一对新的，同一条链于是分成两支。清扫要按 token 逐个过期，**不能假设链是一条直线**。
 - **判定读库，不读内存**：Keycloak 的 CVE-2026-9802 就是陈旧检测拿了进程启动时间，重启后已轮换的旧令牌又被接受。我们查 `rotated_from` 与库里的时间戳，重启不影响。
 - **refresh token 必须会过期，而且是两把尺子**：**闲置期**（多久不用就作废）+ **绝对上限**（即使天天用也强制重新授权一次）。两个默认值在 `skillmaster.tokens.refresh-token-idle` / `refresh-token-absolute`，见 [`config.md`](../config.md)。[RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html) §4.14 建议的是闲置那一条；绝对上限的价值在于**保证一个被遗忘的凭据不会永远有效**，而且它强制了一次「人出面」——那是重新确认「这个人还在用这个账号」的唯一时机。
   - **跟上用户那个旋钮（未定）**：用户能选「保持登录多久」（一周 / 一月 / 长期），refresh token 的过期跟着它走，这样用户只需要理解**一个**寿命概念，而不是两个。**这个旋钮在产品里还不存在**——ADR 0024 提到了它，PRD 里没有，所以今天绝对上限是一个部署配置、不是一个人能选的东西。
-  - **一个让风险比看起来小的性质**：因为轮换，**磁盘上那张 refresh token 每次用都会被换掉**。所以「长期」这个词有点误导——每天都用 CLI 的人，盘上那张最多只有几小时的历史。真正长期不变的是**不用它的人**手里那张。
+  - **一个让风险比看起来小的性质**：因为轮换，**磁盘上那张 refresh token 每次用都会被换掉**。所以「长期」这个词有点误导——每天都用它的客户端，盘上那张最多只有几小时的历史。真正长期不变的是**不用它的人**手里那张。
 - **刷新可以收窄 scope，不可以放大**（`refresh_token.scope` 的注释）。收窄是客户端在放弃权限，放大是把一次授权当成永久的提权入口。
 - 令牌**过期了就静默换**——产品图第 ② 格那件事就落在这一条上。
 
 ### 无人：今天是一把 API key
 
-- **这条路不在本模块的协议面上。** 无人值守（CI、服务器）没有浏览器，也没有人在场，所以它不用授权码、不用同意页——它用控制台里签出的一把 **API key**（`login --with-key`，或 `SKILLMASTER_API_KEY`；[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7、[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)）。
+- **这条路不在本模块的协议面上。** 无人值守（CI、服务器）没有浏览器，也没有人在场，所以它不用授权码、不用同意页——它用控制台里签出的一把 **API key**（放进 `SKILLMASTER_API_KEY`；[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7、[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)）。
 - **「它凭什么代表某个人」不再是一个必须回答的产品问题**——它代表的**就是**签它那个人，而签字这个动作只可能发生在一个已登录的会话里（[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md) §决定 1）。v1 为此在 `oauth_client` 上加过一列 `user_id`（[ADR 0022](../../decisions/0022-unattended-client-bound-to-a-user.md)），那条路没了，那一列也就没有存在的理由。
 - **验证同样不在 M2。** key 与 OAuth 令牌共用一个接缝（`TokenValidator` 的一个实现，见 §实现状态），而接缝在 M3；请求路径上一样没有 M2。**两种凭据的区别只有一处**：key 会说它为什么被拒（撤销 / 停用 / 过期各有各的 `error.code`），OAuth 令牌一律只说 `unauthenticated`——这条分界由 `IssuedTokenValidatorIT` 与 `ApiKeyIT` 分开钉住。
 - **key 的设计权威不在这里。** 表结构、续期与两条审计信号在 [v2 技术设计](../../versions/v2-credentials/technical-design.md) 与 ADR 0038–0042；**有效期是用户的选项、上限固定 365 天、365 天未使用自动撤销**在 [v53 技术设计](../../versions/v53-api-key-expiry/technical-design.md) 与 [ADR 0171](../../decisions/0171-api-key-expiry-is-a-choice.md)。这一页只说明**它为什么是 M2 的一张表**：一个接缝验两种凭据，所以两类凭据的存储归同一个模块。
@@ -159,9 +161,9 @@
 - **两个方向都要有**：`POST /oauth/revoke`（RFC 7009，客户端自己注销一张令牌）与用例层调的 `TokenRevocation.revokeAllFor(userId)`（一个人全部令牌）。
 - **`/oauth/revoke` 上公共客户端怎么被认出来**：CLI 没有 `client_secret`，所以按 RFC 7009 带 `client_id` 即可——**但它只能撤自己那一次授权的令牌**（拿 `authorization_id` 与 `client_id` 一起校验），否则任何一个人都能拿别人的令牌串去把别人踢下线。撤销一个本来就不存在或不属于自己的令牌，要**答 200 而不是 404**（RFC 7009 的要求：不泄露令牌是否存在）。
 - **停用一个人也是撤销的一部分**：`status = 'suspended'` 在他的令牌上不会自动生效（M1 只在**登录那一刻**校验 status），所以「停用」要走一个用例——**改 status 与 `TokenRevocation.revokeAllFor(userId)` 在同一个事务里**，和重置密码是同一个形状。**代价：「停用」必须只有一个入口**，散在多处就会漏掉撤销那一边。
-- **`skmr logout` 清本地凭据，并从 v46 起结束服务端那次 CLI 登录**（[ADR 0142](../../decisions/0142-cli-logout-ends-its-own-server-login.md)）：登录凭据走 `POST /api/v1/logout`，由出示的凭据自身定位授权；API 密钥仍只清本机，key 在控制台撤销（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7 已收窄到 key）。本地两处都清——钥匙串与兜底文件，见 [ADR 0025](../../decisions/0025-cli-credential-storage.md)。**v46 之前的形状是只删本地、服务端那两份一份都不碰**，那时 `login` 换来的授权只有重置密码能连带撤掉；**「先撤销、再删本地、顺序不能反」曾是 v1 的形状**（先删本地就没法撤销了；只做一步都不够）——那条顺序现在归 `login` 替换旧授权时走：`RevokeAuthorization` 只撤销、**不删**本地，因为那一刻库里已经是新的那一份。
+- **`skmr logout` 清本地凭据，并从 v46 起结束服务端那次 CLI 登录**（[ADR 0142](../../decisions/0142-cli-logout-ends-its-own-server-login.md)）：登录凭据走 `POST /api/v1/logout`，由出示的凭据自身定位授权；API 密钥仍只清本机，key 在控制台撤销（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7 已收窄到 key）。本地那一份也要清——默认的 0600 文件，或 `--keyring` 写的那份，见 [ADR 0185](../../decisions/0185-credentials-default-to-a-file.md)。**v46 之前的形状是只删本地、服务端那两份一份都不碰**，那时 `login` 换来的授权只有重置密码能连带撤掉；**「先撤销、再删本地、顺序不能反」曾是 v1 的形状**（先删本地就没法撤销了；只做一步都不够）——那条顺序现在归 `login` 替换旧授权时走：`RevokeAuthorization` 只撤销、**不删**本地，因为那一刻库里已经是新的那一份。
 - **两边的登出互不牵连，这是有意的**：`skmr logout` 不碰浏览器会话，`/web/logout` 也不撤销 CLI 的令牌。它们是两张独立凭据、两条独立授权——这与行业一致（从 GitHub 网页登出，`gh` 的 token 不受影响）。用户的心智若是「我登出了」，需要的是下面那条，而不是把两件事偷偷绑在一起。**这条已被真令牌实测过**（2026-10-05，第十二轮）：网页端退出后，同一账号的访问令牌打 API 仍是 200、刷新令牌仍能换新；而把同一张令牌直接 `POST /oauth/revoke` 则立刻 401——所以那个 200 是「网页退出没碰它」，不是「令牌本来就不校验」。数字与步骤见 [`test-plan.md` §结果](../../versions/v1-hosting/test-plan.md#结果)。
-- **交接机器要用户做两件事**：`skmr logout`（清钥匙串或兜底文件；v46 起对 CLI 登录还会结束服务端那次登录）**＋** 浏览器登出（清 cookie）。API 密钥仍要单独去控制台撤销；浏览器里存的登录密码更不在我们管辖内。
+- **交接机器要用户做两件事**：`skmr logout`（清默认文件或钥匙串；v46 起对 CLI 登录还会结束服务端那次登录）**＋** 浏览器登出（清 cookie）。API 密钥仍要单独去控制台撤销；浏览器里存的登录密码更不在我们管辖内。
 - **「退出所有设备」是那个缺失的一键，v1 明确不做**（用户的决定，2026-10-02）。它本来不必是新的能力——`TokenRevocation.revokeAllFor(userId)` 已经有了（重置密码在用），只是换一个入口。**做的时候有一处交互必须做对**：别的机器上本地文件还在，那条 CLI 下次刷新会拿到 `invalid_grant`，它必须把这句话翻译成「你的授权已被撤销，请重新登录」，**并自己删掉本地那份凭据**——不能报一个裸错误码，也不能默默失败。
 - **重置密码要撤销该用户全部令牌——两半都实现了**（M2 这一半 2026-10-05 才接上）。M1 那一半（撤销会话）在 `ResetPasswordUseCase` 里早就有了，M2 这一半当时只到「接口和实现都写好」为止，**没有任何生产调用者**：全仓库唯一调 `TokenRevocation.revokeAllFor` 的是 `AuthorizationServerIT` 的一条测试，所以它钉住的是 SQL 与模块边界，**「有人能走到它」这层没人钉**。补上的是用例层的一行注入加一次调用（跨模块编排归用例层，[规则②](../rules.md)），以及一条走 `POST /web/reset` 真实入口的用例——原来那条直接调模块方法的用例，正是它此前一直绿的原因。
 
@@ -183,7 +185,7 @@
 
 **`scope` 只有两个**：`skills:read` 与 `skills:write`（[`Scopes`](../../../skillmaster-server/src/main/java/com/skillmasterai/modules/auth/Scopes.java)），而**按方法判该要哪一个**这件事已经在 M3 里实现了（`Scopes.requiredForMethod`）。M2 是这两个字符串的生产者，`Scopes` 是它们的权威——**两处各写一份字面量是这套东西最容易漂的地方**。
 
-**对外的 HTTP 面全在 `/oauth/*` 与 `/.well-known/*` 上**（§4.1 的协议面）——路径由 `AuthorizationServerSettings` 配成这个形状（**不跟随框架的 `/oauth2/*` 默认值**），线格式由各端点自己定义。**同意页不在这套端点里**：它是 `skillmaster-console/` 提供的一个页面（[ADR 0015](../../decisions/0015-web-frontend-stack.md) 说页面归 SPA、`/web/*` 永远只是 API），而未登录时的落点是**已经有的** `/login`。
+**协议面在 `/oauth/*` 与 `/.well-known/*` 上**（§4.1），**设备登录另有四条匿名端点**：`POST /cli-device-sign-ins`（发起）、`GET /cli-device-sign-ins/{ticket}`（页面读公开视图）、`POST /cli-device-sign-ins/{ticket}/token`（轮询）、`POST /cli-device-sign-ins/{ticket}/cancel`（取消），加上会话面上的 `POST /web/cli-device-sign-ins/{ticket}/approve|refuse` 两条，共六个；都在 `WebRoutes` 里——路径由 `AuthorizationServerSettings` 配成这个形状（**不跟随框架的 `/oauth2/*` 默认值**），线格式由各端点自己定义。**同意页不在这套端点里**：它是 `skillmaster-console/` 提供的一个页面（[ADR 0015](../../decisions/0015-web-frontend-stack.md) 说页面归 SPA、`/web/*` 永远只是 API），而未登录时的落点是**已经有的** `/login`。
 
 ## 为什么这样切
 
@@ -200,7 +202,7 @@
 
 | 项 | 状态 |
 |---|---|
-| 表清单 | **已落库。** 涉及 M2 的迁移是 `V1`、`V5`–`V9`、`V13`、`V14`。 `V1` 建四张；**`V5`** 加三张令牌表的 `authorization_id` 与框架的同意表（它原本还有第三处——`oauth_client.user_id`——**v3 已就地撤销**，见 §无人）；**`V6`** 补父行 `oauth_authorization`；**`V7`** 补它的 `state`；**`V8`** 改对 `id` 的注释；**`V9`** 给父行加 `revoked_at`，让它能自己说「我结束了」（§撤销）；**`V13`** 加 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）；**`V14`** 加 `cli_sign_in_code`（[v4 技术设计](../../versions/v4-cli-login/technical-design.md)）。`V10`–`V12` 是 M7 的。全部迁移从零应用过，`TableOwnershipTest` 双向对得上。 |
+| 表清单 | **已落库。** 涉及 M2 的迁移是 `V1`、`V5`–`V9`、`V13`、`V53`。 `V1` 建四张；**`V5`** 加三张令牌表的 `authorization_id` 与框架的同意表（它原本还有第三处——`oauth_client.user_id`——**v3 已就地撤销**，见 §无人）；**`V6`** 补父行 `oauth_authorization`；**`V7`** 补它的 `state`；**`V8`** 改对 `id` 的注释；**`V9`** 给父行加 `revoked_at`，让它能自己说「我结束了」（§撤销）；**`V13`** 加 `api_key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md)）；**`V53`** 删 `cli_sign_in_code`、加 `cli_device_sign_in`（[v68 技术设计](../../versions/v68-cloud-device-login/technical-design.md)，[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)）。`V10`–`V12` 是 M7 的。全部迁移从零应用过，`TableOwnershipTest` 双向对得上。 |
 | `ModuleMap` 的 M2 条目 | **已就位**（`M2` → `token` → 该行列出的表）。**加表时要与迁移同批改**。 |
 | 依赖 | **已加** `spring-security-oauth2-authorization-server`，版本随 Spring Security（7.1.1），pom 里不写版本。 |
 | 存储适配器 | **已实现**：`internal/TokenStore`（框架的 `OAuth2AuthorizationService`，只存哈希）、`internal/ClientRegistry`（`oauth_client` → `RegisteredClient`）、`internal/TokenRevocations`（`TokenRevocation.revokeAllFor`）。 |
@@ -211,18 +213,18 @@
 | 审计 | **已接**（§3.5 那张单子里的 two）：签发记 `token_issue`（只在令牌确实是新的时候——框架会把读回来的授权再存一次）、整条授权撤销记 `token_revoke`、`TokenRevocation.revokeAllFor` 记 `token_revoke_all`（带**四**类行数：授权、access token、refresh token、码，因为「有没有真的切断」正是事后要回答的那个问题，而 `authorizations` 这一格在 `V9` 之前是无法统计的）。**两处不精确，都写着而不是留着让人猜**：① 令牌这条路上没有外层事务（框架不为令牌端点开事务），所以审计行是紧随其后写的，不是与变更同一个事务——见 [已知的不精确](#已知的不精确)；② `token_revoke` 的 `trigger` 记的是**哪一行是被标着失效递上来的**，不总是原因——一次**授权码重放**也会走到那个分支（框架那次会去失效它签发过的 refresh token），于是审计说 `refresh_token_revoked`，而真实原因是重放。之所以不去猜，是因为在这个方法里分辨不出来：换过码的授权，其码本身也已经失效，所以「码用过了」在每一次兑换之后的写入里都成立。原因仍可从同一条审计上复原——那张码自己的 `used_at`，离这次授权只有一行。 |
 | `/oauth/*`、`/.well-known/*` | **已实现且已验证**：路径配成 `/oauth/*`，发现文档返回那三条路径。`config/TokenSecurityConfig` 是 Order 0 的那条链，带 `securityMatcher`。<br>**元数据被收窄成「本部署真正支持的东西」**（`TokenSecurityConfig.describeThisServer`）：框架默认那份广告的是**框架**的能力——四种授权类型（`client_credentials` 是 v3 删掉的那条、`token-exchange` 从未实现）、六种机密客户端认证方式（这里只有公共客户端）、JWKS、introspection、证书绑定与 DPoP。每一项都是客户端会照着做事的一句话，而失败落在客户端那侧：它去要一个没人能拿到的授权、或去取一份答 401 的文档。**这是一处偏离，所以有一条测试盯着它**（`theDiscoveryDocumentDescribesThisServer...`），框架升级把默认项加回来时先红的是测试，而不是文档又开始过度承诺。<br>**资源元数据那一份（RFC 9728）不在**：它从未实现，§174 的 MUST 至今未兑现，见 [v3 的 known-issues 003](../../versions/v3-sessions/known-issues.md)（状态行在 [v1 README](../../versions/v1-hosting/README.md)）。 |
 | 客户端注册 | **没有接口，只有一行种子**（ADR 0011）。`ClientRegistry.save` 直接抛异常并把这条决定写在消息里——静默无操作会让一个「注册成功」的客户端在授权端点才失败。IT 自己种那一行，与部署做的事相同。 |
-| 同意页 | **已实现**（`skillmaster-console/src/pages/ConsentPage.tsx`）。两个**普通 HTML 表单**（不是 `fetch`：POST 的答复是一次跳转到 CLI 的 loopback，导航必须由浏览器做），一个是同意、一个是拒绝——**拒绝就是同一个提交不带任何 scope**，框架把它读成 `access_denied`，IT 钉住了这一点。页面把每个 scope 写成**后果**而不是名字，认不出的 scope 会原样显示并标注「我们不知道这一项的含义」。未登录时的落点 `/login` 与 `return_to` 也接好了（见下）。 |
+| 同意页 | **已实现**（`skillmaster-console/src/pages/ConsentPage.tsx`）。两个**普通 HTML 表单**（不是 `fetch`：POST 的答复是一次跳转到客户端注册的回调地址，导航必须由浏览器做），一个是同意、一个是拒绝——**拒绝就是同一个提交不带任何 scope**，框架把它读成 `access_denied`，IT 钉住了这一点。页面把每个 scope 写成**后果**而不是名字，认不出的 scope 会原样显示并标注「我们不知道这一项的含义」。未登录时的落点 `/login` 与 `return_to` 也接好了（见下）。 |
 | **同意那个 POST 的 CSRF** | **开着，但盖不到它**——而且这是框架的选择，不是我们的：`OAuth2AuthorizationServerConfigurer.init()` 对它自己服务的每个端点调 `csrf.ignoringRequestMatchers(...)`，没有公开 API 能把端点从那张名单上摘下来。所以这个链上的 CSRF 配置留着（默认更安全：以后加进这条链、且不属于框架的东西自动受保护），但**同意提交这一笔浏览器写请求是豁免的**。风险边界与它的到期条件记在 [已知的不精确](#已知的不精确)。 |
 | audience 与审计 | **两样都有了。** `access_token.audience` 写的是配置的 base URL，`IssuedTokenValidator` 按同一个值校验（同源判断，不是「谁都能用」）；审计三处接线见上面那行。 |
 | **两把尺子与宽限窗口** | **已实现，且都是配置**（[ADR 0024](../../decisions/0024-refresh-replay-grace-window.md)）。五个数字在 `TokenPolicy`（由 `config.TokenSecurityConfig` 从 `skillmaster.tokens` 建），闲置寿命走框架的 `TokenSettings`，**绝对上限在 `TokenStore` 里自己做**——框架没有这个设置项，因为它是关于整条授权、而不是关于这一次签发的令牌。锚点是 `oauth_authorization.created_at`：唯一能活过每一次轮换的时刻。**上限短于闲置寿命在启动时被拒**，否则闲置那条永远轮不到而表面上像在生效。 |
-| CLI | **v46 起，CLI 登录凭据的 `logout` 会调用 `POST /api/v1/logout` 结束服务端那次登录；API 密钥仍只清本机**（[ADR 0142](../../decisions/0142-cli-logout-ends-its-own-server-login.md)）。**v46 之前的形状是 `logout` 只删本机那一份、不再调 `/oauth/revoke`**（并且**删不掉时报错退出**——钥匙串不应答时它只说「文件那份清了、钥匙串那份没动」，不谎报「已清除本地凭据」），凭据多了环境变量这条来路，`login` 多一个 `--with-key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7、[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)）；下面记的是 v1 当时的形状与那一轮跑出来的东西。<br>**v3 把那条无人值守的子命令连根删了**——参数、两个环境变量、`auth.ClientCredentials`、`Revoke` 的密钥分枝与它那两条错误、以及服务端的半套（`oauth_client.user_id`）。**旧机器上留下的那类凭据得到的是诚实的说法**：它没有刷新令牌、且无法从这台机器撤销（[v3 技术设计](../../versions/v3-sessions/technical-design.md)、`test-plan.md` 的 T17）。<br>**已实现并对着真服务端跑过一遍（2026-10-04）**（`skillmaster-cli/`）：`login` / `logout` / `setup` / `search` / `show` / `get` / `publish`，以及**当时还有的**那条无人值守子命令（现已被删，见上）。`login` 固定端口（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）、S256、校验 `state`、只绑 `127.0.0.1`；`logout` **先撤销再删本地**，撤销失败时**保留**凭据（删了就没法重试，而那会让「已登出」变成假话）；刷新走一把本机锁，且**不每次命令都刷**——刷新即轮换，每次刷就是每次转动那条链。**回滚是唯一没写的子命令**，而且 §4.6 并没有列它。**`versions` 与 `list` / `share` 都已经落地了**（P0f 与 P0g；§4.6 那张表现在逐行都有对应实现）；服务端那一侧还缺的是 §4.3 的 `PATCH` 元数据与 `restore`。<br>**跑这一遍才发现的东西，四条**（都是 CLI 侧，服务端没错）：① `publish` 把服务端的 `created` 读成「这个 skill 是新建的」，而它其实是「这次调用新建了**版本**」——于是给一个改过内容的旧 skill 打上「已创建」；② 刷新时用的是 CLI 自己编译进去的 `client_id`，而不是凭据自己的那个，于是无人值守凭据的续期以别的客户端身份发出去；③ 无人值守凭据（没有 refresh token）过期时发一个空 `refresh_token`，收到的是服务端一句裸的 `invalid_client`；④ **`logout` 对无人值守凭据什么都不撤销却报「已撤销授权」**，令牌继续能用最多一小时。前三条是消息与身份，第四条是真话与假话的区别——已全部修掉，各自有测试。<br>**第十一轮（2026-10-05）又跑了一遍，这次走的是浏览器那条**：真账号 → 真浏览器 → 同意页 → `127.0.0.1:51004` 回调 → PKCE 换令牌 → 钥匙串；随后 publish/search/show/get 全通，**同意过的账号第二次 `login` 一次点击都没要**，**服务端重启后重启前那枚凭据照旧可用**，刷新与轮换也用 10 秒 TTL 逼出来并观察到（`rotated_from` 与 `revoked_at` 逐个对得上），`logout` 只撤被递上来那条链（库里当时有两条授权，另一条一个令牌都没动）。**又抓到三条**：① 开发代理 `changeOrigin: true` 改写 Host，让授权端点回 `Location: http://localhost:8080/login`——那个源没有页面，登录会在中间断；② `/gateway` 没进代理表而 Vite 对未匹配路径回 `index.html` + 200，于是 `setup` **把一张网页写进 `SKILL.md` 并报成功**（agent 随即以 `description: <!doctype html>` 加载它）——两边的测试各自都对，合起来才错；③ 刷新锁的目录在钥匙串用户那里根本不存在，于是每次刷新都以 ENOENT 失败、打一句像「有人正持有锁」的警告然后不带锁继续（锁的单测用 `t.TempDir()`，目录总是存在）。三条都修了；**第四条是问出来的**：`access_token` 在有效期内被撤销（改密码、或那条链在别处被撤销）时，CLI 只按自己存的 `expires_at` 判断要不要刷新，于是收到 401 就只剩一句服务端原文、既不自动恢复也不说重新登录——现在 `api` 把 401 报成 `ErrUnauthorized`（**403 不算**：`insufficient_scope` 重新登录也只会拿到同样的 scope），`main` 收到就 `auth.Renew` 续期一次并重试一次，`Renew` 还会被告知被拒的是哪一枚、因此同一条命令里不会转两次链。ADR 0024 §后果 要的那句「请重新登录」也一并落到消息里了（原先那句是英文的 `the authorization was revoked`，只翻译了错误码、没说该做什么）。<br>**当轮还改了一处行为**：重新 `login` 现在会把**上一次那张授权**撤掉（顺序是登录成功之后再撤，反过来会在登录失败时把人踢下线；撤销失败只警告，因为新凭据已经在手且可用）。改的原因是这次测试里连着登录了三次，于是库里同时活着三条授权，而其中两条的 refresh token **已经不在任何地方了**——第二次登录覆盖了第一次，它们再也不可能从这台机器上撤销。那正是下面「已授权的凭据列表」那条被推迟时没说到的维度。 |
+| CLI | **v68 起，CLI 登录不再经过 `/oauth/*` 与回环**：`skmr login` 在 `/cli-device-sign-ins` 发起、打印一次性链接，人在任意浏览器批准，CLI 每秒轮询取回令牌（[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)）；`cancel` 让 Ctrl-C 立即作废票根。下面记的是这条路径之前的历史。<br>**v46 起，CLI 登录凭据的 `logout` 会调用 `POST /api/v1/logout` 结束服务端那次登录；API 密钥仍只清本机**（[ADR 0142](../../decisions/0142-cli-logout-ends-its-own-server-login.md)）。**v46 之前的形状是 `logout` 只删本机那一份、不再调 `/oauth/revoke`**（并且**删不掉时报错退出**——钥匙串不应答时它只说「文件那份清了、钥匙串那份没动」，不谎报「已清除本地凭据」），凭据多了环境变量这条来路，`login` 多一个 `--with-key`（[ADR 0038](../../decisions/0038-default-credential-is-an-api-key.md) §决定 7、[ADR 0040](../../decisions/0040-api-key-in-the-cli-now-the-browser-path-later.md)）；下面记的是 v1 当时的形状与那一轮跑出来的东西。<br>**v3 把那条无人值守的子命令连根删了**——参数、两个环境变量、`auth.ClientCredentials`、`Revoke` 的密钥分枝与它那两条错误、以及服务端的半套（`oauth_client.user_id`）。**旧机器上留下的那类凭据得到的是诚实的说法**：它没有刷新令牌、且无法从这台机器撤销（[v3 技术设计](../../versions/v3-sessions/technical-design.md)、`test-plan.md` 的 T17）。<br>**已实现并对着真服务端跑过一遍（2026-10-04）**（`skillmaster-cli/`）：`login` / `logout` / `setup` / `search` / `show` / `get` / `publish`，以及**当时还有的**那条无人值守子命令（现已被删，见上）。`login` 固定端口（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)）、S256、校验 `state`、只绑 `127.0.0.1`；`logout` **先撤销再删本地**，撤销失败时**保留**凭据（删了就没法重试，而那会让「已登出」变成假话）；刷新走一把本机锁，且**不每次命令都刷**——刷新即轮换，每次刷就是每次转动那条链。**回滚是唯一没写的子命令**，而且 §4.6 并没有列它。**`versions` 与 `list` / `share` 都已经落地了**（P0f 与 P0g；§4.6 那张表现在逐行都有对应实现）；服务端那一侧还缺的是 §4.3 的 `PATCH` 元数据与 `restore`。<br>**跑这一遍才发现的东西，四条**（都是 CLI 侧，服务端没错）：① `publish` 把服务端的 `created` 读成「这个 skill 是新建的」，而它其实是「这次调用新建了**版本**」——于是给一个改过内容的旧 skill 打上「已创建」；② 刷新时用的是 CLI 自己编译进去的 `client_id`，而不是凭据自己的那个，于是无人值守凭据的续期以别的客户端身份发出去；③ 无人值守凭据（没有 refresh token）过期时发一个空 `refresh_token`，收到的是服务端一句裸的 `invalid_client`；④ **`logout` 对无人值守凭据什么都不撤销却报「已撤销授权」**，令牌继续能用最多一小时。前三条是消息与身份，第四条是真话与假话的区别——已全部修掉，各自有测试。<br>**第十一轮（2026-10-05）又跑了一遍，这次走的是浏览器那条**：真账号 → 真浏览器 → 同意页 → `127.0.0.1:51004` 回调 → PKCE 换令牌 → 钥匙串；随后 publish/search/show/get 全通，**同意过的账号第二次 `login` 一次点击都没要**，**服务端重启后重启前那枚凭据照旧可用**，刷新与轮换也用 10 秒 TTL 逼出来并观察到（`rotated_from` 与 `revoked_at` 逐个对得上），`logout` 只撤被递上来那条链（库里当时有两条授权，另一条一个令牌都没动）。**又抓到三条**：① 开发代理 `changeOrigin: true` 改写 Host，让授权端点回 `Location: http://localhost:8080/login`——那个源没有页面，登录会在中间断；② `/gateway` 没进代理表而 Vite 对未匹配路径回 `index.html` + 200，于是 `setup` **把一张网页写进 `SKILL.md` 并报成功**（agent 随即以 `description: <!doctype html>` 加载它）——两边的测试各自都对，合起来才错；③ 刷新锁的目录在钥匙串用户那里根本不存在，于是每次刷新都以 ENOENT 失败、打一句像「有人正持有锁」的警告然后不带锁继续（锁的单测用 `t.TempDir()`，目录总是存在）。三条都修了；**第四条是问出来的**：`access_token` 在有效期内被撤销（改密码、或那条链在别处被撤销）时，CLI 只按自己存的 `expires_at` 判断要不要刷新，于是收到 401 就只剩一句服务端原文、既不自动恢复也不说重新登录——现在 `api` 把 401 报成 `ErrUnauthorized`（**403 不算**：`insufficient_scope` 重新登录也只会拿到同样的 scope），`main` 收到就 `auth.Renew` 续期一次并重试一次，`Renew` 还会被告知被拒的是哪一枚、因此同一条命令里不会转两次链。ADR 0024 §后果 要的那句「请重新登录」也一并落到消息里了（原先那句是英文的 `the authorization was revoked`，只翻译了错误码、没说该做什么）。<br>**当轮还改了一处行为**：重新 `login` 现在会把**上一次那张授权**撤掉（顺序是登录成功之后再撤，反过来会在登录失败时把人踢下线；撤销失败只警告，因为新凭据已经在手且可用）。改的原因是这次测试里连着登录了三次，于是库里同时活着三条授权，而其中两条的 refresh token **已经不在任何地方了**——第二次登录覆盖了第一次，它们再也不可能从这台机器上撤销。那正是下面「已授权的凭据列表」那条被推迟时没说到的维度。 |
 | spike | **已删除**（2026-10-03）。它证明的两件事都已经被真实现和 `AuthorizationServerIT` 覆盖。**代价记在这里**：它那条机密客户端的测试是唯一钉住「覆盖没有把框架自己的路弄坏」的东西，而真实现里没有机密客户端可测——**v3 之后也没有一个有日期的计划要有**（无人值守那条已经收掉，唯一的客户端是公共客户端），所以这条守卫今天没有回来的日子：真要接第三方机密客户端时才回。 |
 
 ### 还没做的
 
 | 没做 | 为什么 |
 |---|---|
-| ~~loopback 的端口~~ **已定（2026-10-03）：固定端口** | 框架逐字比对 `redirect_uri`（`getRedirectUris().contains(...)`），不实现 RFC 8252 §8.4 的端口例外。要放过随机端口就得在授权端点加**第四处覆盖**，而 `setAuthenticationValidator` 会**整体替换**框架的校验组合（grant_type、code_challenge、prompt 都在里面）——等于重写整套安全校验，违反 ADR 0026 自己那条「只认领没人处理的那种形状」。所以 **CLI 用一个固定端口**（[ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md)），`gcloud`/`gh` 的做法。`AuthorizationServerIT` 已经按这个形状写。**临时端口 + 第四处覆盖排到 P2**，与 CIMD 一起。 |
+| ~~loopback 的端口~~ **已退役（2026-11-14）** | [ADR 0028](../../decisions/0028-cli-uses-a-fixed-loopback-port.md) 曾给第一方 CLI 定下固定回环端口。**v68 起 CLI 不再监听回环**，改走一次性链接 + 轮询（[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)），这个待办随之关闭。第三方客户端将来若要走回环，仍要面对框架的逐字比对。 |
 | ~~重放窗口的落点~~ **已定（2026-10-04）** | ADR 0024 留下的那个问题——窗口从哪个时间戳起算——两个半边的答案不同，且都不是新加的列：**绝对上限**锚在 `oauth_authorization.created_at`（唯一能活过每次轮换的时刻），**宽限窗口**锚在被递上来的那张自己的 `revoked_at`（唯一表示「它在何时不再是最新」的时刻）。ADR 0024 §后果 说这条决定会逼出一个时间戳列，结论是**没有逼出来**：`V5` 已有的 `revoked_at` 就够。 |
 | ~~refresh token 的绝对上限~~ **已实现（2026-10-04）**；**用户那个旋钮仍未定** | 两把尺子都在跑，五个数字都是配置（`TokenPolicy`）。剩下的只有**用户界面那半**：寿命跟着「保持登录多久」走这件事，产品上还没有那个选择项——它是 `prd.md` 要不要收的问题，不是 M2 的实现问题。 |
 | ~~同意页的形态~~ **已实现（2026-10-03）** | 页面在两个**普通 HTML 表单**里（同意 / 拒绝），协议那一半由 IT 钉住。**踩到的坑记在这里**：同意页拿到的 `state` **不是**客户端发来的那个——框架为这次往返换发了一个，表单必须回框架给的那个，回错会被拒成 `OAuth 2.0 Parameter: state`，读起来像安全失败而不是参数错误。拒绝＝同一个提交不带 scope。 |
@@ -236,7 +238,7 @@
 
 | 不精确 | 影响与边界 |
 |---|---|
-| **拿到会话的人可以静默拿到一张 CLI 凭据** | 同意是按 `(client_id, userId)` 记的（用户维度，见 §同意），所以一个已经同意过的用户，**在另一台机器上再次 `skmr login` 不会再被问**。于是任何拿到他会话的人（共享的电脑、被偷的 cookie）都能在自己的机器上静默拿到一张 refresh token，**而用户看不到任何提示**。设备维度解决不了它（标识是自报的，见 §同意），正确的缓解手段是**通知**——而通知 v1 没有。这是本条取舍的明确价钱。 |
+| **拿到会话的人可以给自己签一张 CLI 凭据** | v68 的设备批准每次都要人在页面上点一次，但页面认的是**会话**：拿到会话的人可以自己发起一条 ticket、再在同一会话里批准，把那张 access token 拿到自己的机器上，**而用户看不到任何提示**。设备维度解决不了它（标识是自报的，见 §同意），正确的缓解手段是**通知**——而通知 v1 没有。这是本条取舍的明确价钱。授权码流程里同样的风险还多一层（同意被记住、可以静默换 refresh token），规则同上。 |
 | **同意页跨一次跳转，待授权请求要在会话里过一夜** | 用户可能在同意页上停留很久、或者干脆关掉标签页。暂存的请求因此需要自己的过期时间，且**过期后必须拒绝而不是用默认值继续**。 |
 | **轮换链的撤销是「整链」而不是「这一个客户端」** | 一个用户在两个客户端上登录，其中一个的刷新令牌泄露 → 只撤那一条链。这是对的，但也意味着**链的划分依赖 `client_id` 判得准**——同一个客户端在两台机器上登录会得到两条独立的链，各自重放只撤各自那条。 |
 | **重放检出依赖「旧的还能被找到」** | 如果旧 token 的行被清扫掉了，重放就退化成「无效令牌」——仍然拒绝，但**整链撤销不会发生**。清扫策略（`idx_at_expiry` 那个索引暗示的按时间清扫）要与这条规则对齐。 |
@@ -245,4 +247,4 @@
 | **`audience` 只能校验「是不是本服务」** | 它挡得住「拿别处的令牌来用」，挡不住「拿本服务的令牌去访问本服务里另一个资源」——v1 只有一个资源，所以这不是问题；等付费与 MCP 适配器进来它才会变成问题。 |
 | **审计行与它描述的那次变更不在同一个事务里** | §3.5 与 `AuditLog` 的注释都要求「同一个事务」——在**用例**那条路上这是成立的（它们本来就有事务边界）。**令牌这条路上没有事务**：框架不为令牌端点开事务，我们的存储是一条语句一次提交，所以审计行是紧随其后写的。后果：一次在两步之间崩溃会留下「令牌已签发但没有审计行」。**为什么先接受**：另一种做法是给令牌端点套一个事务，那意味着在框架的过滤器里开事务——比这条不精确更糟。**到期条件**：等审计变成合规要求而不是可追溯性要求时，那才是重新考虑它的时候。 |
 | **`oauth_client.client_secret_hash` 必须是 bcrypt，否则认证会炸在一个不相干的地方** | 框架的 `ClientSecretAuthenticationProvider` 对读到的密文调 `PasswordEncoder.upgradeEncoding`，答案为「是」时**重新编码并调 `RegisteredClientRepository.save`**——而那个方法故意抛异常（v1 没有注册入口）。所以一条用 `{noop}`（或任何非 bcrypt 前缀）种下的行，认证会以一个 `UnsupportedOperationException` 结束，栈里全是框架的类。**已经踩过一次**：测试里那个无人值守客户端最初就是 `{noop}`——而**那条路 v3 已经删掉，所以今天没有任何一行会触发它**（唯一的客户端 `client_secret_hash` 为空）。框架的行为一个字没变，所以这条在种进第一个机密客户端时立刻回来。**怎么办**：种子行写 `{bcrypt}…`，这也正是那一列注释说的形状。**没有自动检查**——一条只在有人用非 bcrypt 密钥注册客户端时才出现的失败，只能靠把这件事写下来。 |
-| **同意提交不受 CSRF 保护，而这是框架的选择** | `OAuth2AuthorizationServerConfigurer.init()` 对它自己服务的每个端点调 `csrf.ignoringRequestMatchers(...)`，而 `CsrfConfigurer` 只提供「再加一条豁免」，没有撤销。所以这一笔**带着会话 cookie 的浏览器写请求**是豁免的。**风险边界**：v1 只有一个客户端（我们自己的 CLI），攻击者能促成的只有「让受害者的浏览器同意一次 `skillmaster-cli` 的授权」，而授权码只能落到**受害者自己机器上**的 loopback 监听——他机器上没有 CLI 在听，那条路就没有终点；有 CLI 在听，说明他就是本人。**到期条件**：P2 的 CIMD 一进来，客户端不再只有我们自己，「替别人同意」就有了真实收益，那时要么不再用框架的同意提交（改用我们自己的端点，代价是重新实现一遍同意处理——但那时它已经属于「有人处理而我们不合意」的另一种情形），要么去框架上补一个能撤销豁免的 API。**这一条不是「暂时关掉」，是「框架如此」，所以它按不精确记录而不是按待办。** |
+| **同意提交不受 CSRF 保护，而这是框架的选择** | `OAuth2AuthorizationServerConfigurer.init()` 对它自己服务的每个端点调 `csrf.ignoringRequestMatchers(...)`，而 `CsrfConfigurer` 只提供「再加一条豁免」，没有撤销。所以这一笔**带着会话 cookie 的浏览器写请求**是豁免的。**风险边界**：这条豁免只涉及**框架自己的同意页**（现在只服务将来的第三方客户端）；第一方 CLI 的批准走 `/web/cli-device-sign-ins/{ticket}/approve`，那条链上有会话与 CSRF。攻击者能促成的因此是「让受害者的浏览器对某个第三方客户端同意一次」，而授权码落到**那个客户端注册的回调地址**——受害者没有装它，就没有终点。**到期条件**：P2 的 CIMD 一进来，客户端不再只有我们自己，「替别人同意」就有了真实收益，那时要么不再用框架的同意提交（改用我们自己的端点，代价是重新实现一遍同意处理——但那时它已经属于「有人处理而我们不合意」的另一种情形），要么去框架上补一个能撤销豁免的 API。**这一条不是「暂时关掉」，是「框架如此」，所以它按不精确记录而不是按待办。** |

@@ -157,6 +157,10 @@ class SecurityConfig {
                         // but nothing would ask who is asking — the identical defect the
                         // `/web/keys/**` line above was written about.
                         .requestMatchers("/web/cli-sign-ins/**").authenticated()
+                        // The browser's two answers to a CLI question (v68). Same reason as the line
+                        // above: without it these writes fall to the permitAll over `/web/**` and
+                        // anybody could approve a login into somebody else's account.
+                        .requestMatchers("/web/cli-device-sign-ins/**").authenticated()
                         // v45's notification centre. Every answer is about one person's own feed
                         // and read state; falling to the permitAll below would let an anonymous
                         // request reach a controller that asks the session who it is, and there
@@ -229,7 +233,11 @@ class SecurityConfig {
                         // which is correct — the request carries no ambient authority to forge — and a
                         // request that also sends a bogus Bearer header is answered 401 by the
                         // validator rather than `code_not_found`. Harmless, and arguably truer.
-                        .requestMatchers("/cli-sign-ins/exchange").permitAll()
+                        // The CLI's question (v68): creation, view and poll. The poll is the one
+                        // public write that can hand out a credential, and what stands in for a
+                        // session is the device secret plus the PKCE verifier — never the ticket in
+                        // the link. Its address-keyed limit lives in the token module.
+                        .requestMatchers("/cli-device-sign-ins/**").permitAll()
                         // **`/gateway/**` keeps its permit even though no route answers it.** That
                         // turns a late client's request into this server's own 404 — "this went
                         // away" — instead of a 401, which would read as "you may not". The journey

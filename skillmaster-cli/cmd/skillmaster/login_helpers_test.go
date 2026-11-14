@@ -15,7 +15,9 @@ func driveTheLogin(t *testing.T, available bool, start func(store credentials.En
 	// under `go test` — including from inside Claude Code's own sandbox, where `SANDBOX_RUNTIME=1`
 	// is inherited. Without this the gate skips `startLogin` and the login tests fail for a reason
 	// that has nothing to do with what they pin.
-	for _, name := range []string{"CODEX_SANDBOX", "CURSOR_SANDBOX", "GEMINI_SANDBOX", "SANDBOX_RUNTIME"} {
+	// **`CI` too**: `clientFor` now refuses to start a login where nobody is watching, and every
+	// GitHub Actions runner sets `CI=true` — a positive test about auto-login must stand outside it.
+	for _, name := range []string{"CODEX_SANDBOX", "CURSOR_SANDBOX", "GEMINI_SANDBOX", "SANDBOX_RUNTIME", "CI"} {
 		t.Setenv(name, "")
 	}
 	wasBrowser, wasLogin := browserAvailable, startLogin

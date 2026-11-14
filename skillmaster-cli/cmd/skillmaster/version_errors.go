@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"net/http"
 	"os"
 	"sort"
@@ -405,6 +406,14 @@ func classifyFailure(err error) *cliFailure {
 	if credentialUnavailable(err) {
 		failure.Code = "unauthenticated"
 		failure.Exit = 4
+		return failure
+	}
+	// **A login that ran out is not a network failure.** The distinction is on the error itself
+	// (v68): a script that retried on `network` would retry a link that is gone, and one that backs
+	// off on `login_failed` should ask the person to run `skmr login` again instead.
+	var loginGone *auth.LoginFailedError
+	if errors.As(err, &loginGone) {
+		failure.Code = "login_failed"
 		return failure
 	}
 	var usage *usageError

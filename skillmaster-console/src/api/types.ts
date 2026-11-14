@@ -503,38 +503,28 @@ export interface SessionsRevoked {
 }
 
 /**
- * The four parameters the login-request screen read off its own address, which it sends back unread
- * (`technical-design.md` v4 §接口).
+ * One CLI question, as its page sees it (v68).
  *
- * **Snake case, and the names are the address's own** — `client_id`, `code_challenge` — because the
- * screen neither invents nor interprets any of them: the CLI put them on the address it opened, and
- * the server decides what each may mean. `name` is the one thing the person supplies, and the one
- * thing this request is really about.
+ * **Snake case, because this is the wire and not the screen** — `created_at`, `expires_at` are the
+ * server's spelling, and the page formats them the way it formats every other timestamp.
+ *
+ * `from` is where the request came from, as the server saw it, or null when the socket did not expose
+ * one. It is the one fact on the page the CLI cannot make up, and the page omits the line rather than
+ * guessing when it is absent.
  */
-export interface CliSignIn {
+export interface CliDeviceSignInView {
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'used'
   name: string
-  client_id: string
-  scope: string
-  state: string
-  code_challenge: string
-}
-
-/** A refusal, which carries no name because a refusal creates no row for one to belong to. */
-export interface CliSignInRefusal {
-  client_id: string
-  state: string
-}
-
-/**
- * Where the browser goes next.
- *
- * The CLI's own loopback address, built by the server from the registered client row and never from
- * the request: a redirect target the caller could choose would be an open redirect with a one-time
- * code on the end of it (ADR 0028). Both buttons answer with this one shape, so the page never has to
- * know two — the difference between agreeing and declining is entirely in the address.
- */
-export interface CliSignInRedirect {
-  redirect_to: string
+  client: string
+  scopes: string[]
+  from: string | null
+  created_at: string
+  expires_at: string
+  /**
+   * How long ago the question was asked, counted by the server rather than by this browser.
+   * Null when a server older than the field answers; the line then leaves the age out.
+   */
+  age_minutes: number | null
 }
 
 /**

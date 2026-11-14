@@ -44,7 +44,7 @@ var ErrOldBrowserLogin = errors.New(
 var ErrNotRenewable = errors.New(
 	"本机存的凭据来自无人值守登录——这个版本已经没有那条路了（它的认证是一对已经不在的环境变量），" +
 		"所以从这台机器撤不掉它。它没有刷新令牌，到点就自己失效，不会自动续期。" +
-		"要接着用就重新运行 skmr login（浏览器登录），" +
+		"要接着用就重新运行 skmr login（链接登录），" +
 		"或在无人值守的机器上把一把 API key 放进环境变量")
 
 // Leftover is what a stored credential is when this version's login did not write it and it is not

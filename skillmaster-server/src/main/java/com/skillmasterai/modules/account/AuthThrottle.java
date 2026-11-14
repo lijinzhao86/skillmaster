@@ -80,17 +80,36 @@ public interface AuthThrottle {
     Throttle countUsernameLookup(String clientIp);
 
     /**
-     * Counts one attempt to redeem a CLI sign-in code, against the caller's address (v4).
+     * Counts one CLI question being created, against the caller's address (v68).
      *
-     * <p><strong>Per address, and it must not look at the code.</strong> A limit that behaved
-     * differently for a code that exists would be a better existence probe than the endpoint it
-     * guards: the timing would answer what the status code deliberately refuses to. Nothing here costs
-     * money, so what is being bounded is the one thing an anonymous write endpoint can be made to do —
-     * turn a guess into a row lookup.
+     * <p>An anonymous write that creates a ten-minute row, so what is bounded is how fast one address
+     * can fill the table. The honest caller creates one per login; thirty per ten minutes is far
+     * above that and far below a useful flood.
      *
      * @param clientIp the caller's address, or null when it is not known
      */
-    Throttle countCliSignInExchange(String clientIp);
+    Throttle countDeviceSignInStart(String clientIp);
+
+    /**
+     * Counts one read of a CLI question, against the caller's address (v68).
+     *
+     * <p>The page reads it once as it opens, and the poll is counted separately. Generous because a
+     * person may reload while reading it; tight enough that walking tickets is not cheap.
+     *
+     * @param clientIp the caller's address, or null when it is not known
+     */
+    Throttle countDeviceSignInView(String clientIp);
+
+    /**
+     * Counts one poll of a CLI question, against the caller's address (v68).
+     *
+     * <p><strong>Per address, and it must not look at the ticket.</strong> A limit that behaved
+     * differently for a ticket that exists would be a better existence probe than the endpoint it
+     * guards. The per-ticket one-second interval is enforced by the row itself, not here.
+     *
+     * @param clientIp the caller's address, or null when it is not known
+     */
+    Throttle countDeviceSignInPoll(String clientIp);
 
     /**
      * Counts one login attempt against the phone.

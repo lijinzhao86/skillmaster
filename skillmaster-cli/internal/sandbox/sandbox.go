@@ -222,11 +222,14 @@ func WrapFor(host string, err error) error {
 	return err
 }
 
-// LoopbackHint is for the login listener and the probe, both of which know which capability they
-// were exercising and therefore do not have to infer it from an errno string.
+// LoopbackHint is for the probe's loopback check, which knows which capability it was exercising and
+// therefore does not have to infer it from an errno string.
+//
+// **It no longer mentions login.** v4's login came back through a loopback redirect, so this was the
+// sentence that told somebody to run it in their own terminal; v68's login polls the server instead,
+// so loopback is only about the local features now.
 func LoopbackHint(client Client) string {
-	return "本地回环被沙箱挡住了。如果只是登录，在自己的终端里跑 `skmr login`；\n" +
-		"如果要用本地功能，按这个客户端的设置放行回环：\n" + Snippets(client)
+	return "本地回环被沙箱挡住了。如果要用本地功能，按这个客户端的设置放行回环：\n" + Snippets(client)
 }
 
 // StateHint is for the probe's state-directory check. `SKILLMASTER_HOME` is the mechanism that
@@ -312,8 +315,13 @@ func certificateHintOn(goos string) string {
 func networkHint(host string) string {
 	env := Detect()
 	if env.Sandboxed {
-		return fmt.Sprintf("到 %s 的连接失败。客户端沙箱的域名白名单默认通常是空的，放行它：\n%s",
-			host, snippetsFor(networkHosts(host), env.Client))
+		// **The snippet, and the command that writes it.** v68's login needs nothing but outbound
+		// HTTPS, so this is the sentence a cloud sandbox user is most likely to hit; handing them a
+		// JSON fragment to paste by hand and not naming `doctor --fix` would leave the easier road
+		// hidden.
+		return fmt.Sprintf("到 %s 的连接失败。客户端沙箱的域名白名单默认通常是空的，放行它：\n%s\n"+
+			"也可以直接运行 `skmr doctor --fix` 让它写进去。", host,
+			snippetsFor(networkHosts(host), env.Client))
 	}
 	return fmt.Sprintf("到 %s 的连接失败。检查服务是否启动、地址是否正确、网络是否可达。", host)
 }

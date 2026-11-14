@@ -6,6 +6,12 @@ spring:
     url: ${SKILLMASTER_TEST_DB_URL:jdbc:postgresql://localhost:5432/skillmaster_test}
     username: ${SKILLMASTER_TEST_DB_USER:${SKILLMASTER_DB_USER:${USER}}}
     password: ${SKILLMASTER_TEST_DB_PASSWORD:${SKILLMASTER_DB_PASSWORD:}}
+    hikari:
+      # **Contexts are cached, so pools accumulate.** A full `verify` builds dozens of Spring
+      # contexts and each keeps its pool for the JVM's life; the default of ten per pool crossed
+      # PostgreSQL's `max_connections` (100) near the end of the run and the remaining migration
+      # tests failed with 53300 "too many clients". Two is all a sequential test needs.
+      maximum-pool-size: 2
 
   flyway:
     # Tests rebuild the schema from the migrations on every context, so this database is
