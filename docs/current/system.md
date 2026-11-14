@@ -7,7 +7,7 @@
 | 模块 | 职责 | 包后缀 | 拥有的表 | 对外发布类型 |
 |---|---|---|---|---|
 | M1 | account | `.account` | `app_user`、`credential`、`identity`、`phone_verification`、`legal_consent`、`auth_throttle`、`captcha`、`spring_session`、`spring_session_attributes` | `AccountDirectory`、`AuthThrottle`、`Throttle`、`ThrottledException` |
-| M2 | token | `.token` | `oauth_client`、`oauth_authorization`、`auth_code`、`access_token`、`refresh_token`、`oauth2_authorization_consent`、`api_key`、`cli_sign_in_code` | — |
+| M2 | token | `.token` | `oauth_client`、`oauth_authorization`、`auth_code`、`access_token`、`refresh_token`、`oauth2_authorization_consent`、`api_key`、`cli_device_sign_in` | — |
 | M3 | auth | `.auth` | — | `AuthenticatedSubject`、`TokenValidation`、`TokenValidator` |
 | M4 | namespace | `.namespace` | `namespace`、`namespace_member` | `Namespace` |
 | M5 | ingest | `.ingest` | — | `ReservedPaths`、`Utf8Probe` |

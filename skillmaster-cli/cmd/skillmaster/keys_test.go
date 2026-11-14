@@ -136,44 +136,6 @@ func TestAKeyThatIsRefusedIsNotRetried(t *testing.T) {
 	}
 }
 
-// The negative case v4 验收 #7(a) asks for: on a machine with no browser `login` must fail, and the
-// failure must point at the one road that works there.
-//
-// **"Only that one" is half the criterion.** The message used to name the paste command v2 had, and
-// that command does not exist any more: a person sent to a misspelling of a command that is gone has
-// been told something worse than nothing. So the two things it may name are asserted, and so is the
-// absence of the removed shape.
-//
-// It also fails **before** it prints a link and starts listening, which is the part worth testing: the
-// other order produces a command that waits for a callback that cannot come, and the person has no way
-// to tell that from a slow login. Nothing is listening at the address below, so a path that reached
-// the network at all would answer a connection error instead of this sentence.
-func TestLoginWithoutABrowserPointsAtTheKeyPath(t *testing.T) {
-	original := browserAvailable
-	browserAvailable = func() bool { return false }
-	t.Cleanup(func() { browserAvailable = original })
-
-	t.Setenv(config.ServerEnv, "http://127.0.0.1:9")
-	t.Setenv(config.WebURLEnv, "https://web.example")
-	t.Setenv("HOME", t.TempDir())
-
-	var err error
-	_ = captureStdout(t, func() { err = login(context.Background(), nil) })
-	if err == nil {
-		t.Fatal("a browser login was attempted on a machine with no browser")
-	}
-	for _, want := range []string{config.ApiKeyEnv, "没有可以打开链接的浏览器", "https://web.example/account/keys"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("message = %q, want it to contain %q", err, want)
-		}
-	}
-	for _, unwanted := range []string{"--with-key", "pbpaste", "--client-credentials"} {
-		if strings.Contains(err.Error(), unwanted) {
-			t.Fatalf("message = %q, still sends the person to a login this version does not have", err)
-		}
-	}
-}
-
 // What `login` does with the credential it replaced, one shape at a time.
 //
 // **Three of the four have nothing for this CLI to call, and each says something different about why**

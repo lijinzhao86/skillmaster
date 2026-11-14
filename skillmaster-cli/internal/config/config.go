@@ -69,9 +69,8 @@ const stateDir = "skillmaster"
 //
 // Compiled in rather than discovered, because the CLI is a first-party client and `client_id` is
 // published with it (ADR 0011: v1 registers clients ahead of time). It has to match the seeded
-// `oauth_client.client_id` **and** the redirect URI has to match that row's, so this constant and
-// `CallbackPort` and the deployment's seed row are one fact in three places — which is why ADR 0028
-// says changing the port means changing the seed.
+// `oauth_client.client_id`; since v68 no redirect URI is involved on either side, so this constant
+// and the deployment's seed row are the whole of it.
 const ClientID = "skillmaster-cli"
 
 // DefaultServer is where a login goes when nothing says otherwise.
@@ -92,18 +91,6 @@ const ClientID = "skillmaster-cli"
 // On a working copy, `SKILLMASTER_SERVER` exported by the shell overrides both. The repository's
 // `.env.example` documents it; nothing here reads a file.
 var DefaultServer = "http://localhost:8080"
-
-// CallbackPort is the loopback port the redirect comes back on.
-//
-// **Fixed, not ephemeral**, and it has to match the client's registered redirect URI character for
-// character: the server reads that URI from the client's own row rather than letting a request name
-// one (v4 §接口), and nothing knows about RFC 8252 §8.4's exception for the port. So this number and
-// the deployed `oauth_client.redirect_uris` entry are one fact in two places — see ADR 0028.
-const CallbackPort = 51004
-
-// CallbackPath is the path half of that registered redirect URI, and the one address the loopback
-// listener answers.
-const CallbackPath = "/callback"
 
 // Server is the base URL to talk to, without a trailing slash.
 func Server() string {

@@ -1,6 +1,6 @@
 # 0028 · CLI 的回调用固定 loopback 端口
 
-- 状态：已采纳
+- 状态：已取代（由 [0200](0200-cloud-device-login-approves-on-a-web-page.md) 取代：登录改为设备链接 + 轮询，CLI 不再监听回环端口）
 - 日期：2026-10-03
 - 相关：[0011](0011-server-and-cli-stack.md)、[0023](0023-spring-authorization-server-with-our-own-storage.md)、[0026](0026-overriding-the-framework-for-public-clients.md)
 

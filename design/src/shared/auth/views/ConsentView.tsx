@@ -30,6 +30,11 @@ export default function ConsentView({
 }: ConsentViewProps) {
   return (
     <div className="dialog-view" id="consentView" hidden={!active}>
+      {/* The link is a one-time invitation, and the person may be one tap away from forwarding it.
+          Said before the identity card because it is about the address they followed, not about who
+          is signed in — and forwarding it is the one mistake this screen can still prevent. */}
+      <p className="hint" id="consentLinkOnly">这条链接只能批准一次登录，不要转发给别人。</p>
+
       {/* Who is about to grant this, first. The page used to show only the client and the scopes, so
           a browser still signed in as the previous account silently issued the credential to it.
           The name is the largest thing in this card on purpose: the permissions below are only worth
@@ -63,6 +68,19 @@ export default function ConsentView({
           onChange={(event) => onName(event.target.value)}
         />
         <p className="hint" id="consentNameHint">这台机器的名称。它只出现在你的「登录设备」里。</p>
+        {/* **The one fact on this card the CLI cannot make up.** The name above is what the CLI
+            reports; this line is where the request came from and how long ago, as the server saw it.
+            It is what a person checks against the machine they just logged into — and what a
+            forwarded link gives away. Absent when the server could not see the socket. */}
+        {entry.from !== '' ? (
+          <p className="hint" id="consentOrigin">
+            {entry.ageMinutes === null
+              ? `请求来自 ${entry.from}。`
+              : entry.ageMinutes < 1
+                ? `请求来自 ${entry.from}，刚刚发起。`
+                : `请求来自 ${entry.from}，${entry.ageMinutes} 分钟前发起。`}
+          </p>
+        ) : null}
       </div>
 
       <p className="consent-who">

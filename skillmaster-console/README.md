@@ -118,19 +118,13 @@ what production does — ADR 0015's nginx front. (It is also why the proxy must 
 see the note in `vite.config.ts`, and `setup`'s check that what came back is really a `SKILL.md`.)
 
 The client needs a row in `oauth_client` before any of this, seeded by hand — v1 has no registration
-endpoint (ADR 0011). The redirect URI must match the CLI's fixed port **character for character**:
+endpoint (ADR 0011). The INSERT, and what each column has to be, is
+[`deploy/README.md`](../../deploy/README.md) §The CLI's client row — the same row a laptop needs.
 
-```sql
-INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,
-    client_secret_hash, metadata, created_at) VALUES
-  ('skillmaster-cli','SkillMaster CLI','preregistered',
-   '["http://127.0.0.1:51004/callback"]','["authorization_code","refresh_token"]',
-   NULL, '{"scopes":["skills:read","skills:write"]}', '2026-01-01T00:00:00Z');
-```
-
-`client_secret_hash` is NULL because the CLI is a public client: PKCE stands in for a secret. Consent
-is asked once per (client, account) and remembered, so the second and later logins go straight
-through with nothing to click.
+**Since v68 that row is the whole requirement, and the page appears every time.** The loopback
+callback is gone, so there is no redirect URI to match ([ADR 0200](../../docs/decisions/0200-cloud-device-login-approves-on-a-web-page.md));
+a login asks once and the answer arrives on the machine that asked, which is why nothing is
+remembered per (client, account) any more.
 
 ## What is deliberately not here
 
@@ -148,9 +142,11 @@ carries the trigger line and the measured cost of each route. Nothing in the app
 needs a fallback so a refresh on `/register` is not a 404. The nginx snippet is in ADR 0015, marked
 **unverified** — there is nowhere to deploy yet, so it has never been run.
 
-The CLI's login (v4) adds the mirror image of that rule, and the two are one letter apart:
-`/cli-sign-ins/**` are **the server's** routes — the exchange is what a CLI with no session posts its
-code to — so the same proxy has to send that prefix to the backend, while `/cli-sign-in` (singular)
-stays a page of this app. Getting the pair backwards produces exactly the failure `vite.config.ts`
-records for its own entry: a `200` carrying `index.html`, and a client failing to decode a web page as
-JSON.
+The CLI's login adds the mirror image of that rule, and the names are one letter apart:
+`/cli-sign-ins/**` and `/cli-device-sign-ins/**` are **the server's** routes — what a CLI with no
+session posts to — so the same proxy has to send both prefixes to the backend, while `/cli-sign-in`
+(singular) stays a page of this app. Getting one backwards produces the failure `vite.config.ts`
+records for its own entries: a `200` carrying `index.html` (or a `404`), and a client failing to
+decode a web page as JSON. **`/cli-sign-ins` does not match `/cli-device-sign-ins`**, which is how
+v68's consent page came to tell people their perfectly good link had expired until both the dev
+proxy and `deploy/nginx/skillmaster.conf` learned the longer prefix (2026-11-14).

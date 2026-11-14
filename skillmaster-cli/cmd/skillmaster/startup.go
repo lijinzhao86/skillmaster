@@ -38,16 +38,20 @@ func startup(ctx context.Context, args []string) error {
 	}
 	client, err := clientFor(ctx, false)
 	if errors.Is(err, auth.ErrNotSignedIn) || errors.Is(err, errNoBrowserNoCredential) {
-		// **A detectable sandbox says where to log in.** `skmr login` inside it reaches a blocked
-		// `open` and waits out the callback timeout; 「有浏览器就…」 would point straight back there.
+		// **One sentence now, and since v68 it is true in both places.** The login no longer needs a
+		// browser on this machine — it prints a link, and any browser will do — so a sandbox is told
+		// the same thing a desktop is. What it must not say is that this command will do the login
+		// quietly: in a sandbox that would be ten minutes of silence on a URL nobody has seen.
 		if sandbox.Detect().Sandboxed {
 			return &credentialError{message: fmt.Sprintf(
-				"本机没有凭据，startup 不会假装成功。在沙箱外的终端运行 skmr login 登录或注册；"+
-					"无人值守时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
+				"本机没有凭据，startup 不会假装成功。先运行 skmr login 登录或注册，"+
+					"把打印的链接在任意浏览器里打开并批准；无人值守时，把一把在控制台签发的 API key "+
+					"放进 %s。", config.ApiKeyEnv)}
 		}
 		return &credentialError{message: fmt.Sprintf(
-			"本机没有凭据，startup 不会假装成功。有浏览器就运行 skmr login 登录或注册；"+
-				"会话里没有浏览器时，把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
+			"本机没有凭据，startup 不会假装成功。运行 skmr login 登录或注册，"+
+				"把打印的链接在任意浏览器里打开并批准；会话里没有浏览器也一样，"+
+				"无人值守时把一把在控制台签发的 API key 放进 %s。", config.ApiKeyEnv)}
 	}
 	if err != nil {
 		return err

@@ -474,3 +474,26 @@
 .dialog .btn-block{width:100%;min-height:44px}
 
 .dialog [hidden]{display:none !important}
+
+/* ---------------------------------------------------------------- phone (v68)
+   **This card is usually opened on a phone**, because the link arrives in a chat from the agent.
+   The desktop numbers spend 76px of a 375px screen on the overlay's and the card's padding alone;
+   here both give some back, and the title drops a step. The rules belong to the auth family rather
+   than to one screen: the same person may register on this phone before coming back to approve.
+   The close button does not exist on the standalone screens, so the title's reserved 36px goes back
+   to the text there only. */
+@media (max-width:480px){
+  .overlay{padding:16px}
+  .dialog{padding:28px 20px 26px}
+  .dialog-title{font-size:20px}
+  .overlay.is-standalone .dialog-title{padding-right:0}
+  /* iOS zooms the page when a field it focuses is smaller than 16px. The field grows, not the
+     layout: `min-height` and padding are unchanged, so the card only gains the text's own leading. */
+  .dialog .field input{font-size:16px}
+  /* Two text controls that matter on this screen are escape hatches, not decoration; on a phone
+     they get a thumb-sized box instead of a line of type. */
+  .dialog .consent-account-who .link,
+  .dialog .dialog-foot .link{display:inline-flex;align-items:center;min-height:44px}
+}
+/* An IPv6 address is one long token; let it break rather than widen the card. */
+#consentOrigin{overflow-wrap:anywhere}

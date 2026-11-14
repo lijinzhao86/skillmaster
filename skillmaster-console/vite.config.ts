@@ -75,6 +75,14 @@ export default defineConfig(({ command, mode }) => {
         // Vite answers that POST with `index.html` and a 200, and the CLI fails decoding a web page as
         // JSON. There is no 404 to notice, which is why the entry is not optional.
         '/cli-sign-ins': { target: API },
+        // The consent page's read (v68), and it is the `/cli-sign-ins` story with `device-` in the
+        // middle. The old prefix does not match the new one, so without this entry the
+        // page's `GET` of its own ticket never reaches the server: Vite answers 404, the page reads
+        // that as a ticket it cannot see, and it tells the person their link 「已经用过或过期了」 —
+        // a wrong answer, in the one moment they are deciding whether to hand over a credential.
+        // Found by walking the flow in a browser (2026-11-14), not by a test: the console's tests stub
+        // `fetch`, so a request that never arrives is a request they cannot fail on.
+        '/cli-device-sign-ins': { target: API },
       },
     },
 

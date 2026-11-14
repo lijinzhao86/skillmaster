@@ -39,9 +39,9 @@ func TestStartupRefusesWithoutACredentialAndNamesBothWays(t *testing.T) {
 	}
 }
 
-// **A detectable sandbox can have `open` and still not open a browser.** Starting the login there
-// would print a URL the blocked command cannot relay and wait the full callback timeout. The
-// command takes the no-browser path instead and names the API key.
+// **A command does not start a login nobody asked for in a sandbox.** Since v68 `skmr login` itself
+// works there — the link is opened elsewhere — but a command that quietly blocks for ten minutes on
+// a URL nobody has been shown is a different thing from one the person typed.
 func TestASandboxWithoutCredentialDoesNotStartABrowserLogin(t *testing.T) {
 	t.Setenv(config.ApiKeyEnv, "")
 	t.Setenv("SANDBOX_RUNTIME", "1")
@@ -61,17 +61,49 @@ func TestASandboxWithoutCredentialDoesNotStartABrowserLogin(t *testing.T) {
 	if started {
 		t.Fatal("a browser login was started inside a detectable sandbox")
 	}
-	for _, want := range []string{config.ApiKeyEnv, "沙箱外"} {
+	for _, want := range []string{config.ApiKeyEnv, "skmr login", "任意浏览器"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("message = %q, want it to name %s", err, want)
 		}
 	}
 }
 
-// **The sandbox sentence is the one that can be acted on.** `skmr login` inside the same sandbox
-// reaches the blocked `open`; `startup` has to name the terminal that will work, and keep the
-// credential exit code so an agent can tell it apart from a network failure.
-func TestStartupInASandboxNamesTheTerminalItHasToRunIn(t *testing.T) {
+// **CI means nobody is watching, so a command does not start a login for itself.** A runner can have
+// a launcher on PATH; that is not the same thing as a person who can approve a link. The refusal is
+// the same one the other no-person branches give, and no login is started.
+func TestACommandInCIDoesNotStartALogin(t *testing.T) {
+	t.Setenv(config.ApiKeyEnv, "")
+	t.Setenv("CI", "true")
+	for _, name := range []string{"CODEX_SANDBOX", "CURSOR_SANDBOX", "GEMINI_SANDBOX", "SANDBOX_RUNTIME"} {
+		t.Setenv(name, "")
+	}
+	wasBrowser, wasLogin := browserAvailable, startLogin
+	browserAvailable = func() bool { return true }
+	started := false
+	startLogin = func(context.Context, string, credentials.EnvStore, string) error {
+		started = true
+		return nil
+	}
+	t.Cleanup(func() { browserAvailable, startLogin = wasBrowser, wasLogin })
+
+	_, err := clientFor(context.Background(), false)
+	if err == nil {
+		t.Fatal("clientFor succeeded with no credential in CI")
+	}
+	if started {
+		t.Fatal("a login was started for a command in CI")
+	}
+	for _, want := range []string{"skmr login", config.ApiKeyEnv} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("message = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+// **The sandbox sentence names the one command that works there now.** It used to send the person
+// outside the sandbox; since v68 `skmr login` prints a link that any browser can open, so startup
+// says that and keeps the credential exit code so an agent can tell it apart from a network failure.
+func TestStartupInASandboxNamesTheWayThatWorksThere(t *testing.T) {
 	t.Setenv(config.ApiKeyEnv, "")
 	t.Setenv("SANDBOX_RUNTIME", "1")
 	original := browserAvailable
@@ -85,7 +117,7 @@ func TestStartupInASandboxNamesTheTerminalItHasToRunIn(t *testing.T) {
 	if got := reportError(err); got != 4 {
 		t.Errorf("exit code = %d, want 4 (the credential class)", got)
 	}
-	for _, want := range []string{"沙箱外", config.ApiKeyEnv} {
+	for _, want := range []string{"skmr login", "任意浏览器", config.ApiKeyEnv} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q:\n%s", want, err)
 		}

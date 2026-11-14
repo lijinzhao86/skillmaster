@@ -44,12 +44,11 @@ public abstract class AbstractAuthorizationCodeIT extends AbstractAccountIT {
 
     protected static final String CLIENT_ID = "skillmaster-cli";
 
-    /** v4's CLI sign-in addresses, beside the OAuth ones above and for the same reason. */
-    protected static final String SIGN_INS = "/web/cli-sign-ins";
-    protected static final String EXCHANGE = "/cli-sign-ins/exchange";
+    /** v68's CLI sign-in addresses, beside the OAuth ones above and for the same reason. */
+    protected static final String DEVICE_SIGN_INS = "/cli-device-sign-ins";
+    protected static final String DEVICE_APPROVALS = "/web/cli-device-sign-ins";
     protected static final String SESSIONS = "/web/sessions";
     protected static final String REGISTERED_SCOPES = "skills:read skills:write";
-    protected static final String STATE = "state-from-the-cli";
     protected static final String MACHINE = "my MacBook";
 
     /**
@@ -253,103 +252,110 @@ public abstract class AbstractAuthorizationCodeIT extends AbstractAccountIT {
         return registerAndSignIn(randomUsername(), randomPhone());
     }
 
-    /** A login that has been started and not yet redeemed: the code, and the verifier that redeems it. */
-    protected record Pending(String verifier, String code) {
+    /** A question that has been asked and not yet collected: the verifier, the ticket and the secret. */
+    protected record Pending(String verifier, String ticket, String deviceSecret) {
     }
 
     protected Pending start(String name) {
         return start(name, REGISTERED_SCOPES);
     }
 
-    /** Starts a login and insists it worked, which is the arrangement every later step assumes. */
+    /** Asks a question and insists it worked, which is the arrangement every later step assumes. */
     protected Pending start(String name, String scope) {
         String verifier = codeVerifier();
         HttpResponse<String> response = startRequest(name, scope, verifier);
-        assertThat(response.statusCode()).as("starting a login: %s", response.body()).isEqualTo(201);
-        return new Pending(verifier, codeOf(response));
+        assertThat(response.statusCode()).as("starting a question: %s", response.body()).isEqualTo(201);
+        JsonNode started = body(response);
+        return new Pending(verifier, started.get("ticket").asText(),
+                started.get("device_secret").asText());
     }
 
     /** The start request, with nothing asserted about what it answers — several cases are about that. */
     protected HttpResponse<String> startRequest(String name, String scope, String verifier) {
-        return webPost(SIGN_INS, loginBody(name, scope, verifier), csrfToken());
+        return send(request(DEVICE_SIGN_INS, null)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(deviceStartBody(name, scope, verifier)))
+                .build());
     }
 
     /**
-     * The same, started by a browser other than the primary one.
-     *
-     * <p>A login belongs to the session that approved it, so the case that needs a second account's
-     * login has to make it through that account's own jar — the primary {@link #start} would begin it
-     * for whoever this class is signed in as.
-     */
-    protected Pending startThrough(Browser who, String name) {
-        String verifier = codeVerifier();
-        HttpResponse<String> response = who.post(uri(SIGN_INS),
-                loginBody(name, REGISTERED_SCOPES, verifier), who.csrfToken());
-        assertThat(response.statusCode()).as("starting a login: %s", response.body()).isEqualTo(201);
-        return new Pending(verifier, codeOf(response));
-    }
-
-    /**
-     * The body the screen posts: the name it collected, plus the four parameters it read off its own
-     * address and sends back unread by the server.
+     * The machine's side of the question.
      *
      * <p>Snake case written out, because the tests send raw maps and no naming strategy applies to
      * them — the server's own strategy is what turns {@code client_id} into the field it reads.
      *
      * @param name null to send no name at all, which is a different refusal from a blank one
      */
-    protected static String loginBody(String name, String scope, String verifier) {
+    protected static String deviceStartBody(String name, String scope, String verifier) {
         Map<String, Object> body = new HashMap<>();
         body.put("name", name);
         body.put("client_id", CLIENT_ID);
         body.put("scope", scope);
-        body.put("state", STATE);
         body.put("code_challenge", challenge(verifier));
         return JSON.writeValueAsString(body);
     }
 
+    /** The person's yes, through the jar that is signed in. */
+    protected HttpResponse<String> approve(Pending pending) {
+        return approve(pending, MACHINE);
+    }
+
+    protected HttpResponse<String> approve(Pending pending, String name) {
+        return webPost(DEVICE_APPROVALS + "/" + pending.ticket() + "/approve",
+                JSON.writeValueAsString(Map.of("name", name)), csrfToken());
+    }
+
+    /** The same, answered by a browser other than the primary one — a login belongs to who approved it. */
+    protected HttpResponse<String> approveThrough(Browser who, Pending pending, String name) {
+        return who.post(uri(DEVICE_APPROVALS + "/" + pending.ticket() + "/approve"),
+                JSON.writeValueAsString(Map.of("name", name)), who.csrfToken());
+    }
+
+    /** The person's no. */
+    protected HttpResponse<String> refuse(Pending pending) {
+        return webPost(DEVICE_APPROVALS + "/" + pending.ticket() + "/refuse", "", csrfToken());
+    }
+
     /**
-     * Redeems a code exactly as the CLI does: a bare client, no cookie, the code and the verifier in a
-     * JSON body.
+     * The machine's poll, exactly as the CLI does it: a bare client, no cookie, the secret and the
+     * verifier in a JSON body.
      *
      * <p>Not through {@link #browser}: a request carrying the session cookie would answer a different
      * question, and this route's whole design is that it does not need one.
      */
-    protected HttpResponse<String> exchange(String code, String verifier) {
-        return send(request(EXCHANGE, null)
+    protected HttpResponse<String> poll(Pending pending) {
+        return send(request(DEVICE_SIGN_INS + "/" + pending.ticket() + "/token", null)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        json(Map.of("code", code, "code_verifier", verifier))))
+                .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(Map.of(
+                        "device_secret", pending.deviceSecret(),
+                        "code_verifier", pending.verifier()))))
                 .build());
     }
 
-    /** Redeems a fresh login and hands back the credential, which only this answer ever carries. */
-    protected String redeem(Pending pending) {
-        HttpResponse<String> response = exchange(pending.code(), pending.verifier());
-        assertThat(response.statusCode())
-                .as("redeeming a fresh code: %s", response.body()).isEqualTo(200);
-        return body(response).get("access_token").asText();
-    }
-
-    /** The code out of the answer the start gave, asserted before anything is read from it. */
-    protected String codeOf(HttpResponse<String> started) {
-        String code = queryParameter(redirectOf(started), "code");
-        assertThat(code).as("a code in %s", started.body()).isNotBlank();
-        return code;
-    }
-
     /**
-     * The address the start hands the browser.
-     *
-     * <p>Asserted to be the registered address <em>plus a query</em> rather than merely the registered
-     * address: a delivery that arrives at the loopback address without a code on it is not a delivery,
-     * and {@code startsWith(base)} alone would let one through.
+     * The waiting process giving up — Ctrl-C — exactly as the CLI does it: a bare client, no cookie,
+     * the secret in a JSON body.
      */
-    protected String redirectOf(HttpResponse<String> started) {
-        String redirect = body(started).get("redirect_to").asText();
-        assertThat(redirect).as("the start's answer: %s", started.body())
-                .startsWith(REDIRECT_URI + "?");
-        return redirect;
+    protected HttpResponse<String> cancel(Pending pending) {
+        return send(request(DEVICE_SIGN_INS + "/" + pending.ticket() + "/cancel", null)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        JSON.writeValueAsString(Map.of("device_secret", pending.deviceSecret()))))
+                .build());
+    }
+
+    /** Approves a fresh question and hands back the credential, which only this answer ever carries. */
+    protected String redeem(Pending pending) {
+        assertThat(approve(pending).statusCode()).as("approving a fresh question").isEqualTo(204);
+        return collect(pending);
+    }
+
+    /** The machine's half alone — for a case whose approval went through another browser. */
+    protected String collect(Pending pending) {
+        HttpResponse<String> response = poll(pending);
+        assertThat(response.statusCode())
+                .as("collecting a fresh credential: %s", response.body()).isEqualTo(200);
+        return body(response).get("access_token").asText();
     }
 
     /** The parameter names on an address — read to assert what a URL does <em>not</em> carry. */
@@ -367,7 +373,10 @@ public abstract class AbstractAuthorizationCodeIT extends AbstractAccountIT {
      * own handle would fail instead of agreeing with itself.
      */
     protected String authorizationId() {
-        return jdbc.sql("SELECT authorization_id FROM cli_sign_in_code").query(String.class).single();
+        return jdbc.sql("SELECT authorization_id FROM cli_device_sign_in"
+                        + " WHERE authorization_id IS NOT NULL ORDER BY created_at DESC LIMIT 1")
+                .query(String.class)
+                .single();
     }
 
     /** The console's list, read through the jar that is signed in. */

@@ -11,6 +11,7 @@ import (
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/auth"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/credentials"
+	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/sandbox"
 	"io"
 	"os"
 	"strings"
@@ -243,7 +244,7 @@ func authStatusWith(ctx context.Context, server string, store credentials.EnvSto
 		return fmt.Errorf("读取本机凭据：%w", err)
 	}
 	if !found || stored.AccessToken == "" {
-		return errors.New("本机没有凭据。跑 `skmr login` 在浏览器里登录，" +
+		return errors.New("本机没有凭据。跑 `skmr login` 拿一条登录链接，" +
 			"或把一把控制台签发的 API key 放进 " + config.ApiKeyEnv + "。")
 	}
 
@@ -405,39 +406,49 @@ func previousCredential(store credentials.EnvStore) (credentials.Credentials, bo
 // `internal/auth`, next to the command that would do the opening.
 var browserAvailable = auth.BrowserAvailable
 
-// loginWithBrowser is the whole of `login` now: a browser, PKCE, and a person.
+// loginWithBrowser is the whole of `login`: a link, a browser somewhere, and a person.
 //
-// **It refuses up front on a machine with no browser**, and the refusal points at the one way that
-// works there. Waiting instead would be the worst of the options: the flow would print the sign-in
-// address, listen on the loopback port, and sit there until the callback timed out — a command that
-// looks like it is working, for a reason the person cannot see (v4 验收 #7(a); ADR 0040 §决定 2).
+// **It works on a machine with no browser, and that is v68's point.** What this machine needs is a
+// network connection: the link is printed, and it can be opened on the phone in the person's hand.
+// So the command no longer refuses up front — the one case it still cannot serve is a machine with
+// **no network at all**, and that failure names itself when it happens rather than being predicted
+// here from a platform switch.
 //
-// **The refusal names the variable and the console, and nothing else** — in particular not the
-// paste command v2 had, which this version removed. That is v4 验收 #7(a)'s whole point, and v3 met
-// the same trap from the other side: a message that sends somebody to a command that no longer exists
-// is worse than no message, because they go and try it.
+// **Ctrl-C is a supported way out.** The waiting process is the only one that knows the person gave
+// up, so it tells the server (best effort) that this question is over; the ticket expiring on its
+// own is the backstop. The command says what happened rather than printing a timeout.
+//
+// Inside a sandbox the browser is not even attempted: there is a launcher, and calling it produces a
+// refusal that reads as a broken login. The link is the mechanism there.
+//
 // @param progress where the narration goes. `login` answers on stdout; a command that logged in for
 //
 //	itself writes to stderr, because its stdout is the `--json` object and nothing else.
 func loginWithBrowser(ctx context.Context, progress io.Writer, server string, store credentials.EnvStore,
 	notice string) error {
-	if !browserAvailable() {
-		return fmt.Errorf("这台机器上没有可以打开链接的浏览器，浏览器登录走不通。"+
-			"改用控制台签发的 API key：把它放进 %s（CI、容器用它，什么都不会写到本机），"+
-			"或到控制台签一把：%s/account/keys", config.ApiKeyEnv, config.WebURL())
-	}
-
 	fmt.Fprintf(progress, "正在登录 %s …\n", server)
+
+	// **Only a machine that could actually open something is asked to.** On Linux that means a
+	// display server, not merely an `xdg-open` on PATH; a container has the binary and nowhere to
+	// draw. The link is the mechanism either way, and attempting here would print a failure at the
+	// one moment the person is reading their instructions.
+	var open func(string) error
+	if !sandbox.Detect().Sandboxed && browserAvailable() {
+		open = openBrowser
+	}
 	credential, err := auth.Login(ctx, auth.LoginOptions{
 		Server:   server,
 		ClientID: config.ClientID,
-		Port:     config.CallbackPort,
 		OnURL: func(url string) {
-			fmt.Fprintf(progress, "如果浏览器没有自动打开，请访问：\n%s\n", url)
+			fmt.Fprintf(progress, "在任何浏览器里打开下面的链接完成批准（手机也行）：\n%s\n"+
+				"批准后这条命令会自动继续。链接只能批准一次，不要转发给别人。\n", url)
 		},
-		OpenURL: auth.OpenBrowser,
+		OpenURL: open,
 	})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return errors.New("已取消登录，没有拿到凭据。")
+		}
 		return err
 	}
 	return saveAndReport(progress, store, notice, server, credential)

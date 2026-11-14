@@ -74,8 +74,9 @@ There is no longer a token to export: `/api/v1/*` is authenticated by credential
 server or the console issues, and nothing in configuration can mint one. Two ways to get one:
 
 - **`skmr login`** from [`skillmaster-cli/`](../skillmaster-cli/) — the browser flow, and
-  what a person would do. It needs the CLI built and its `client_id` seeded, which the CLI's README
-  covers.
+  what a person would do. It needs the CLI built and one hand-seeded row in `oauth_client`; the
+  INSERT is [`deploy/README.md`](../deploy/README.md) §The CLI's client row. Without it the request
+  is a 500 at the first step, before any link is printed.
 - **A key**, for a script or a machine with nobody in front of it: sign one in the console and put
   it in `SKILLMASTER_API_KEY`. **This is now the only unattended route** — the `client_credentials`
   grant was retired in v3 (ADR 0038 §决定 9), and a row that still asks for it stops the server from

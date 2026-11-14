@@ -30,13 +30,13 @@
 -- whichever of those ran second would count the other's sessions.
 --
 -- The token tables M2 writes are here — api_key among them since v2 (ADR 0038), and
--- cli_sign_in_code since v4 (ADR 0028) — and oauth_client is deliberately not. A test that needs a
+-- cli_device_sign_in since v68 (ADR 0200) — and oauth_client is deliberately not. A test that needs a
 -- client seeds its own row — v1 has no registration endpoint, so that is what a deployment does too —
 -- and seeding it with ON CONFLICT keeps it stable across runs. Emptying oauth_client instead would
 -- make the row a fixture each test must recreate, when it is really a deployment fact. A key is the
 -- opposite: tests issue them, so leaving one behind would make a listing's length depend on which
--- tests ran before it. A one-time code is the same: a sign-in test writes one, and a code left behind
--- would make a later exchange test find a code it did not issue.
+-- tests ran before it. A question is the same: a sign-in test asks one, and a question left behind
+-- would make a later poll find one it did not ask.
 -- skill_category is NOT here, and it is the one exception among v14's tables. It is platform
 -- seed data (V28), not something a test writes: emptying it would leave every later test without a
 -- vocabulary, and because skill.category_key points at it, TRUNCATE ... CASCADE would take `skill`
@@ -93,5 +93,5 @@ TRUNCATE TABLE
     oauth_authorization,
     oauth2_authorization_consent,
     api_key,
-    cli_sign_in_code
+    cli_device_sign_in
 RESTART IDENTITY CASCADE;
