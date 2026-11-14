@@ -47,7 +47,7 @@ a custom domain, so nginx is the front door and the bucket is the origin — see
 | `/etc/skillmaster/tls-dl/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/dl.skillmasterai.com/` |
 | `/etc/skillmaster/acme/{auth,cleanup}.sh` | the DNS-01 hooks, copied from [`acme/`](acme/) |
 | `/etc/skillmaster/acme.env` | their credentials, `0600 root` |
-| `/etc/nginx/conf.d/skillmaster.conf` | the proxy, copied from `deploy/nginx/` |
+| `/etc/nginx/conf.d/skillmaster.conf`, `/etc/systemd/system/nginx.service.d/restart.conf` | the proxy and the restart drop-in, **shipped by the Server deploy's `Gateway` step** from `deploy/nginx/` (ADR 0207); by hand only when Actions is down |
 | `/srv/skillmaster/console`, `/srv/skillmaster/site` | the two front-end builds |
 
 Production configuration has exactly one source: the repository's Actions variables and
@@ -309,6 +309,9 @@ sudo systemctl daemon-reload
 systemctl show nginx -p Restart -p RestartSec      # on-failure / 5
 ```
 
+Server 部署的 `Gateway` 步已经会装这个 drop-in 并 `daemon-reload`（ADR 0207）；上面这几行是
+Actions 不可用时的手工兜底。
+
 **外部可用性监控已按 5 分钟一次配置（2026-11-05）。** 三个任务各选 1 个中国境内 IDC 探测节点，
 约 26 元/月；云监控对可用率指标最小按 15 分钟一个周期聚合，所以“连续 2 个周期”的告警最坏约
 30 分钟到达。控制台、API、下载站任意一个挂掉都会触发：
@@ -390,8 +393,9 @@ been tested, and switching the challenge method is a separate operation.
 2. **重签证书加 SAN**（命令见 [Certificates](#certificates)，本版多了 `-d home.skillmasterai.com`），
    再跑一次 `certbot renew --cert-name skillmasterai.com --dry-run --no-random-sleep-on-renew`。
 
-3. **拷 nginx 配置并重载。** 校验不能只看状态码：443 的默认 server 是 `console`，`home` 块缺失时
-   未知 Host 会拿到控制台首页的 200。要比内容：
+3. **拷 nginx 配置并重载。** 正常发布已经由 Server 部署的 `Gateway` 步自动做（ADR 0207），
+   这一步只在改完新主机名、Actions 不可用或手工兜底时走。校验不能只看状态码：443 的默认 server 是
+   `console`，`home` 块缺失时未知 Host 会拿到控制台首页的 200。要比内容：
 
    ```bash
    scp deploy/nginx/skillmaster.conf root@<host>:/etc/nginx/conf.d/skillmaster.conf
@@ -433,8 +437,8 @@ been tested, and switching the challenge method is a separate operation.
 3. **控制台指向 `home`**：`skillmaster-console/.env.production` 的 `VITE_SITE_URL` 改成
    `https://home.skillmasterai.com`，合并后重新部署控制台。
 4. **裸域 301 指向 `home`**：`deploy/nginx/skillmaster.conf` 的裸域块改成
-   `return 301 https://home.skillmasterai.com$request_uri`；合并，再拷配置、`nginx -t`、reload
-   （同一维护窗口）。
+   `return 301 https://home.skillmasterai.com$request_uri`；合并后发一次 Server 部署，`Gateway`
+   步会把它装上去、`nginx -t` 通过才 reload（ADR 0207）。Actions 不可用时才手工拷。
 5. **云监控**补一条 `https://home.skillmasterai.com/` 的 200 探测（现有三个任务见 §自愈与监控）。
 6. **验证**：两个宿主都显示登录态；`https://skillmasterai.com/` 301 到 `home`；控制台与站点的
    构建产物里都没有指向 `www` 的链接；跑一次 `ops-check`。
@@ -448,8 +452,8 @@ been tested, and switching the challenge method is a separate operation.
 拷的一份。它不随站点发布更新，改它也不会影响 `home`；`home` 的发布路径完全不变。
 
 回退（办证结束、要把两边合回同一份构建）：把 `deploy/nginx/skillmaster.conf` 里 `www` 块的
-`root` 改回 `/srv/skillmaster/site`，拷配置、`nginx -t`、reload；`site-www` 目录可以留着，也可以
-确认不再需要后删掉。
+`root` 改回 `/srv/skillmaster/site`，合并后发一次 Server 部署（`Gateway` 步负责上机与 reload，
+ADR 0207）；`site-www` 目录可以留着，也可以确认不再需要后删掉。
 
 ## Certificates
 
@@ -472,15 +476,17 @@ be a `403` from the ICP appliance), but the renewal configuration stays on DNS-0
 deleted, because it is also where an older build can be fetched from by hand; it is public like the
 rest of the bucket (a few tens of MB per release). Clearing old prefixes is a manual OSS operation.
 
-**The repository is the source; the host runs its own copy.** `deploy/acme/*.sh` and
-`deploy/nginx/skillmaster.conf` are copied to `/etc/skillmaster/acme/` and `/etc/nginx/conf.d/` by
-hand, so `sh -n` passing in CI says nothing about the file that runs at renewal time. After an
-edit, copy it and compare:
+**The repository is the source; the host runs its own copy.** `deploy/nginx/skillmaster.conf` is
+installed by the Server deploy's `Gateway` step (ADR 0207), which also runs `nginx -t` on the host.
+`deploy/acme/*.sh` is still copied to `/etc/skillmaster/acme/` **by hand**, so `sh -n` passing in CI
+says nothing about the file that runs at renewal time. After an edit, copy it and compare:
 
 ```bash
-diff <(ssh root@<host> 'cd /etc/skillmaster/acme && sha256sum auth.sh cleanup.sh; sha256sum /etc/nginx/conf.d/skillmaster.conf' | cut -d' ' -f1) \
-     <(sha256sum deploy/acme/*.sh deploy/nginx/skillmaster.conf | cut -d' ' -f1)
+diff <(ssh root@<host> 'cd /etc/skillmaster/acme && sha256sum auth.sh cleanup.sh') \
+     <(sha256sum deploy/acme/*.sh | sed 's#deploy/acme/##')
 ```
+
+For the nginx file the comparison is `ops-check.yml`'s job, once a day.
 
 The hashes are compared, not the printed lines: the two sides print different paths, so a raw
 `diff` always differs and tells you nothing.

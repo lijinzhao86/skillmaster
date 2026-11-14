@@ -37,7 +37,9 @@ case "$key" in
     # `reference-python/` is an archived design reference, not built code — the same
     # exclusion the workflow's `paths:` filter used to carry.
     without_archive="$(grep -vE '^skillmaster-server/reference-python/' <<< "$files" || true)"
-    grep -qE '^(skillmaster-server/|\.dockerignore$|\.github/workflows/server\.yml$|deploy/sync-sources\.yml$)' <<< "$without_archive"
+    # `deploy/nginx/` is deployed by this workflow now (the Gateway step), so a change to it has
+    # to run the server's checks like any other part of the deployment.
+    grep -qE '^(skillmaster-server/|\.dockerignore$|\.github/workflows/server\.yml$|deploy/nginx/)' <<< "$without_archive"
     ;;
   cli)
     # The Guide and the entry skill are read by the CLI's help tests, so a change to either is a

@@ -25,8 +25,11 @@ check server  false "docs/current/TODO.md"
 check server  false "skillmaster-server/reference-python/a.py"
 check server  true  $'skillmaster-server/reference-python/a.py\nskillmaster-server/src/A.java'
 check server  true  ".dockerignore"
-check server  true  "deploy/sync-sources.yml"
-check server  false "deploy/nginx/skillmaster.conf"
+# The whitelist moved to ops in v69 (ADR 0199); the server stopped reading this file.
+check server  false "deploy/sync-sources.yml"
+# The Gateway step deploys these, so they are the server's business now (ADR 0207).
+check server  true  "deploy/nginx/skillmaster.conf"
+check server  false "deploy/ops/compose.yaml"
 check console true  "skillmaster-console/src/a.tsx"
 check console false "skillmaster-cli/cmd/a.go"
 check site    true  "skills/skillmaster/SKILL.md"

@@ -9,7 +9,8 @@
 # A mismatch fails the run, which is the notification: repository watchers get the failure
 # email, and the run is visible in the Actions tab.
 #
-# Run it by hand after copying a new nginx config to the host, to confirm the copy landed.
+# Since ADR 0207 the nginx config is installed by the Server deploy itself, so this check is the
+# drift detector rather than the step that notices a missing copy.
 name: Ops check
 
 on:
@@ -51,9 +52,10 @@ jobs:
             echo "$unit: active"
           done
 
-          # 2. The host runs a copy of these files (deploy/README: copied by hand). A mismatch
-          # means the repository and production have drifted apart, which is how a fix that was
-          # merged quietly fails to be the fix that runs.
+          # 2. The host runs a copy of these files — the nginx one installed by the Server deploy
+          # (ADR 0207), the acme hooks by hand (deploy/README). A mismatch means the repository
+          # and production have drifted apart, which is how a fix that was merged quietly fails
+          # to be the fix that runs.
           compare() {
             local repo="$1" remote="$2" label="$3" want got
             want=$(sha256sum "$repo" | cut -d' ' -f1)
