@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 201 条。
+共 202 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -208,4 +208,5 @@
 | [0198](0198-api-planes-are-named-by-audience.md) | API 面按使用方命名：oauth / web / api / inner / admin | 已采纳 | 2026-11-14 |
 | [0199](0199-ops-runs-as-its-own-service-and-database.md) | 内容运营作为独立服务与独立库部署 | 已采纳 | 2026-11-14 |
 | [0200](0200-cloud-device-login-approves-on-a-web-page.md) | 云端设备的登录：批准在网页上，执行在设备上 | 已采纳 | 2026-11-14 |
+| [0206](0206-startup-is-the-onboarding-and-joining-is-the-default.md) | Startup 是新人引导，公开库默认 join | 已采纳 | 2026-11-14 |
 | [0207](0207-the-gateway-ships-with-the-server-deploy.md) | 网关配置随服务端部署一起下发 | 已采纳（2026-11-14） | 2026-11-14 |

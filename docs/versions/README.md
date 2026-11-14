@@ -75,3 +75,4 @@ v1–v39 是**历史记录**：正文冻结，不再修改。v40 起只写「相
 | [`v67-guide-content`](v67-guide-content/README.md) | 已完成（已合并并发布：线上 `skillmaster/skillmaster-guide@1.1.0`）… |
 | [`v68-cloud-device-login`](v68-cloud-device-login/README.md) | 已实现（服务端、控制台、CLI 与设计件完成；五轮审计通过；本机与 WorkBuddy 沙箱的端到端已跑通；待合并） |
 | [`v69-ops-service`](v69-ops-service/README.md) | 已完成（2026-11-14 上线：服务端、控制台、站点已部署，CLI 随 beta 通道发布）… |
+| [`v71-onboarding`](v71-onboarding/README.md) | 进行中（2026-11-14 平台已上线 `skillmaster/skillmaster-startup@2.0.0`）… |
