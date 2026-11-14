@@ -2,7 +2,7 @@
    CSS. Custom properties so the palette is stated once. */
 
 @import './styles-editor-media.css'; @import './styles-notifications.css';
-@import './styles-logout.css'; @import './styles-my-when.css';
+@import './styles-logout.css'; @import './styles-my-when.css'; @import './styles-cli-sign-in.css';
 
 :root {
   /* Text in three weights of importance: the page's own words, the label beside a value, and the
@@ -7235,41 +7235,3 @@ a.tag-count:hover { color: var(--accent); text-decoration: underline; text-under
 .cred-shared-person{display:inline-flex;gap:8px;align-items:baseline;margin-left:10px}
 .cred-bind{display:flex;gap:12px;flex-wrap:wrap}
 .cred-bind .control{width:240px}
-
-/* ---------------------------------------------------------------------------
-   The auth card on a phone (v68).
-   The design's auth family owns these numbers (`design/src/shared/auth/auth.css`), and this page is
-   a copy of that family rather than an import of it — so the rules have to exist here too. They are
-   scoped to the standalone overlay: the sign-in request is the one screen that is a whole page, and
-   the same numbers on a dialog floating over the console would move controls the console did not ask
-   to move.
-   --------------------------------------------------------------------------- */
-@media (max-width: 480px) {
-  .overlay.is-standalone {
-    padding: 16px;
-  }
-  .overlay.is-standalone .dialog {
-    padding: 28px 20px 26px;
-  }
-  .overlay.is-standalone .dialog-title {
-    font-size: 20px;
-    padding-right: 0;
-  }
-  /* iOS zooms the whole page when a field it focuses is smaller than 16px. The field grows, not the
-     layout: padding and height are untouched, so the card only gains the text's leading. */
-  .overlay.is-standalone .dialog .field input {
-    font-size: 16px;
-  }
-  /* Escape hatches, not decoration: a thumb-sized box instead of a line of type. */
-  .overlay.is-standalone .consent-account-who .link,
-  .overlay.is-standalone .dialog-foot .link {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-}
-
-/* An IPv6 address is one long token; let it break rather than widen the card. */
-#consentOrigin {
-  overflow-wrap: anywhere;
-}

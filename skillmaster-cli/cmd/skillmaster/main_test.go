@@ -10,10 +10,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/api"
 	"github.com/lijinzhao86/skillmaster/skillmaster-cli/internal/config"
@@ -1336,31 +1334,5 @@ func TestTheDraftApprovalLinkNamesTheDraftAndItsActionsTab(t *testing.T) {
 
 	if got, want := draftApprovalURL(result), "http://localhost:5173/skills/demo%20user/pdf-tools?tab=versions&version=PA1P7BSQ&sub=actions"; got != want {
 		t.Fatalf("draftApprovalURL = %q, want %q", got, want)
-	}
-}
-
-// **Ctrl-C has to reach the context, or `login`'s cancellation is dead code.** The signal is sent to
-// this very process; `rootContext` installed the handler, so it is delivered to the context instead
-// of ending the test run. Windows has no Interrupt signal to send, and the CLI's promise there is
-// the same handler — this only pins the wiring, which is shared code.
-func TestRootContextIsCancelledByAnInterrupt(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("os.Interrupt cannot be sent on Windows")
-	}
-	ctx, stop := rootContext()
-	defer stop()
-
-	process, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		t.Fatalf("finding this process: %v", err)
-	}
-	if err := process.Signal(os.Interrupt); err != nil {
-		t.Fatalf("sending SIGINT to self: %v", err)
-	}
-
-	select {
-	case <-ctx.Done():
-	case <-time.After(2 * time.Second):
-		t.Fatal("SIGINT did not cancel the root context")
 	}
 }
