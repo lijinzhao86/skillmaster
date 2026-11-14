@@ -909,6 +909,9 @@ func TestHelpBudgets(t *testing.T) {
 	if indexRunes > 3000 {
 		t.Errorf("the Guide index is %d characters, over 3000", indexRunes)
 	}
+	if lines := len(strings.Split(strings.TrimSuffix(string(index), "\n"), "\n")); lines > 150 {
+		t.Errorf("the Guide index is %d lines, over 150", lines)
+	}
 	entry := utf8.RuneCountInString(top) + utf8.RuneCountInString(topic.Body) + indexRunes
 	if entry > 5000 {
 		t.Errorf("the entry cost is %d characters, over 5000", entry)

@@ -1,0 +1,444 @@
+{
+  "_comment": "Guide 评测题表。每题是一句用户原话、一个期望打开的指南篇目、以及最终回答里必须出现的词。规则与门槛在 cmd/skillmaster/guide_eval_test.go；改这里的题等于换一把尺。prompt 里不许出现期望篇目的文件名或 must 里的词。",
+  "tasks": [
+    {
+      "id": "account-credentials-switch",
+      "group": "account",
+      "prompt": "我在两台电脑上都登录过，现在想把这台换成另一个账号；之前还设过环境变量里的一把密钥。",
+      "page": "account/credentials.md",
+      "must": [
+        "SKILLMASTER_API_KEY",
+        "skmr login"
+      ]
+    },
+    {
+      "id": "account-devices-revoke",
+      "group": "account",
+      "prompt": "有台笔记本丢了，我想让那台机器上的命令行立刻失效，再看看还有哪些密钥在用。",
+      "page": "account/devices.md",
+      "must": [
+        "/account/sessions",
+        "/account/keys"
+      ]
+    },
+    {
+      "id": "account-delete",
+      "group": "account",
+      "prompt": "我想彻底注销这个账号，在哪里做？注销后会怎样？",
+      "page": "account/delete.md",
+      "must": [
+        "/account",
+        "30 天"
+      ]
+    },
+    {
+      "id": "account-register",
+      "group": "account",
+      "prompt": "我还没有账号，想注册一个；第一段地址以后还能不能改？",
+      "page": "account/register.md",
+      "must": [
+        "/register",
+        "用户名"
+      ]
+    },
+    {
+      "id": "account-sign-in",
+      "group": "account",
+      "prompt": "登录有哪几种方式？我在一台没有浏览器的服务器上，怎么让它有凭据？",
+      "page": "account/sign-in.md",
+      "must": [
+        "skmr login",
+        "SKILLMASTER_API_KEY"
+      ]
+    },
+    {
+      "id": "author-create",
+      "group": "author",
+      "prompt": "我要从零新建一个 skill，名字和描述怎么定？",
+      "page": "author/create.md",
+      "must": [
+        "skmr skill create",
+        "description"
+      ]
+    },
+    {
+      "id": "author-describe",
+      "group": "author",
+      "prompt": "我的 skill 想被更多人搜到，标签和分类该怎么写？",
+      "page": "author/describe.md",
+      "must": [
+        "skmr skill tag add",
+        "skmr skills categories"
+      ]
+    },
+    {
+      "id": "author-draft-create",
+      "group": "author",
+      "prompt": "要把线上的 skill 改一改，但不想动线上；另开一份草稿怎么开？",
+      "page": "author/draft-create.md",
+      "must": [
+        "skmr draft create",
+        "线上版本"
+      ]
+    },
+    {
+      "id": "author-draft-meta",
+      "group": "author",
+      "prompt": "草稿要上线了，但版本列表里的名字还是「改一下」，说明也没写。",
+      "page": "author/draft-meta.md",
+      "must": [
+        "skmr version rename",
+        "skmr version note"
+      ]
+    },
+    {
+      "id": "author-edit",
+      "group": "author",
+      "prompt": "我已经有一份没上线的草稿，想改其中一个文件里的一句话。",
+      "page": "author/edit.md",
+      "must": [
+        "skmr skill edit",
+        "skmr version list"
+      ]
+    },
+    {
+      "id": "author-files",
+      "group": "author",
+      "prompt": "我想把草稿里的一个目录改名，再取一份到本地看看。",
+      "page": "author/files.md",
+      "must": [
+        "skmr skill mv",
+        "skmr skill get"
+      ]
+    },
+    {
+      "id": "author-media",
+      "group": "author",
+      "prompt": "我要把一份 PDF 和几张截图放进 skill 里。",
+      "page": "author/media.md",
+      "must": [
+        "skmr skill write",
+        "--from"
+      ]
+    },
+    {
+      "id": "author-upload",
+      "group": "author",
+      "prompt": "我本地有一整个目录，第一次传到平台，怎么传？",
+      "page": "author/upload.md",
+      "must": [
+        "skmr skill submit"
+      ]
+    },
+    {
+      "id": "concepts-library",
+      "group": "concepts",
+      "prompt": "「我的库」里到底有什么？把一个公开 skill 收进来或移出去分别怎么做？",
+      "page": "concepts/library.md",
+      "must": [
+        "skmr skill join",
+        "skmr skill leave"
+      ]
+    },
+    {
+      "id": "concepts-namespace",
+      "group": "concepts",
+      "prompt": "地址第一段是什么意思？我新建 skill 能不能选别人的那一段？",
+      "page": "concepts/namespace.md",
+      "must": [
+        "命名空间",
+        "账号名"
+      ]
+    },
+    {
+      "id": "concepts-versions",
+      "group": "concepts",
+      "prompt": "我改了文件，别人却说看不到，为什么？",
+      "page": "concepts/versions-and-drafts.md",
+      "must": [],
+      "any": [
+        "线上版本",
+        "线上版",
+        "冻结",
+        "publish"
+      ]
+    },
+    {
+      "id": "concepts-visibility",
+      "group": "concepts",
+      "prompt": "公开·调用和公开·浏览有什么区别？公开之后还能收回吗？",
+      "page": "concepts/visibility.md",
+      "must": [
+        "复制",
+        "下载"
+      ]
+    },
+    {
+      "id": "concepts-what-is-a-skill",
+      "group": "concepts",
+      "prompt": "一个 skill 到底是一个文件还是一个目录？地址怎么组成？",
+      "page": "concepts/what-is-a-skill.md",
+      "must": [
+        "SKILL.md",
+        "命名空间"
+      ]
+    },
+    {
+      "id": "limits-quotas",
+      "group": "limits",
+      "prompt": "一个 skill 最多能放多少文件、单个文件多大？",
+      "page": "limits/quotas.md",
+      "must": [
+        "512",
+        "100 MiB"
+      ]
+    },
+    {
+      "id": "ship-change-visibility",
+      "group": "ship",
+      "prompt": "我想把一个 skill 从私有改成公开，命令是什么？",
+      "page": "ship/change-visibility.md",
+      "must": [
+        "skmr skill visibility"
+      ]
+    },
+    {
+      "id": "ship-delete",
+      "group": "ship",
+      "prompt": "有个 skill 不想再让人用了，但以后可能还要用；应该下线还是删除？",
+      "page": "ship/delete.md",
+      "must": [
+        "skmr skill offline",
+        "恢复"
+      ]
+    },
+    {
+      "id": "ship-notifications",
+      "group": "ship",
+      "prompt": "别人共享给我一个 skill，我该在哪里接受？",
+      "page": "ship/notifications.md",
+      "must": [
+        "skmr notifications accept"
+      ]
+    },
+    {
+      "id": "ship-release",
+      "group": "ship",
+      "prompt": "草稿写好了，怎么上线？上线后发现有问题怎么退回去？",
+      "page": "ship/release.md",
+      "must": [
+        "skmr version publish",
+        "skmr version rollback"
+      ]
+    },
+    {
+      "id": "ship-share",
+      "group": "ship",
+      "prompt": "我想让同事能上线我的 skill，但不想让他改可见性；该给哪一档、怎么给？",
+      "page": "ship/share.md",
+      "must": [
+        "--role maintain"
+      ]
+    },
+    {
+      "id": "start-agent",
+      "group": "start",
+      "prompt": "怎么让 Claude Code 每次都记得先查 SkillMaster 的库？",
+      "page": "start/agent.md",
+      "must": [
+        "skmr prompt print",
+        "CLAUDE.md"
+      ]
+    },
+    {
+      "id": "start-first-skill",
+      "group": "start",
+      "prompt": "我第一次用，想从零建一个 skill 并上线，按什么顺序做？",
+      "page": "start/first-skill.md",
+      "must": [
+        "skmr skill create",
+        "skmr version publish"
+      ]
+    },
+    {
+      "id": "start-install",
+      "group": "start",
+      "prompt": "我在 macOS 上还没装命令行工具，装完怎么确认？",
+      "page": "start/install.md",
+      "must": [
+        "skmr --version"
+      ]
+    },
+    {
+      "id": "tips-for-authors",
+      "group": "tips",
+      "prompt": "我的 skill 写得很长，agent 总是不按它做；内容该怎么组织？",
+      "page": "tips/for-authors.md",
+      "must": [
+        "SKILL.md",
+        "入口"
+      ]
+    },
+    {
+      "id": "trouble-env",
+      "group": "trouble",
+      "prompt": "命令报连不上服务端，还说被沙箱拦了，怎么排查？",
+      "page": "trouble/env.md",
+      "must": [
+        "skmr doctor"
+      ]
+    },
+    {
+      "id": "trouble-feedback",
+      "group": "trouble",
+      "prompt": "我按文档做了还是失败，想把现场提交给平台。",
+      "page": "trouble/feedback.md",
+      "must": [
+        "skmr feedback send"
+      ]
+    },
+    {
+      "id": "trouble-invoke",
+      "group": "trouble",
+      "prompt": "加载一个 skill 时报没有权限，或者读到的内容是旧的。",
+      "page": "trouble/invoke.md",
+      "must": [
+        "skmr skill versions",
+        "版本码"
+      ]
+    },
+    {
+      "id": "trouble-release",
+      "group": "trouble",
+      "prompt": "点上线后页面上没有能点的按钮，为什么？",
+      "page": "trouble/release.md",
+      "must": [
+        "维护"
+      ]
+    },
+    {
+      "id": "trouble-sign-in",
+      "group": "trouble",
+      "prompt": "登录报错：浏览器里没有同意；再试又说登录太频繁。",
+      "page": "trouble/sign-in.md",
+      "must": [
+        "skmr login"
+      ],
+      "any": [
+        "限流",
+        "频率限制"
+      ]
+    },
+    {
+      "id": "trouble-upload",
+      "group": "trouble",
+      "prompt": "上传时报「这一版和已有版本一模一样」和「缺名称」，分别怎么办？",
+      "page": "trouble/upload.md",
+      "must": [
+        "--name",
+        "草稿"
+      ]
+    },
+    {
+      "id": "use-copy",
+      "group": "use",
+      "prompt": "我想把别人的一个公开 skill 拿来改一改，发成自己的版本。",
+      "page": "use/copy.md",
+      "must": [
+        "skmr skill copy"
+      ]
+    },
+    {
+      "id": "use-inspect",
+      "group": "use",
+      "prompt": "用之前我想知道一个 skill 的许可证、它要什么环境、有哪些版本。",
+      "page": "use/inspect.md",
+      "must": [
+        "skmr skill show",
+        "skmr skill license"
+      ]
+    },
+    {
+      "id": "use-read-files",
+      "group": "use",
+      "prompt": "我只想看这个 skill 里的某一个文件，不想加载整份正文。",
+      "page": "use/read-files.md",
+      "must": [
+        "skmr skill read"
+      ]
+    },
+    {
+      "id": "use-run",
+      "group": "use",
+      "prompt": "这个 skill 让我运行它 scripts 目录里的一个 Python 脚本。",
+      "page": "use/run.md",
+      "must": [
+        "skmr run",
+        "python3"
+      ]
+    },
+    {
+      "id": "use-search",
+      "group": "use",
+      "prompt": "我想按意思找一个能处理 PDF 的 skill，还要列出我库里所有 skill。",
+      "page": "use/search.md",
+      "must": [
+        "skmr skills search",
+        "skmr skills list"
+      ]
+    },
+    {
+      "id": "use-secrets",
+      "group": "use",
+      "prompt": "脚本要用的 API key 不能写在代码里，怎么让它在我运行 skill 时自动带上？",
+      "page": "use/secrets.md",
+      "must": [
+        "skmr secret set",
+        "注入"
+      ]
+    },
+    {
+      "id": "use-usage",
+      "group": "use",
+      "prompt": "我想知道我发出去的 skill 最近有没有人用、被搜到后有没有人点。",
+      "page": "use/usage.md",
+      "must": [
+        "skmr usage"
+      ]
+    },
+    {
+      "id": "use-invoke",
+      "group": "use",
+      "prompt": "我有个 skill 地址，想加载它的正文并记住这一版，照它做。",
+      "page": "use/read-files.md",
+      "must": [
+        "skmr skill invoke"
+      ]
+    },
+    {
+      "id": "trouble-feedback-attach",
+      "group": "trouble",
+      "prompt": "消息里已经有一张报错截图的路径，反馈前怎么先取到可提交的稳定路径？",
+      "page": "trouble/feedback.md",
+      "must": [
+        "skmr feedback attach"
+      ],
+      "any": [
+        "--copy"
+      ]
+    },
+    {
+      "id": "use-search-label",
+      "group": "use",
+      "prompt": "想找需要 Python 的公开 skill，怎么按运行环境筛？",
+      "page": "use/search.md",
+      "must": [
+        "skmr skills search",
+        "--scope public"
+      ],
+      "any": [
+        "--label"
+      ]
+    }
+  ]
+}
