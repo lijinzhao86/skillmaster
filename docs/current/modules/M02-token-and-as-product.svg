@@ -2,7 +2,7 @@
      fill="#1f2328" color="#1f2328"
      font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans CJK SC',sans-serif">
   <title>M02 令牌与 AS：它在产品的哪一格</title>
-  <desc>产品里人亲自出面的时刻只有两次。第一次是注册与登录（M01）。第二次是把一份凭据交给一台机器，而它有两个样子：CLI 打开浏览器里的一页，写着它要哪两个权限、用哪个账号，人点同意；CI 与服务器上没有人，那份凭据是控制台里签出的一把 API key——由一次浏览器会话签出，所以它代表的永远是签字的那个人。此后每次任务都由 agent 拿 Bearer 直接调接口，请求路径上只有 M3（验凭据），没有 M2——M2 已经签完了。</desc>
+  <desc>产品里人亲自出面的时刻只有两次。第一次是注册与登录（M01）。第二次是把一份凭据交给一台机器，而它有两个样子：CLI 打印一条一次性链接，人在任意浏览器里打开、看见它要哪两个权限、用哪个账号并点同意，那台机器再轮询取回凭据；CI 与服务器上没有人，那份凭据是控制台里签出的一把 API key——由一次浏览器会话签出，所以它代表的永远是签字的那个人。此后每次任务都由 agent 拿 Bearer 直接调接口，请求路径上只有 M3（验凭据），没有 M2——M2 已经签完了。</desc>
 
   <!--
     Colours are written as presentation attributes so the light theme renders even
@@ -52,13 +52,13 @@
   <text class="mono" fill="#1f2328" x="232" y="175" font-size="12">skmr login</text>
   <text fill="#59636e" x="366" y="175" font-size="12">→ 浏览器打开一页</text>
 
-  <text fill="#1f2328" x="220" y="212" font-size="12.5">那一页是<tspan font-weight="650">同意页</tspan>：写着 <tspan class="mono" fill="#59636e">SkillMaster CLI</tspan> 想要 <tspan class="mono" fill="#59636e">skills:read</tspan> 与 <tspan class="mono" fill="#59636e">skills:write</tspan>，以及用的是哪个账号</text>
-  <text fill="#1f2328" x="220" y="236" font-size="12.5">人点「同意」→ 回调到本机一个临时端口 → 令牌直接进 keychain</text>
+  <text fill="#1f2328" x="220" y="212" font-size="12.5">那一页是<tspan font-weight="650">同意页</tspan>：写着 <tspan class="mono" fill="#59636e">SkillMaster CLI</tspan> 想要 <tspan class="mono" fill="#59636e">skills:read</tspan> 与 <tspan class="mono" fill="#59636e">skills:write</tspan>、用的是哪个账号、请求从哪来</text>
+  <text fill="#1f2328" x="220" y="236" font-size="12.5">人点「同意并继续」→ 那台机器轮询取回令牌 → 默认写 0600 文件（`--keyring` 才进钥匙串）</text>
   <text class="mu" fill="#59636e" x="220" y="262" font-size="11.5">这是产品里第二次需要人出面（第一次是 M01 的注册/登录）。<tspan font-weight="600">一次同意换来一个长期凭据</tspan>——所以它只发生一次，不是每次登录</text>
   <text class="mu" fill="#59636e" x="220" y="282" font-size="11.5">同意页要说清「同意了会发生什么」：这个 CLI 之后能读你的 skill、能代表你发布——而不是一句「是否授权」</text>
 
-  <text class="mono c1" fill="#2563eb" x="900" y="178" font-size="13" font-weight="650">/oauth/authorize</text>
-  <text class="mu" fill="#59636e" x="900" y="198" font-size="11.5">+ 同意页（SPA）</text>
+  <text class="mono c1" fill="#2563eb" x="900" y="178" font-size="13" font-weight="650">/cli-sign-in?ticket=</text>
+  <text class="mu" fill="#59636e" x="900" y="198" font-size="11.5">+ /web/…/approve（SPA）</text>
   <text class="mu" fill="#59636e" x="900" y="218" font-size="11.5">浏览器 · 会话 cookie</text>
 
   <!-- ── ② 每次 · 静默 ───────────────────────────────────────────────── -->
@@ -71,7 +71,7 @@
   <text fill="#1f2328" x="220" y="352" font-size="12.5">网关 skill <tspan class="mono" fill="#59636e">→ list → invoke → files → read</tspan>，每次带 <tspan class="mono" fill="#59636e">Authorization: Bearer</tspan></text>
   <text fill="#1f2328" x="220" y="378" font-size="12">令牌是短命的，过期了就<tspan font-weight="650">静默换一个</tspan>——人不会看到任何一次登录</text>
   <text class="mu" fill="#59636e" x="220" y="402" font-size="11.5"><tspan font-weight="600">这条路上没有 M2</tspan>：令牌早就签好了，验它的是 M3。M2 只在签发与撤销时出现</text>
-  <text class="mu" fill="#59636e" x="220" y="422" font-size="11.5">令牌永不进模型上下文，也不进命令历史——它从 keychain 读（ADR 0002）</text>
+  <text class="mu" fill="#59636e" x="220" y="422" font-size="11.5">令牌永不进模型上下文，也不进命令历史——默认从 0600 文件读（ADR 0185）</text>
 
   <text class="mono c4" fill="#1a7f37" x="900" y="356" font-size="13" font-weight="650">/api/v1/*</text>
   <text class="mu" fill="#59636e" x="900" y="376" font-size="11.5">机器 · Bearer</text>
@@ -84,7 +84,7 @@
   <text class="c3" fill="#b45309" x="92" y="502" font-size="13.5" font-weight="650">③ 无人</text>
   <text class="mu" fill="#59636e" x="92" y="524" font-size="11.5">CI / 服务器</text>
 
-  <text fill="#1f2328" x="220" y="506" font-size="12.5"><tspan class="mono" fill="#59636e">skmr login --with-key</tspan>：不打开浏览器，用控制台里签的一把 <tspan font-weight="650">API key</tspan></text>
+  <text fill="#1f2328" x="220" y="506" font-size="12.5">把控制台里签的一把 <tspan font-weight="650">API key</tspan> 放进 <tspan class="mono" fill="#59636e">SKILLMASTER_API_KEY</tspan></text>
   <text class="mu" fill="#59636e" x="220" y="532" font-size="12">凭据由<tspan font-weight="600">一次浏览器会话</tspan>签出——所以它代表的永远是那个签字的人，而不是「这个客户端被允许代表谁」</text>
 
   <text class="mono c3" fill="#b45309" x="884" y="504" font-size="13" font-weight="650">/web/keys</text>

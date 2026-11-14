@@ -23,12 +23,13 @@ func OpenBrowser(url string) error {
 
 // BrowserAvailable answers "is there anything on this machine that opens a URL".
 //
-// **Asked before the flow starts, which is a different moment from asking whether opening worked.**
-// Once `login` has printed an authorization URL and is listening on the loopback port, "there is no
-// browser here" is no longer a fact it can act on: the callback can never arrive, and the person
-// watches a command that looks like it is working. The container case — the one this exists for —
-// is knowable in advance, so it is answered in advance, and it is answered by the same platform
-// switch the opening uses rather than by a second opinion about what a browser is.
+// **Asked by commands that would start a login on their own, which is a different moment from
+// `login` itself.** Since v68 the login no longer needs a browser on *this* machine: the link can be
+// opened anywhere, so an explicit `skmr login` prints it and waits regardless. What still depends on
+// the answer is a command that logs in for itself, because there nobody asked for a ten-minute wait,
+// and a machine with nothing to open the link in would sit through one for a step nobody can finish.
+// The answer comes from the same platform switch the opening uses, rather than from a second opinion
+// about what a browser is.
 func BrowserAvailable() bool {
 	if _, _, err := browserCommand(""); err != nil {
 		return false
@@ -40,11 +41,10 @@ func BrowserAvailable() bool {
 //
 // **`xdg-open` installed is not a browser**, and the image where that matters is the ordinary one: a
 // CI base with `xdg-utils` pulled in by something else, no `$DISPLAY`, no session bus. There,
-// `LookPath` answers yes and the login prints an authorization URL, listens on the loopback port and
-// waits out the whole five-minute timeout — the "command that looks like it is working" this check
+// `LookPath` answers yes, and a command that logs in for itself would block on a wait whose only
+// possible end is ten minutes of silence — the "command that looks like it is working" this check
 // exists to prevent, with the person on the other side of it. The variable is the platform's own
-// statement that there is a screen to open something on; a session without one cannot complete a
-// loopback redirect however many binaries it has.
+// statement that there is a screen to open something on.
 //
 // Deliberately not a probe of the launcher (running `xdg-open` to see what happens would open a
 // window on the machines where it works), and deliberately nothing on macOS or Windows, which have

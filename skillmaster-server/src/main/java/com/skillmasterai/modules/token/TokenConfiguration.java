@@ -20,6 +20,7 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.token.DelegatingOAuth2TokenGenerator;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 
@@ -65,8 +66,8 @@ public class TokenConfiguration {
     }
 
     /**
-     * The CLI's login (v4): the consent that writes the code, and the exchange that delivers the
-     * credential.
+     * The CLI's login (v68): the question the machine asks, the answer a session writes, and the poll
+     * that collects the credential.
      *
      * <p>It takes the store rather than a second copy of the tables: what it does is describe an act —
      * this person, this machine, these scopes — and the store is what decides what a token row looks
@@ -75,10 +76,10 @@ public class TokenConfiguration {
      */
     @Bean
     CliSignIn cliSignIns(JdbcClient jdbc, RegisteredClientRepository clients, TokenStore authorizations,
-            TokenPolicy tokenPolicy, CliSignInPolicy cliSignInPolicy, AuthThrottle authThrottle,
-            AuditLog audit) {
-        return new PgCliSignIns(jdbc, clients, authorizations, tokenPolicy, cliSignInPolicy,
-                authThrottle, audit);
+            CliSignInPolicy cliSignInPolicy, AuthThrottle authThrottle, AuditLog audit,
+            PlatformTransactionManager transactionManager) {
+        return new PgCliSignIns(jdbc, clients, authorizations, cliSignInPolicy, authThrottle, audit,
+                transactionManager);
     }
 
     /**

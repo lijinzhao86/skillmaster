@@ -165,8 +165,14 @@ java.lang.IllegalStateException: no oauth_client row for 'skillmaster-cli' —
 this deployment cannot start a login. Seed it (see the server README).
 ```
 
-— which the consent page can only report as 服务暂时不可用. Seeded by hand, once per deployment, and
-the redirect URI has to match the CLI's fixed loopback port exactly (ADR 0028):
+— which reaches the person as `错误：服务端没能发起这次登录（HTTP 500）` before any link is printed.
+Seeded by hand, once per deployment. Since v68 the login has no redirect URI at all (the loopback
+callback is gone,
+[ADR 0200](../docs/decisions/0200-cloud-device-login-approves-on-a-web-page.md) §决定 1), but the
+columns stay: **`grant_types` has to be non-empty**, because `ClientRegistry` reads every row into
+the authorization server's `RegisteredClient`, whose builder refuses an empty set with
+`IllegalArgumentException: authorizationGrantTypes cannot be empty` — a 500 at the same place.
+`metadata.scopes` is what a login's requested scopes are intersected with.
 
 ```sql
 INSERT INTO oauth_client (client_id, name, registration, redirect_uris, grant_types,
@@ -420,7 +426,7 @@ been tested, and switching the challenge method is a separate operation.
    ```
 
    **回滚的前提**：变量变成两个值之后，每次 Deploy（包括 `release=<旧 sha>` 的回滚）都会用
-   当前变量重写 `server.env`，而 ADR 0190 之前的 jar 遇到逗号会拒绝启动。要回滚到那样的
+   当前变量重写 `server.env`，而 ADR 0200 之前的 jar 遇到逗号会拒绝启动。要回滚到那样的
    release，先把 `SKILLMASTER_SITE_ORIGIN` 改回单值再 dispatch；否则回滚会在启动失败后自动
    切回当前 release——线上不中断，但回滚没有发生。
 

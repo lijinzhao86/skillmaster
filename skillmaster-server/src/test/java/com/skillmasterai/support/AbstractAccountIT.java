@@ -273,16 +273,20 @@ public abstract class AbstractAccountIT extends AbstractIT {
     }
 
     /**
-     * Moves the SMS cooldown's counter out of the way.
+     * Removes the SMS cooldown's counter.
      *
      * <p>That rule is one message per number per minute, which any test needing two messages would
-     * otherwise have to wait out. Moving the window lets such a test reach the rule it is actually
+     * otherwise have to wait out. Removing the row lets such a test reach the rule it is actually
      * about; the cooldown itself is pinned in {@code AccountThrottleIT}, and nothing else depends
      * on it having been respected here.
+     *
+     * <p><strong>Removed rather than aged into 2000.</strong> Aging worked only while every spend
+     * swept old rows, so the next aging had nothing to collide with; v68 made that sweep at most once
+     * a minute, and a second aging then hit the primary key of the one the first left behind.
+     * Deletion is the same state the test wants, and it does not depend on a background cleanup.
      */
     protected void clearSmsCooldown() {
-        jdbc.sql("UPDATE auth_throttle SET window_start = '2000-01-01T00:00:00Z'"
-                + " WHERE scope = 'sms:cooldown'").update();
+        jdbc.sql("DELETE FROM auth_throttle WHERE scope = 'sms:cooldown'").update();
     }
 
     /**

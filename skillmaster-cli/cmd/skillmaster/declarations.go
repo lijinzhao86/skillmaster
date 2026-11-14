@@ -47,15 +47,19 @@ var exitsLocal = []int{0, 1, 2}
 // exitsRefusal is for a command whose only job is to say where the action lives.
 var exitsRefusal = []int{0, 1}
 
-// keyLine is the no-browser credential path, worded once. It appears on the pages a person lands on
-// when login is not an option (login, startup, help env), because a page that only says "see help
-// auth" costs the reader a second command (v22 S1/A1).
-const keyLine = "无浏览器（容器 / CI / sandbox）：控制台 /account/keys 签一把 skm_…，" +
+// keyLine is the credential path for a machine with nobody in front of it, worded once. It appears on
+// the pages a person lands on when a login will not do (login, startup, help env), because a page
+// that only says "see help auth" costs the reader a second command (v22 S1/A1).
+//
+// **It is about attendance, not about browsers.** Since v68 a browser-less machine can log in — the
+// link opens anywhere — so what this sentence is for is the machine nobody is sitting at, where no
+// link can be approved by definition.
+const keyLine = "无人值守（CI / 容器里没有人在旁边）：控制台 /account/keys 签一把 skm_…，" +
 	"放进 SKILLMASTER_API_KEY，用 skmr auth status 验证。"
 
 // autoLoginLine is what a read command does with no credential. None of these six take `--no-login`,
 // so the sentence has to say what happens instead of naming a flag they do not have (v22 A4).
-const autoLoginLine = "没有凭据时会打开浏览器登录；无人值守请先设 SKILLMASTER_API_KEY（help auth）。"
+const autoLoginLine = "没有凭据时会先登录；沙箱 / CI 请先设 SKILLMASTER_API_KEY（help auth）。"
 
 // versionRuleLine is the one thing a bare address does not mean: it is the version pinned by this
 // machine's last `invoke`, not whatever is live now. One string, four pages — the rule is the same
@@ -73,16 +77,16 @@ var commandHelp = declarationsCatalog{
   SKILLMASTER_SKILLS_DIR   submit 解析裸名字的目录（默认 ~/.claude/skills）
   SKILLMASTER_WEB_URL      审批页地址（默认同服务端）
   SKILLMASTER_AUTO_UPDATE  设 0 关掉自动更新（update 照常可用）
-无浏览器：控制台 /account/keys 签 skm_… 填进 SKILLMASTER_API_KEY，auth status 验证。
+无人值守：控制台 /account/keys 签 skm_… 填进 SKILLMASTER_API_KEY，auth status 验证。
 `,
 		},
 		"auth": {
 			Name:  "auth",
 			Label: "凭据",
 			Body: `两种凭据：
-  浏览器：skmr login（有图形界面时）
+  登录：skmr login——打印一个链接，任意浏览器批准（手机也行，沙箱里也能用）。
   API key：控制台 /account/keys 签一把 skm_…，放进 SKILLMASTER_API_KEY。
-           容器 / CI / sandbox 用它——不要浏览器，也不写本机。
+           无人值守的机器用它——不需要任何人点同意，也不写本机。
 验证：skmr auth status
 续期 / 撤销：登录的去控制台「登录设备」，key 的去「API 密钥」。
 logout 会清本机；CLI 登录还会结束服务端那次登录，key 只清本机。
@@ -146,9 +150,13 @@ var topSpecs = []*help.Spec{
 	},
 	{
 		Path:    "login",
-		Summary: "在浏览器里登录这台机器",
+		Summary: "登录这台机器",
 		Usage:   "skmr login [--keyring]",
-		Output: "登录成功后在 stdout 打印这份凭据是谁的、到什么时候；诊断走 stderr。\n" +
+		Output: "在终端打印一个一次性链接，你在任意浏览器里打开并批准——手机、另一台电脑都行，" +
+			"云设备不需要自己的浏览器。批准后这条命令自动继续，通常两秒内完成；链接 10 分钟有效，" +
+			"只能批准一次，不要转发。Ctrl-C 取消，会尽力通知服务端结束这次待批准；" +
+			"通知不到也会在 10 分钟后失效。\n" +
+			"登录成功后在 stdout 打印这份凭据是谁的、到什么时候；诊断走 stderr。\n" +
 			"凭据默认写状态目录里的 0600 明文文件（仅本人可读）；--keyring 写系统钥匙串。" +
 			"在沙箱里它可能被直接拒绝（不弹窗，本次回退明文文件），也可能弹一次审批后只写进会话副本" +
 			"（重启后可能丢失）；输出会说明落在系统钥匙串还是明文文件。\n" +
@@ -158,7 +166,7 @@ var topSpecs = []*help.Spec{
 		},
 		Failures: []help.Failure{
 			{Code: "network", Summary: "打开或连不上服务端", Next: "检查网络与地址后重试"},
-			{Code: "login_failed", Summary: "浏览器里没有同意", Next: "重新运行 skmr login"},
+			{Code: "login_failed", Summary: "页面上没有批准，或链接过期了", Next: "重新运行 skmr login 拿一个新链接"},
 			{Code: "too_many_requests", Summary: "登录试得太频繁", Next: "等一会儿再试"},
 		},
 		Examples: []string{"skmr login", "skmr login --keyring"},
@@ -182,13 +190,13 @@ var topSpecs = []*help.Spec{
 		Path:    "startup",
 		Summary: "开始入门旅程",
 		Usage:   "skmr startup",
-		Output: "先确保这台机器登录：没有凭据、又能打开浏览器时，它先带你登录；打不开浏览器就停下，" +
-			"并说明改用 skmr login 或 API key 怎么继续。登录后加载官方入门技能 " +
+		Output: "先确保这台机器登录：没有凭据时它先带你登录——终端打印链接，你在任意浏览器里批准；" +
+			"没有浏览器可用时也会说明改用 skmr login 或 API key 怎么继续。登录后加载官方入门技能 " +
 			"skillmaster/skillmaster-startup、钉住这一版，正文原样打印到 stdout；提示走 stderr。\n" + keyLine,
 		Failures: []help.Failure{
 			{Code: "usage", Summary: "多给了参数", Next: "去掉多余的参数：startup 不带参数"},
 			{Code: "network", Summary: "连不上服务端", Next: "检查网络与地址后重试"},
-			{Code: "login_failed", Summary: "浏览器里没有完成登录", Next: "重新运行 skmr startup"},
+			{Code: "login_failed", Summary: "页面上没有完成登录", Next: "重新运行 skmr startup"},
 			{Code: "not_found", Summary: "旅程技能不存在或对它不可见", Next: "去控制台确认它还在线上"},
 		},
 		Examples: []string{"skmr startup"},

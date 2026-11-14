@@ -19,6 +19,7 @@ export type AuthView =
   | 'resetDone'
   | 'consent'
   | 'consentIncomplete'
+  | 'consentExpired'
   | 'consentDone'
   | 'logout'
 
@@ -297,6 +298,10 @@ export interface ConsentEntry {
   knownClient: boolean
   who: string
   name: string
+  /** Where the CLI asked from, as the server observed it — not something the CLI reports. */
+  from: string
+  /** Whole minutes since the request was made; null when the address does not carry it. */
+  ageMinutes: number | null
   scopes: ConsentScope[]
 }
 
@@ -323,11 +328,15 @@ export function readConsent(params: URLSearchParams | undefined): ConsentEntry {
   /* Either half missing is a link that cannot work. A link carrying neither is not a consent entry
      at all in the source; a host that asks for this view anyway gets the incomplete card rather
      than an empty request. */
+  const age = Number(query.get('age'))
+
   return {
     complete: clientId !== null && clientId !== '' && state !== null,
     knownClient,
     who: knownClient && clientId !== null ? CONSENT_CLIENTS[clientId] : (clientId ?? ''),
     name: query.get('name') || '',
+    from: query.get('from') || '',
+    ageMinutes: query.get('age') !== null && Number.isFinite(age) && age >= 0 ? Math.floor(age) : null,
     scopes,
   }
 }
@@ -345,6 +354,7 @@ export const VIEW_TITLE: Record<AuthView, string> = {
   resetDone: '密码已重置',
   consent: '授权请求',
   consentIncomplete: '授权请求',
+  consentExpired: '授权请求',
   consentDone: '授权成功',
   logout: '已退出登录',
 }
@@ -357,7 +367,7 @@ export const VIEW_TITLE: Record<AuthView, string> = {
 export function addressViewOf(view: AuthView): AuthView {
   if (view === 'register' || view === 'registerCode' || view === 'registerDone') return 'register'
   if (view === 'reset' || view === 'resetCode' || view === 'resetPassword' || view === 'resetDone') return 'reset'
-  if (view === 'consent' || view === 'consentIncomplete' || view === 'consentDone') return 'consent'
+  if (view === 'consent' || view === 'consentIncomplete' || view === 'consentExpired' || view === 'consentDone') return 'consent'
   if (view === 'logout') return 'logout'
   return 'login'
 }

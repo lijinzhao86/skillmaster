@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 199 条。
+共 200 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -35,7 +35,7 @@
 | [0025](0025-cli-credential-storage.md) | CLI 的凭据存哪：keychain 优先，明文文件兜底并告知 | 已采纳 | 2026-10-02 |
 | [0026](0026-overriding-the-framework-for-public-clients.md) | 为公共客户端覆盖框架的两处：发 refresh token，并允许它刷新与撤销 | 已采纳 | 2026-10-02 |
 | [0027](0027-attributes-keep-the-frameworks-principal-type.md) | 框架的 attributes 里，principal 存框架自己的类型 | 已采纳 | 2026-10-03 |
-| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口 | 已采纳 | 2026-10-03 |
+| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口 | 已取代（由 [0200](0200-cloud-device-login-approves-on-a-web-page.md) 取代：登录改为设备链接 + 轮询，CLI 不再监听回环端口） | 2026-10-03 |
 | [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上 | 已采纳 | 2026-10-05 |
 | [0030](0030-the-fallback-credential-is-per-server.md) | 兜底凭据文件按 server 分 | 已采纳 | 2026-10-05 |
 | [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作 | 已采纳 | 2026-10-06 |
@@ -51,7 +51,7 @@
 | [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方走我们的 CLI 进来，本版不做 MCP 适配器 | 已采纳 | 2026-10-15 |
 | [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置是上限，不只是默认值 | 已采纳，**被 [ADR 0171](0171-api-key-expiry-is-a-choice.md) 取代**（`lifetime` 配置被删除；上限是产品常量 365 天，默认值是产品常量 90 天；「按天、按上海日、由服务端下发」的部分保留） | 2026-10-15 |
 | [0043](0043-the-browser-session-is-bounded-and-revocable.md) | 浏览器会话有两条尺子，而且设备可撤销 | 已采纳 | 2026-10-15 |
-| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端的范围：CLI 管桌面与服务器，移动端将来由 App | 已采纳 | 2026-10-16 |
+| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端的范围：CLI 管桌面与服务器，移动端将来由 App | 已采纳；§决定 1（服务器上走 API key）被 [0200](0200-cloud-device-login-approves-on-a-web-page.md) 取代 | 2026-10-16 |
 | [0045](0045-the-absolute-ceiling-follows-the-session.md) | 绝对上限从「会话那一行创建的时刻」算起，重新登录不重启它 | 已采纳 | 2026-10-16 |
 | [0046](0046-deleting-a-skill-happens-in-the-browser.md) | 把一个 skill 删掉这件事，只在浏览器面存在 | 已采纳 | 2026-10-16 |
 | [0047](0047-permissions-are-a-ladder.md) | 对一个 skill 的权限是一条梯子，不是一个开关 | 已采纳 | 2026-10-17 |
@@ -207,3 +207,4 @@
 | [0197](0197-production-tables-hold-only-final-claims.md) | 生产表只存最终标签与预期结果，抽取中间态进候选表 | 已采纳 | 2026-11-14 |
 | [0198](0198-api-planes-are-named-by-audience.md) | API 面按使用方命名：oauth / web / api / inner / admin | 已采纳 | 2026-11-14 |
 | [0199](0199-ops-runs-as-its-own-service-and-database.md) | 内容运营作为独立服务与独立库部署 | 已采纳 | 2026-11-14 |
+| [0200](0200-cloud-device-login-approves-on-a-web-page.md) | 云端设备的登录：批准在网页上，执行在设备上 | 已采纳 | 2026-11-14 |

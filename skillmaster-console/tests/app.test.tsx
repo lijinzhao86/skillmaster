@@ -356,18 +356,28 @@ describe('the app shell', () => {
     // The address `skmr login` hands the browser. **The card is the whole page**: the design's
     // standalone screen, so there is no brand line above it and no navigation beside it — the card
     // carries its own brand, and there is nothing under this address for a site to be.
-    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT))
-
-    const { container } = await showApp(
-      '/cli-sign-in?client_id=skillmaster-cli&state=s1&scope=skills%3Aread&code_challenge=abc',
+    const { requests } = stubFetch(() => json(200, SHELL_ACCOUNT), () =>
+      json(200, {
+        status: 'pending',
+        name: '我的 MacBook',
+        client: 'skillmaster-cli',
+        scopes: ['skills:read'],
+        from: '47.117.36.14',
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 600_000).toISOString(),
+        age_minutes: 0,
+      }),
     )
 
+    const { container } = await showApp('/cli-sign-in?ticket=t1')
+
     expect(requested(requests, '/web/session')).toBeDefined()
+    expect(requested(requests, '/cli-device-sign-ins/t1')).toBeDefined()
     expect(text(container.querySelector('h2'))).toBe('授权请求')
     expect(container.querySelector('h1')).toBeNull()
     expect(container.querySelector('.sidenav')).toBeNull()
     expect(container.querySelector('.dialog-brand')).not.toBeNull()
-    // And what it says came from the address rather than from anywhere in the app.
+    // And what it says came from the question the server read, not from anywhere in the app.
     expect(text(container.querySelector('.consent-scopes li'))).toBe('读取你可见的全部 skill，包括未公开的')
   })
 

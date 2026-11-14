@@ -111,15 +111,9 @@ final class WebRoutes {
     static final String SESSION_BY_ID = SESSIONS + "/{id}";
 
     /**
-     * The CLI's login (v4): the browser action that mints, the public exchange that delivers, and the
-     * console write that ends one.
+     * The console's list of CLI logins, and the write that ends one.
      *
-     * <p><strong>One of the three is deliberately not under {@code BASE}.</strong> A CLI has no
-     * session, which is why the exchange is asked for at its own address and given a limit of its own
-     * — being on this plane would mean either an authenticated endpoint the CLI cannot call, or a
-     * blanket {@code permitAll} over {@code /web/**} that would unauthenticate everything else on it.
-     *
-     * <p><strong>And the screen's own address is not here at all.</strong> {@code /cli-sign-in} is the
+     * <p><strong>The screen's own address is not here at all.</strong> {@code /cli-sign-in} is the
      * SPA's route, in the same sense {@code /account/keys} is: no controller owns it, and the server's
      * only part in it is the {@code return_to} redirect {@code TokenSecurityConfig} builds when nobody
      * is signed in. Putting it here would suggest this class can move it, and moving it would be a
@@ -131,25 +125,44 @@ final class WebRoutes {
     static final String CLI_SIGN_IN_BY_ID = CLI_SIGN_INS + "/{id}";
 
     /**
-     * Redeeming a one-time code for the credential it carries.
+     * The CLI's question (v68): anonymous creation, anonymous view, anonymous poll.
      *
-     * <p>Absolute rather than relative to {@code BASE}, and that is the whole of its security story:
-     * it is the one write on this server a caller with no session may make. What stands in for a
-     * session is the code — single-use, minutes long, and bound to a PKCE challenge the caller has to
-     * prove it holds.
+     * <p><strong>All three are absolute rather than under {@code BASE}.</strong> The caller is a
+     * process on the person's machine with no session; being on the browser plane would mean either
+     * an authenticated endpoint it cannot call, or a blanket {@code permitAll} over {@code /web/**}
+     * that would unauthenticate everything else on it. The poll carries a limit of its own keyed on
+     * the address.
      */
-    static final String CLI_SIGN_IN_EXCHANGE = CLI_SIGN_INS + "/exchange";
+    static final String CLI_DEVICE_SIGN_INS = "/cli-device-sign-ins";
+
+    /** One question, addressed by its ticket: the page reads it, the CLI polls it. */
+    static final String CLI_DEVICE_SIGN_IN = CLI_DEVICE_SIGN_INS + "/{ticket}";
+
+    /** The one poll, which may hand over the credential. */
+    static final String CLI_DEVICE_SIGN_IN_TOKEN = CLI_DEVICE_SIGN_IN + "/token";
 
     /**
-     * The screen's other button: no login happens, and the browser is sent back to where it came from.
+     * The waiting process giving up (Ctrl-C), so the link stops being a question.
      *
-     * <p><strong>Why this cannot be done in the page.</strong> The refusal has to end at the CLI's
-     * loopback address, and the page does not have it — the registered redirect URI is read from the
-     * client row on the server, deliberately, because a target chosen by the request is an open
-     * redirect. So the "no" comes back here to ask the way, and the answer comes from the same row the
-     * mint's answer does.
+     * <p>Anonymous like the poll, and for the same reason: what proves it is the device secret, which
+     * stayed with the process that asked.
      */
-    static final String CLI_SIGN_IN_REFUSE = CLI_SIGN_INS + "/refuse";
+    static final String CLI_DEVICE_SIGN_IN_CANCEL = CLI_DEVICE_SIGN_IN + "/cancel";
+
+    /**
+     * The browser's two answers to a question, on the session plane.
+     *
+     * <p>The approval writes the authorization row and nothing else; the refusal writes nothing. Both
+     * take the person from the session rather than from the body, the way every other write on this
+     * plane does.
+     */
+    static final String CLI_DEVICE_APPROVALS = "/cli-device-sign-ins";
+
+    /** The yes: a person, in a session, agreeing to the question. */
+    static final String CLI_DEVICE_APPROVE = CLI_DEVICE_APPROVALS + "/{ticket}/approve";
+
+    /** The no: the same person closing the question without granting anything. */
+    static final String CLI_DEVICE_REFUSE = CLI_DEVICE_APPROVALS + "/{ticket}/refuse";
 
     /**
      * Whether a registration code send would be asked for a captcha.

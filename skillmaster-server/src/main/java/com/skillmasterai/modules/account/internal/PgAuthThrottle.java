@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 /**
@@ -105,14 +106,26 @@ public final class PgAuthThrottle implements AuthThrottle {
          */
         CODE_POLICY_IP("register:policy", 900, 120),
         /**
-         * Sixty redemptions per address per fifteen minutes.
+         * Thirty CLI questions per address per ten minutes (v68).
          *
-         * <p>The one write on this server that a caller with no session may make (v4), so the one
-         * place an anonymous caller can make it do work: a 256-bit lookup and a signature check per
-         * attempt. Generous, because the honest caller redeems exactly once — anything above a handful
-         * is somebody guessing, and guessing is what this bounds.
+         * <p>An anonymous write that creates a row, bounded by how fast one address can fill the
+         * table. The honest caller creates one per login.
          */
-        CLI_SIGN_IN_EXCHANGE("cli-sign-in:exchange", 900, 60);
+        DEVICE_SIGN_IN_START("cli-device-sign-in:start", 600, 30),
+        /**
+         * A hundred and twenty reads of a CLI question per address per minute (v68).
+         *
+         * <p>The page reads once as it opens; a person reloading while reading stays far below it,
+         * and walking tickets does not.
+         */
+        DEVICE_SIGN_IN_VIEW("cli-device-sign-in:view", 60, 120),
+        /**
+         * A hundred and twenty polls per address per minute (v68).
+         *
+         * <p>The per-ticket one-second interval is the real cadence; this is the backstop for one
+         * address opening many questions at once.
+         */
+        DEVICE_SIGN_IN_POLL("cli-device-sign-in:poll", 60, 120);
 
         private final String scope;
         private final long windowSeconds;
@@ -128,8 +141,22 @@ public final class PgAuthThrottle implements AuthThrottle {
     /** Longer than the longest window, so a sweep never removes a row a rule is still counting. */
     private static final Duration KEEP_FOR = Duration.ofHours(25);
 
+    /**
+     * How often the opportunistic sweep runs at most, per process.
+     *
+     * <p><strong>It used to run on every spend, and one of those spends is once a second.</strong> A
+     * waiting CLI login polls every second (v68), so a link nobody approved paid for one DELETE per
+     * second for ten minutes. Nothing about this sweep needs to be that eager: {@code KEEP_FOR} is 25
+     * hours, and a minute of lag reclaims exactly the same rows. The cost of the coarseness is that a
+     * test which ages a row and then makes a single call may still see it — nothing counts on that,
+     * and the alternative is a background thread this table does not justify.
+     */
+    private static final long SWEEP_EVERY_MILLIS = Duration.ofMinutes(1).toMillis();
+
     private final JdbcClient jdbc;
     private final PhoneCipher cipher;
+    /** The last sweep, as epoch millis; zero means "never", so the first spend always sweeps. */
+    private final AtomicLong lastSweep = new AtomicLong();
 
     public PgAuthThrottle(JdbcClient jdbc, PhoneCipher cipher) {
         this.jdbc = jdbc;
@@ -216,10 +243,24 @@ public final class PgAuthThrottle implements AuthThrottle {
     }
 
     @Override
-    public Throttle countCliSignInExchange(String clientIp) {
+    public Throttle countDeviceSignInStart(String clientIp) {
+        return spendOnAddress(Rule.DEVICE_SIGN_IN_START, clientIp);
+    }
+
+    @Override
+    public Throttle countDeviceSignInView(String clientIp) {
+        return spendOnAddress(Rule.DEVICE_SIGN_IN_VIEW, clientIp);
+    }
+
+    @Override
+    public Throttle countDeviceSignInPoll(String clientIp) {
+        return spendOnAddress(Rule.DEVICE_SIGN_IN_POLL, clientIp);
+    }
+
+    private Throttle spendOnAddress(Rule rule, String clientIp) {
         Optional<Throttle.Refused> refusal = clientIp == null
                 ? Optional.empty()
-                : spend(Rule.CLI_SIGN_IN_EXCHANGE, addressKey(clientIp));
+                : spend(rule, addressKey(clientIp));
         return refusal.isEmpty() ? new Throttle.Allowed() : refusal.get();
     }
 
@@ -279,6 +320,16 @@ public final class PgAuthThrottle implements AuthThrottle {
      * row per key per window and nothing older than a day.
      */
     private void sweep(Instant now) {
+        long millis = now.toEpochMilli();
+        long previous = lastSweep.get();
+        if (previous != 0 && millis - previous < SWEEP_EVERY_MILLIS) {
+            return;
+        }
+        // Compare-and-set rather than a plain write, so two threads arriving together do not both
+        // run the delete; the loser skips this turn and the winner's run covers it.
+        if (!lastSweep.compareAndSet(previous, millis)) {
+            return;
+        }
         jdbc.sql("DELETE FROM auth_throttle WHERE window_start < :cutoff")
                 .param("cutoff", Timestamps.format(now.minus(KEEP_FOR)))
                 .update();
