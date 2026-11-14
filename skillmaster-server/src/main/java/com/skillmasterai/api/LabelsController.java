@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The public label vocabulary (v65).
+ * The public label vocabulary (v66).
  *
  * <p>A read-only list, deliberately without a public total: the size of the public corpus is an
  * internal signal, and the console does not draw counts either. The wire key is the definition id

@@ -82,7 +82,7 @@ public record AuthoredSkillResponse(
          */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         SkillMetaResponse.CopiedFrom copiedFrom,
-        /* v65: the platform's one-line expected result and displayed attributes, for the
+        /* v66: the platform's one-line expected result and displayed attributes, for the
            information page. Omitted when absent, like the other optional blocks. */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         String outcome,
@@ -131,7 +131,7 @@ public record AuthoredSkillResponse(
         return of(authored, objectMapper, sources, metrics, null, List.of());
     }
 
-    /** v65: the author plane carries the same platform claims as the information page. */
+    /** v66: the author plane carries the same platform claims as the information page. */
     public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper,
             com.skillmasterai.modules.skill.SourceService sources,
             com.skillmasterai.modules.metrics.UsageQuery metrics, String outcome,

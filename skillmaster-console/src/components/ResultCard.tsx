@@ -15,11 +15,11 @@ import SourceMark from './SourceMark'
  *
  * **Three lines, everything else on the skill page** (2026-11-05): the name with its category,
  * one line of the author's description, and a third line that is **attributes on the left and
- * public tags on the right** (v65). The row's tail carries the call bucket, the reserved favourite,
+ * public tags on the right** (v66). The row's tail carries the call bucket, the reserved favourite,
  * the join bookmark and the library count. License, 更新时间, 适用场景 and the version moved to the
  * information page, so a 1440-wide screen scans seven rows instead of two cards.
  *
- * **The expected result does not go on this row** (v65): the row answers "what is this", and the
+ * **The expected result does not go on this row** (v66): the row answers "what is this", and the
  * description does that better than a one-line claim. The outcome is on the information page.
  *
  * **The action is one icon at the row's tail.** Joining is a bookmark: outlined when absent,
@@ -31,7 +31,7 @@ import SourceMark from './SourceMark'
 export type JoinState = 'idle' | 'busy' | 'failed'
 
 /**
- * v65: the attribute group's icon — terminal (language), screen (OS), tool (tools and resources),
+ * v66: the attribute group's icon — terminal (language), screen (OS), tool (tools and resources),
  * key (credentials), price tag (pricing). **The colour comes from `data-group` in CSS**; the icon is
  * what tells the groups apart for a reader who does not see colour.
  */
@@ -84,7 +84,7 @@ function iconKind(group: string): 'key' | 'runtime' | 'os' | 'tool' | 'price' {
 }
 
 /**
- * v65: how many attribute chips the row shows before the rest become `+N`.
+ * v66: how many attribute chips the row shows before the rest become `+N`.
  *
  * **Three is the design's number** (PRD A13): a row is read to rule candidates out, and a fourth
  * chip costs a line without changing that decision. The information page shows every one.
@@ -206,7 +206,7 @@ export default function ResultCard({
   const shownTags = skill.public_tags.slice(0, 3)
   const moreTags = skill.public_tags.length - shownTags.length
 
-  /* **v65: the third line is attributes on the left, public tags on the right.** The attributes
+  /* **v66: the third line is attributes on the left, public tags on the right.** The attributes
      answer "what will I need to run it"; the tags answer "why was this found". Each chip filters
      the public results by that one attribute — the same address shape a category chip uses. */
   const attributeChips = (skill.labels ?? []).map((label) => ({
@@ -223,7 +223,7 @@ export default function ResultCard({
   const shownAttrs = attributeChips.slice(0, ATTR_CHIPS)
   const hiddenAttrs = attributeChips.slice(ATTR_CHIPS)
 
-  /* **`+N` opens the rest in a popover** (2026-11-05; v65 adds attributes): the row keeps three
+  /* **`+N` opens the rest in a popover** (2026-11-05; v66 adds attributes): the row keeps three
      lines, so the expansion hangs off the body at the button's position; outside click or Esc
      closes it. */
   const [openMore, setOpenMore] = useState<{
@@ -362,7 +362,7 @@ export default function ResultCard({
         <p className="result-title" title={skill.description}>
           {skill.description}
         </p>
-        {/* **v65: the third line is attributes on the left, public tags on the right**
+        {/* **v66: the third line is attributes on the left, public tags on the right**
             (2026-11-13 用户定). The two answer different questions, so they no longer share one
             `#` run. Source and account count stay on the information page. */}
         <div className="result-bottom">

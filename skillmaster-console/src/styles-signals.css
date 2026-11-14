@@ -106,7 +106,7 @@
   grid-template-columns: 36px minmax(0, 1fr) minmax(132px, max-content);
   gap: 0 16px;
   align-items: start;
-  /* **6 rows + the pager at 900 high** (v65): the third line now carries attributes as well as
+  /* **6 rows + the pager at 900 high** (v66): the third line now carries attributes as well as
      tags, and a row whose third line is empty floors at 106 so the list does not jump. The
      design's own numbers. */
   padding: 11px 20px;
@@ -324,7 +324,7 @@ span.result-avatar {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  /* The source mark hangs at the bottom right of the taller row (v65). */
+  /* The source mark hangs at the bottom right of the taller row (v66). */
   justify-content: space-between;
 }
 .result-action-row {
@@ -479,7 +479,7 @@ a.result-source-badge:focus-visible {
   height: 22px;
 }
 
-/* ------------------------------------------------------------------ v65 · 属性标签与结果页头 */
+/* ------------------------------------------------------------------ v66 · 属性标签与结果页头 */
 
 /* **属性按类别着色**（2026-11-13 用户定）：胶囊上只写短名（`Python`、`API key`、`macOS`），
    完整语义留在词表数据里。类别靠颜色 + 图标分开；同一套色用在结果行、浮层与信息页。 */
@@ -549,7 +549,7 @@ a.chip.is-attr:focus-visible {
   --attr-tint: var(--attr-pricing-tint);
 }
 
-/* **第三行：左属性、右公开标签**（v65）。属性回答「跑起来缺什么」，公开标签回答「它为什么被搜到」。 */
+/* **第三行：左属性、右公开标签**（v66）。属性回答「跑起来缺什么」，公开标签回答「它为什么被搜到」。 */
 .result-bottom {
   align-items: center;
   justify-content: space-between;
@@ -610,7 +610,7 @@ a.tags-pop-attr:focus-visible {
   color: var(--attr-pricing);
 }
 
-/* **结果页有自己的头**（v65）：标题与筛了什么放在搜索框左边，清除放在右边；不额外占一行，
+/* **结果页有自己的头**（v66）：标题与筛了什么放在搜索框左边，清除放在右边；不额外占一行，
    六行的结果页仍装得下。 */
 .discover-result-meta {
   display: flex;

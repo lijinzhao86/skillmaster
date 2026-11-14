@@ -17,6 +17,7 @@ func TestFeedbackTemplateIsLocalAndComplete(t *testing.T) {
 	}
 	for _, section := range []string{
 		"我想做什么", "发生了什么", "怎么复现", "环境", "已经试过什么", "不要写",
+		"附件", "--attach", "不会被自动扫描",
 	} {
 		if !strings.Contains(stdout, section) {
 			t.Errorf("template is missing %q:\n%s", section, stdout)

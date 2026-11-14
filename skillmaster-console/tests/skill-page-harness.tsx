@@ -140,7 +140,7 @@ export const SKILL = {
   // The server lifts these two from the frontmatter (TD 附录 A); the page no longer parses it.
   when_to_use: '需要拆分或合并 PDF 时',
   compatibility: '需要 ghostscript',
-  // v65: the platform's expected result and displayed attributes, read from `/web/skills/{ns}/{name}`.
+  // v66: the platform's expected result and displayed attributes, read from `/web/skills/{ns}/{name}`.
   outcome: '一份拆好的 PDF，以及每页对应的原文页码。',
   labels: [
     { key: 'runtime', value: 'python', label: 'Python', full: '需要 Python', group: 'language' },

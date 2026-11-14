@@ -234,7 +234,7 @@
     flex: 1 1 100%;
     max-width: none;
   }
-  /* v65: the result state takes the first line — title / what was filtered on the left, 清除 on
+  /* v66: the result state takes the first line — title / what was filtered on the left, 清除 on
      the right — and the search box drops to the next. Nothing scrolls sideways. */
   .discover-result-meta {
     order: 1;
@@ -265,7 +265,7 @@
     align-items: flex-start;
     gap: 2px;
   }
-  /* v65: attributes above tags, both from the left; the desktop `margin-left:auto` would push the
+  /* v66: attributes above tags, both from the left; the desktop `margin-left:auto` would push the
      tag run to the right edge of a column that is already left-aligned. */
   .result-tags {
     margin-left: 0;

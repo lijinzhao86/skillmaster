@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * M12's label seam (v65): the vocabulary, a skill's displayed claims, and its outcome.
+ * M12's label seam (v66): the vocabulary, a skill's displayed claims, and its outcome.
  *
  * <p><strong>No policy here beyond the read model.</strong> Extraction decides what to write;
  * this class only answers what a read may show. The definition id is also the wire key, so a

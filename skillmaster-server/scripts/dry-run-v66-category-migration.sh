@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 #
-# v65 category migration — read-only dry run.
+# v66 category migration — read-only dry run.
 #
-# Runs V51 inside one transaction against a database that is still at V50, prints what it would
+# Runs V52 inside one transaction against a database that is still at V50, prints what it would
 # change, then ROLLBACKs. Nothing persists: PostgreSQL's DDL is transactional, so no table, row or
 # Flyway history entry survives the rollback. The real run is Flyway; this is the preview A10
 # asks for, and the rollback statement lives in the migration's own comment.
 #
-# Usage: dry-run-v65-category-migration.sh [database]
-#        SKILLMASTER_DB_NAME=skillmaster_v65 dry-run-v65-category-migration.sh
-#        PSQL=/path/to/psql dry-run-v65-category-migration.sh skillmaster_test_v65
+# Usage: dry-run-v66-category-migration.sh [database]
+#        SKILLMASTER_DB_NAME=skillmaster_v66 dry-run-v66-category-migration.sh
+#        PSQL=/path/to/psql dry-run-v66-category-migration.sh skillmaster_test_v66
 #
-# Refuses to run when V51 is already applied (the tables exist): the point is to look before the
+# Refuses to run when V52 is already applied (the tables exist): the point is to look before the
 # migration happens, not to replay it.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATION="$SCRIPT_DIR/../src/main/resources/db/migration/V51__public_labels_and_thirteen_shelves.sql"
+MIGRATION="$SCRIPT_DIR/../src/main/resources/db/migration/V52__public_labels_and_thirteen_shelves.sql"
 DB_NAME="${1:-${SKILLMASTER_DB_NAME:-skillmaster}}"
 PSQL="${PSQL:-psql}"
 
@@ -38,7 +38,7 @@ fi
 ALREADY="$("$PSQL" -w -d "$DB_NAME" -tAc \
   "SELECT to_regclass('public.skill_category_mapping') IS NOT NULL")"
 if [ "$ALREADY" = "t" ]; then
-  echo "V51 is already applied to '$DB_NAME' (skill_category_mapping exists); nothing to preview." >&2
+  echo "V52 is already applied to '$DB_NAME' (skill_category_mapping exists); nothing to preview." >&2
   exit 1
 fi
 
@@ -54,7 +54,7 @@ SELECT old_key, new_key, old_state, old_sort_order
 SELECT key, name, sort_order
   FROM skill_category WHERE state = 'enabled' ORDER BY sort_order;
 
--- V51 has already moved every skill onto its new shelf, so the old keys survive only in the
+-- V52 has already moved every skill onto its new shelf, so the old keys survive only in the
 -- snapshot. Counting from `skill.category_key = old_key` here would print 0 for every shelf.
 -- The list starts from the 13 enabled shelves, not from the mapping: the six shelves with no old
 -- word still get a row, so "0" is a shown answer rather than a missing one.

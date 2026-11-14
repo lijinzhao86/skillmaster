@@ -56,7 +56,7 @@
   --accent-tint:#eef4ff;
 
   /* **属性标签按类别着色**（2026-11-13 用户定）：胶囊上只写短词（`Python`、`API key`、
-     `macOS`），完整语义放 tooltip / 读屏；类别靠颜色 + 图标分开。类别与词表见 ADR 0192。 */
+     `macOS`），完整语义放 tooltip / 读屏；类别靠颜色 + 图标分开。类别与词表见 ADR 0193。 */
   --attr-language:#2563eb;
   --attr-language-tint:#eef4ff;
   --attr-os:#7c3aed;
@@ -538,7 +538,7 @@ code{font-family:var(--mono);font-size:0.92em}
    the end. */
 /* 「发现」与「我的标签」也是文档页：推荐段与标签列表都可能长过一屏，最后一行的下面要留出
    演示带的高度，滚到底时不会被它压住。 */
-/* v65：信息页多了属性胶囊行与预期结果，页底呼吸从 64px 收到 24px，让这一页仍能一屏放下。 */
+/* v66：信息页多了属性胶囊行与预期结果，页底呼吸从 64px 收到 24px，让这一页仍能一屏放下。 */
 #page-skill{padding-bottom:24px}
 #page-account,#page-discover,#page-my-tags{padding-bottom:64px}
 
@@ -1055,7 +1055,7 @@ a.preview-name:hover{color:var(--accent);text-decoration:underline;text-underlin
 .chip .dot{width:6px;height:6px;border-radius:999px;background:currentColor;flex:none}
 .chip.is-live{background:var(--ok-tint);color:var(--ok)}
 .chip.is-plain{background:var(--wash);color:var(--muted)}
-/* **v65：阻拦项**（需要 API key / 运行环境 / 付费）：强调色 + 图标，与中性灰的分类胶囊分得开。
+/* **v66：阻拦项**（需要 API key / 运行环境 / 付费）：强调色 + 图标，与中性灰的分类胶囊分得开。
    只在有阻拦时画；没有阻拦的 skill 不画这一颗。 */
 .chip.is-blocker,.chip.is-attr{display:inline-flex;align-items:center;gap:4px;background:var(--attr-tint,var(--accent-tint));color:var(--attr-color,var(--accent))}
 .chip.is-blocker svg{width:13px;height:13px;flex:none}
@@ -4399,7 +4399,7 @@ a.tag-count:hover{color:var(--accent);text-decoration:underline;text-underline-o
   gap:0 16px;
   align-items:start;
   /* **6 行 + 分页条 + 演示带在 900 高下的上限。** 第三行内容少时 min-height 兜到 106，
-     同一份列表的行高不跟着标签多少跳（v65，2026-11-13 用户定 6 行密度）。 */
+     同一份列表的行高不跟着标签多少跳（v66，2026-11-13 用户定 6 行密度）。 */
   padding:11px 20px;
   min-height:106px;
   border-bottom:1px solid var(--line);
@@ -4583,7 +4583,7 @@ a.result-source-badge:focus-visible{outline:2px solid var(--accent);outline-offs
 .info-tags .filter-x:hover{color:var(--danger)}
 .info-group .info-tags{margin-top:0}
 #infoOutcome .info-text{line-height:1.6}
-/* **v65：属性在左栏最下、兼容性之后**（2026-11-13 用户定）：先读正文，最后看跑起来要什么。
+/* **v66：属性在左栏最下、兼容性之后**（2026-11-13 用户定）：先读正文，最后看跑起来要什么。
    它的上间距与别的正文块同一个 `--info-gap`，由上面的相邻选择器给。 */
 .info-attributes-row{display:flex;flex-wrap:wrap;gap:6px}
 .info-empty{margin:0;font-size:13px;color:var(--faint)}

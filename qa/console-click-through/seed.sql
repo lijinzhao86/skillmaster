@@ -35,7 +35,7 @@ UPDATE skill
 -- defaults on a third to prove the read model hides `prompt-only` / `free`.
 INSERT INTO skill_label (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                          review_state, created_at, updated_at)
-SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v65-demo',
+SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v66-demo',
        'confirmed', '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z'
   FROM skill s
   JOIN label_definition d ON d.id IN ('runtime:python', 'runtime:online-service', 'pricing_type:paid')
@@ -44,7 +44,7 @@ ON CONFLICT (skill_id, definition_id) DO NOTHING;
 
 INSERT INTO skill_label (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                          review_state, created_at, updated_at)
-SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v65-demo',
+SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v66-demo',
        'confirmed', '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z'
   FROM skill s
   JOIN label_definition d ON d.id IN ('runtime:node', 'runtime:api-key')
@@ -53,7 +53,7 @@ ON CONFLICT (skill_id, definition_id) DO NOTHING;
 
 INSERT INTO skill_label (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                          review_state, created_at, updated_at)
-SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v65-demo',
+SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v66-demo',
        'confirmed', '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z'
   FROM skill s
   JOIN label_definition d ON d.id IN ('runtime:python', 'runtime:node', 'runtime:browser', 'runtime:macos')
@@ -62,7 +62,7 @@ ON CONFLICT (skill_id, definition_id) DO NOTHING;
 
 INSERT INTO skill_label (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                          review_state, created_at, updated_at)
-SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v65-demo',
+SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v66-demo',
        'confirmed', '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z'
   FROM skill s
   JOIN label_definition d ON d.id IN ('runtime:shell', 'runtime:docker', 'pricing_type:paid')
@@ -71,7 +71,7 @@ ON CONFLICT (skill_id, definition_id) DO NOTHING;
 
 INSERT INTO skill_label (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                          review_state, created_at, updated_at)
-SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v65-demo',
+SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::jsonb, 'v66-demo',
        'confirmed', '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z'
   FROM skill s
   JOIN label_definition d ON d.id IN ('runtime:prompt-only', 'pricing_type:free')
@@ -79,7 +79,7 @@ SELECT 'demo:' || s.name || ':' || d.id, s.id, d.id, 'operator', 1.0, '{}'::json
 ON CONFLICT (skill_id, definition_id) DO NOTHING;
 
 -- The account running the click-through needs one public tag of its own, or the public-tags page
--- is empty and those assertions pass vacuously. `v65-demo` is the local demo account the README
+-- is empty and those assertions pass vacuously. `v66-demo` is the local demo account the README
 -- names; on a stack without it this block is a no-op.
 DO $$
 DECLARE
@@ -87,7 +87,7 @@ DECLARE
   ns  text;
   sid text := 'demo-my-tagged-skill';
 BEGIN
-  SELECT id INTO uid FROM app_user WHERE handle = 'v65-demo';
+  SELECT id INTO uid FROM app_user WHERE handle = 'v66-demo';
   IF uid IS NULL THEN RETURN; END IF;
   SELECT id INTO ns FROM namespace WHERE owner_user_id = uid ORDER BY created_at LIMIT 1;
   IF ns IS NULL THEN RETURN; END IF;

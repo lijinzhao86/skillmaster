@@ -74,7 +74,7 @@ final class SqlFilters {
     }
 
     /**
-     * "All of these platform attributes", addressed by definition id (v65).
+     * "All of these platform attributes", addressed by definition id (v66).
      *
      * <p>The same read-model rule as the cards: only auto/confirmed claims count, and an agent
      * claim counts only while it evaluates the current version. Only an operator's confirmed
@@ -88,7 +88,7 @@ final class SqlFilters {
         for (int i = 0; i < definitionIds.size(); i++) {
             String name = "labelId" + i;
             params.put(name, definitionIds.get(i));
-            // **The same rule the read model shows** (v65): a filter that can select a row the
+            // **The same rule the read model shows** (v66): a filter that can select a row the
             // card never displays would be a silent lie. Agent claims speak for the version they
             // evaluated; only an operator's confirmed decision outlives versions.
             clauses.append(" AND EXISTS (SELECT 1 FROM skill_label l")

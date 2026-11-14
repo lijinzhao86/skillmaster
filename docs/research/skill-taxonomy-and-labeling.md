@@ -120,7 +120,7 @@
 
 ## 六、对 SkillMaster 的约束
 
-> **这是调研时的综合，不是决定。** 定稿以 [ADR 0191](../decisions/0191-public-categories-are-thirteen-shelves.md)、[0192](../decisions/0192-public-labels-are-extensible-claims.md)、[0193](../decisions/0193-public-labels-are-agent-produced-and-sampling-audited.md)、[0194](../decisions/0194-labels-p0-narrows-two-adrs.md) 为准；与本文不一致时按 ADR。
+> **这是调研时的综合，不是决定。** 定稿以 [ADR 0192](../decisions/0192-public-categories-are-thirteen-shelves.md)、[0193](../decisions/0193-public-labels-are-extensible-claims.md)、[0194](../decisions/0194-public-labels-are-agent-produced-and-sampling-audited.md)、[0195](../decisions/0195-labels-p0-narrows-two-adrs.md) 为准；与本文不一致时按 ADR。
 
 - **分类**：采用 SkillHub 12 个一级分类 + 我们自己的「AI 协作」，共 13 个；单选、无二级。96 个二级词不进模型，转为候选标签词库。
 - **标签**：必须是「定义 + 挂载」两层，新增维度只插词表行，不改表结构；首批 2 个维度（运行环境、定价），运行环境是多值并含 API key；产出形态不做（预期结果已覆盖）、输入要求推迟。

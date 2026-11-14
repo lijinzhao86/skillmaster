@@ -1,7 +1,7 @@
 package com.skillmasterai.modules.skill;
 
 /**
- * One value of one platform label dimension (v65, ADR 0192).
+ * One value of one platform label dimension (v66, ADR 0193).
  *
  * <p>{@code id} is the stable identity and is also the wire key ({@code dimension:value}). The
  * short name is what a capsule draws; the full sentence is for extraction evidence, the CLI and

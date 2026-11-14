@@ -1,6 +1,6 @@
 # ADR 0086 · 营销首页读取会话，登录后显示已登录态
 
-- **状态**：已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；其余不变）
+- **状态**：已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；§决定 3 的「一个来源」由 [ADR 0190](0190-the-site-origin-is-an-explicit-list.md) 放宽为显式列表，2026-11-13；其余不变）
 - **日期**：2026-10-24
 - **依赖**：[`versions/v15-marketing-home/prd.md`](../versions/v15-marketing-home/prd.md)（www / console 的分域由那一版的文档定；[ADR 0085](0085-rename-web-to-console.md) 只定了项目改名，明确把分域留给 v15）
 - **范围收窄**：§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 改成「结束当前会话 → 停一页引导 → 由人选择回首页，或把一句话交给 agent 结束 CLI」（2026-11-05）；其余决定不变

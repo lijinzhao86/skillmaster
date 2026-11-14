@@ -1,14 +1,14 @@
-# 0192 · 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价
+# 0193 · 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价
 
-- **状态**：已采纳，**部分被 [0194](0194-labels-p0-narrows-two-adrs.md) 取代**（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点）
+- **状态**：已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 取代**（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点）
 - **日期**：2026-11-13
-- **所属版本**：[`v65-skill-labels`](../versions/v65-skill-labels/README.md)
-- **依赖**：[0191](0191-public-categories-are-thirteen-shelves.md)（13 个一级分类）、[0181](0181-text-limits-use-unicode-code-points.md)（文本上限按码点）
+- **所属版本**：[`v66-skill-labels`](../versions/v66-skill-labels/README.md)
+- **依赖**：[0192](0192-public-categories-are-thirteen-shelves.md)（13 个一级分类）、[0181](0181-text-limits-use-unicode-code-points.md)（文本上限按码点）
 - **相关**：[`docs/research/skill-taxonomy-and-labeling.md`](../research/skill-taxonomy-and-labeling.md)（SkillHub 与讯飞的标签模型）
 
 ## 背景
 
-v65 要给公域 skill 加「运行环境（含 API key）、定价」这些描述性字段，还要加一句「预期结果」。摆在我们面前的第一个问题是：这些字段怎么放？
+v66 要给公域 skill 加「运行环境（含 API key）、定价」这些描述性字段，还要加一句「预期结果」。摆在我们面前的第一个问题是：这些字段怎么放？
 
 三种做法：
 
@@ -62,10 +62,10 @@ v65 要给公域 skill 加「运行环境（含 API key）、定价」这些描�
 ## 后果
 
 - **新增两张表与索引**：`label_definition`、`skill_label`；`skill_label` 上有 `(skill_id, definition_id)` 唯一约束、按 `definition_id` 的筛选索引。具体 DDL 进技术设计。
-- **`runtime` 的词表首批 21 个非默认值 + `prompt-only` 默认值**，分语言 / 系统 / 工具 / 凭据四组；新增语言、系统或工具只是插词表行，不改表结构。每个值带短名、完整语义与分组；UI 用 `data-group` 着色，颜色与图标一一对应，**但只画短名**。完整词表见 [`v65 PRD`](../versions/v65-skill-labels/prd.md) §范围。
+- **`runtime` 的词表首批 21 个非默认值 + `prompt-only` 默认值**，分语言 / 系统 / 工具 / 凭据四组；新增语言、系统或工具只是插词表行，不改表结构。每个值带短名、完整语义与分组；UI 用 `data-group` 着色，颜色与图标一一对应，**但只画短名**。完整词表见 [`v66 PRD`](../versions/v66-skill-labels/prd.md) §范围。
 - **`gpu` / `docker` / `database` 三个值都进筛选**（2026-11-13 用户定）：收窄定义，但不把筛选入口藏起来；用 A14 与每周抽样盯误标。若 `database` 的误标率在抽样中明显高于其他值，先关它的筛选，不改标签契约——这是运营动作，不是新 ADR。
 - **`outcome` 新增字段**：可以放在 skill 的读模型表上，也可以单独一张表；无论放哪，都带来源、置信度、证据与「评的是哪一版」。
 - **接口与 CLI 新增字段**：读接口返回 `outcome` 与标签；`skmr skill show` 输出同一组字段，`skmr skills search` 在每条结果下输出属性短名；CLI 不做自己的判断。
 - **抽取流水线写标签**：同步建草稿或发布时触发；每个值带证据；模型与词表版本入库。
 - **未来的评价/证据对象可以引用 skill 与 `outcome`**：做「声称 vs 实际」的对比，不需要改 `outcome` 的表结构。
-- **展示层只读高置信或已确认的值**：低置信不展示；中置信进异常队列。具体分档与验收见 [0193](0193-public-labels-are-agent-produced-and-sampling-audited.md)。
+- **展示层只读高置信或已确认的值**：低置信不展示；中置信进异常队列。具体分档与验收见 [0194](0194-public-labels-are-agent-produced-and-sampling-audited.md)。

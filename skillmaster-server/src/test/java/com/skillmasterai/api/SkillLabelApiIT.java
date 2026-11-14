@@ -8,7 +8,7 @@ import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
 
 /**
- * v65 P0: the label read model, the label filter and the vocabulary (test-plan T2–T6, T14).
+ * v66 P0: the label read model, the label filter and the vocabulary (test-plan T2–T6, T14).
  */
 @Sql("/sql/truncate-business-tables.sql")
 class SkillLabelApiIT extends AbstractOrganizeIT {
@@ -75,7 +75,7 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
 
     @Test
     void theLibraryListingTakesTheSameLabelFilter() {
-        // v65 TD §CLI: 「要按属性筛库内 skill，用 skills search --scope library --label ...」. The
+        // v66 TD §CLI: 「要按属性筛库内 skill，用 skills search --scope library --label ...」. The
         // library enumerates by its own predicates, so the filter has to exist on that path too —
         // and an unknown word is still a 400, not an empty page.
         String mine = publicSkill("mine");
@@ -98,7 +98,7 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
 
     @Test
     void aDisplayOnlyAttributeIsShownButCannotBeFiltered() {
-        // v65 TD: a new dimension may enter the vocabulary as display-only (`filterable=false`).
+        // v66 TD: a new dimension may enter the vocabulary as display-only (`filterable=false`).
         // It is drawn on the card with that flag, and asking for it as a filter is still a 400.
         String skillId = publicSkill("pdf-tools");
         String versionId = currentVersion(skillId);
@@ -237,7 +237,7 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
                 INSERT INTO skill_label
                   (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                    review_state, evaluated_version_id, created_at, updated_at)
-                VALUES (:id, :skill, :definition, :source, 0.95, '{}'::jsonb, 'v65-test',
+                VALUES (:id, :skill, :definition, :source, 0.95, '{}'::jsonb, 'v66-test',
                         :review, :version, :at, :at)
                 ON CONFLICT (skill_id, definition_id) DO UPDATE
                    SET source = EXCLUDED.source, review_state = EXCLUDED.review_state,

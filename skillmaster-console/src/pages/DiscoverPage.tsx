@@ -45,7 +45,7 @@ export default function DiscoverPage() {
   const [query, setQuery] = useState(() => initial.get('q') ?? '')
   /* **The address's category, read-only**: the only way in is a result row's category chip. */
   const tags = useRef(initial.getAll('tag')).current
-  /* v65: attributes are the second filter — `dimension:value`, repeated, ANDed by the server. They
+  /* v66: attributes are the second filter — `dimension:value`, repeated, ANDed by the server. They
      arrive the same way a category does: an address written by a result row's attribute chip. */
   const labels = useRef(initial.getAll('label')).current
   const [page, setPage] = useState(() => Math.max(1, Number.parseInt(initial.get('p') ?? '1', 10) || 1))
@@ -373,12 +373,12 @@ export default function DiscoverPage() {
     )
   }
 
-  /* **The results screen gets its own head** (v65): without it, a searched list reads like
+  /* **The results screen gets its own head** (v66): without it, a searched list reads like
      为你推荐 and nobody knows why these rows are here. The title says which question this is, the
      note says what was filtered, and neither reports a count — the public corpus size is internal
      (PRD A15). A filter word with no result is still printed, so a broken address stays readable. */
   const filterName = (key: string): string => {
-    /* **The vocabulary, not the current page** (v65): a filter that matched nothing would print the
+    /* **The vocabulary, not the current page** (v66): a filter that matched nothing would print the
        internal key, and a shelf's name must not change with which rows happened to come back. Until
        the read lands, the key is shown as itself rather than as a wrong name. */
     if (categoryNames === null) return key
@@ -407,7 +407,7 @@ export default function DiscoverPage() {
         <h1 className="visually-hidden">发现</h1>
         {/* **Search is the header's only control** (2026-11-05): the category row is gone — the
             category on a result row is the way to browse it. Enter submits; there is no button.
-            **No result count** (v65, 2026-11-14 用户定): the line holds the result state on the
+            **No result count** (v66, 2026-11-14 用户定): the line holds the result state on the
             left and 清除 on the right; how many the public corpus has is an internal signal.
 
             **One form, both states (2026-11-07).** Landing and results used to be two forms with two

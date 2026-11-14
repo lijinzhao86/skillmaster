@@ -3,7 +3,7 @@ import { SKILL, showSkill, text } from './skill-page-harness'
 import { clearCookies, setCookie } from './support'
 
 /**
- * v65's information page: the platform's expected result and its attribute chips.
+ * v66's information page: the platform's expected result and its attribute chips.
  *
  * Kept out of `skills.test.tsx` because that file is on the size baseline (may only shrink) and
  * these cases are new rather than moved. The expected-result section's position in the block order

@@ -69,7 +69,7 @@ public final class LabelRepository {
                   JOIN skill s ON s.id = l.skill_id
                  WHERE l.skill_id = ANY(:ids)
                    AND l.review_state IN ('auto', 'confirmed')
-                   -- v65 TD: an agent claim speaks for the version it evaluated; only an
+                   -- v66 TD: an agent claim speaks for the version it evaluated; only an
                    -- operator's **confirmed** decision outlives versions. `author` / `upstream`
                    -- exist in the CHECK for later writers and are not displayable yet.
                    AND l.source IN ('agent', 'operator')

@@ -79,7 +79,7 @@ public final class SkillLibraryService {
      */
     public record Query(String q, List<String> namespaceIds, List<String> categoryKeys,
             List<String> myTagIds, List<String> publicTagKeys,
-            /** v65: attribute definitions, already resolved from `dimension:value` to ids. */
+            /** v66: attribute definitions, already resolved from `dimension:value` to ids. */
             List<String> labelDefinitionIds,
             List<String> sources, String show, boolean byName, List<String> afterKey,
             Integer offset, int limit) {

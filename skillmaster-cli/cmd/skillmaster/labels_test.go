@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// v65's half of the CLI (test-plan T8, T9, T10): the attribute filter, the one-line attributes under
+// v66's half of the CLI (test-plan T8, T9, T10): the attribute filter, the one-line attributes under
 // a search result, and the vocabulary command.
 
 func TestSearchSendsEveryLabelAndAcceptsAFilterWithoutAKeyword(t *testing.T) {
@@ -14,7 +14,7 @@ func TestSearchSendsEveryLabelAndAcceptsAFilterWithoutAKeyword(t *testing.T) {
 		return http.StatusOK, `{"skills":[],"next_cursor":null,"note":null}`
 	})
 
-	// No positional at all: `--label` alone is a question (v65 PRD #7).
+	// No positional at all: `--label` alone is a question (v66 PRD #7).
 	mustRun(t, "skills", "search", "--label", "runtime:python", "--label", "pricing_type:paid")
 
 	pages := wantsRequests(t, fake, http.MethodGet, "/api/v1/skills")

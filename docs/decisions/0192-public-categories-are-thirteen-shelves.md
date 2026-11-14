@@ -1,8 +1,8 @@
-# 0191 · 公域分类是十三个一级货架，单选、无二级
+# 0192 · 公域分类是十三个一级货架，单选、无二级
 
 - **状态**：已采纳
 - **日期**：2026-11-13
-- **所属版本**：[`v65-skill-labels`](../versions/v65-skill-labels/README.md)
+- **所属版本**：[`v66-skill-labels`](../versions/v66-skill-labels/README.md)
 - **取代**：[0078](0078-a-category-is-one-shelf.md) §决定 1 的「10 个词」与「作者选」两半，以及 §后果 里「`skills categories` 打印公域计数」一句；0078 的「平级、单选、无父子、召回交给标签」不变
 - **依赖**：[0146](0146-public-is-platform-endorsement.md)（公开是平台背书）、[0156](0156-sync-writes-as-the-official-namespace.md)（同步以官方命名空间写入）
 - **相关**：[`docs/research/skill-taxonomy-and-labeling.md`](../research/skill-taxonomy-and-labeling.md)（SkillHub 与 ClawHub 的实测）

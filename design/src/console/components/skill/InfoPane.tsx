@@ -85,9 +85,9 @@ export interface InfoPaneProps {
   initialEdit?: EditGroup | null
   /** 可见但当前不可加入 / 暂时不可见时，右栏那一句原因。 */
   membershipNote: string
-  /** v65：平台的「预期结果」主张；没有就不画这一块。 */
+  /** v66：平台的「预期结果」主张；没有就不画这一块。 */
   outcome?: string
-  /** v65：属性标签（短名 + 类别 + 可点的筛选地址）；空数组不画这一组。
+  /** v66：属性标签（短名 + 类别 + 可点的筛选地址）；空数组不画这一组。
       前端只画短名（`Python` / `macOS` / `API key`），完整语义留在词表数据里，不进胶囊与读屏。 */
   attributes?: Array<{
     key: string
@@ -272,7 +272,7 @@ export default function InfoPane({
               )}
             </section>
           )}
-          {/* **v65：预期结果排在两个适用场景之后**（2026-11-13 用户定）：先把「什么时候用」
+          {/* **v66：预期结果排在两个适用场景之后**（2026-11-13 用户定）：先把「什么时候用」
               和「我自己的场景」放在一起读完，再说「用了得到什么」；它是平台的主张，不是作者的描述。
               没有就不画这一块。 */}
           <section className="info-block" id="infoOutcome" hidden={outcome === undefined || outcome === ''}>

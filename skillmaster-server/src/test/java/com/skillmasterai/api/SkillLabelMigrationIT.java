@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.context.jdbc.Sql;
 
 /**
- * v65 migration contract (test-plan T1, T18): 13 shelves, the old 10 retired, and a reversible
+ * v66 migration contract (test-plan T1, T18): 13 shelves, the old 10 retired, and a reversible
  * mapping that still names every old word — including which old word each skill had.
  */
 @Sql("/sql/truncate-business-tables.sql")

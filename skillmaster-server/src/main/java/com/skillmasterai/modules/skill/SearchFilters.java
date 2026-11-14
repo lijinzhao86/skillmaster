@@ -13,7 +13,7 @@ import java.util.List;
  * @param categoryKeys  "any of" — a skill sits on one shelf, so two shelves widen
  * @param publicTagKeys "all of" — each key becomes its own EXISTS
  * @param myTagIds      "all of", addressed by definition id; the owner is checked in the clause
- * @param labelDefinitionIds "all of" (v65), addressed by definition id; each id is one EXISTS
+ * @param labelDefinitionIds "all of" (v66), addressed by definition id; each id is one EXISTS
  */
 public record SearchFilters(List<String> categoryKeys, List<String> publicTagKeys,
         List<String> myTagIds, List<String> labelDefinitionIds) {

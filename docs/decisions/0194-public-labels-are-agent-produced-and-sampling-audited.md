@@ -1,9 +1,9 @@
-# 0193 · 公域标签由 Agent 自动打，按抽样验收
+# 0194 · 公域标签由 Agent 自动打，按抽样验收
 
-- **状态**：已采纳，**部分被 [0194](0194-labels-p0-narrows-two-adrs.md) 取代**（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点）
+- **状态**：已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 取代**（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点）
 - **日期**：2026-11-13
-- **所属版本**：[`v65-skill-labels`](../versions/v65-skill-labels/README.md)
-- **依赖**：[0192](0192-public-labels-are-extensible-claims.md)（标签是可扩展主张）、[0191](0191-public-categories-are-thirteen-shelves.md)（13 个一级分类）
+- **所属版本**：[`v66-skill-labels`](../versions/v66-skill-labels/README.md)
+- **依赖**：[0193](0193-public-labels-are-extensible-claims.md)（标签是可扩展主张）、[0192](0192-public-categories-are-thirteen-shelves.md)（13 个一级分类）
 - **相关**：[`docs/research/skill-taxonomy-and-labeling.md`](../research/skill-taxonomy-and-labeling.md) §五（行业的置信度分档与抽样做法）
 
 ## 背景

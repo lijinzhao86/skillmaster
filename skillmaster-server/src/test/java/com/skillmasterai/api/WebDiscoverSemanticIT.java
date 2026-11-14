@@ -85,8 +85,8 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
      */
     @Test
     void aCategoryNarrowsTheSearchAndIsUnderstoodInTheConsolesSpelling() {
-        // v65: the shelves are the 13 new words; `doc` / `dev` are retired and would resolve to
-        // nothing (the V51 migration maps them, but this fixture is written after it runs).
+        // v66: the shelves are the 13 new words; `doc` / `dev` are retired and would resolve to
+        // nothing (the V52 migration maps them, but this fixture is written after it runs).
         index(skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-in-doc", "public", Ulid.generate(),
                 null, null, "office-efficiency"));
         index(skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-in-dev", "public", Ulid.generate(),
@@ -100,7 +100,7 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
     }
 
     /**
-     * v65 (test-plan T16): an attribute filter narrows the id set before the ranking, on the
+     * v66 (test-plan T16): an attribute filter narrows the id set before the ranking, on the
      * semantic path too. Both skills are equally similar, so only the label can separate them.
      */
     @Test
@@ -117,7 +117,7 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
                 INSERT INTO skill_label
                   (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
                    review_state, evaluated_version_id, created_at, updated_at)
-                VALUES (:id, :skill, 'runtime:python', 'agent', 0.95, '{}'::jsonb, 'v65-test',
+                VALUES (:id, :skill, 'runtime:python', 'agent', 0.95, '{}'::jsonb, 'v66-test',
                         'auto', :version, :at, :at)
                 """).param("id", "lbl-" + python).param("skill", python)
                 .param("version", pythonVersion).param("at", AT).update();
@@ -149,7 +149,7 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
                 .param("at", AT).update();
     }
 
-    /** v65: an unknown attribute is a typo on every path, so the semantic path is a 400 too. */
+    /** v66: an unknown attribute is a typo on every path, so the semantic path is a 400 too. */
     @Test
     void anUnknownAttributeOnTheSemanticPathIsAFourHundred() {
         index(publicSkill("pdf-tools"));

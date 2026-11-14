@@ -57,7 +57,7 @@ func tableCell(value string) string {
 // and a listing that re-sorted them by count would move a word every time somebody tagged a skill.
 // That is the difference between this table and `public-tags`, which is ordered by usage.
 //
-// **No public count** (v65): how large the public corpus is is an internal signal, and the console
+// **No public count** (v66): how large the public corpus is is an internal signal, and the console
 // stopped drawing these numbers in the same version. The table keeps one column.
 func categoriesCmd(ctx context.Context, args []string) error {
 	noLogin := false
@@ -94,7 +94,7 @@ func categoriesCmd(ctx context.Context, args []string) error {
 	return nil
 }
 
-// labelsCmd prints the attribute vocabulary (v65): one row per `dimension:value`, with the short name
+// labelsCmd prints the attribute vocabulary (v66): one row per `dimension:value`, with the short name
 // a search result draws and the full sentence the extractor recorded.
 //
 // **This is the reader the `--label` filter points at.** The key column is the exact string

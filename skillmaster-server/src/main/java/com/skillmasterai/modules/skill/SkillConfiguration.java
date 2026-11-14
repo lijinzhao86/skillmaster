@@ -178,7 +178,7 @@ public class SkillConfiguration {
         return new MyWhenToUseService(repository);
     }
 
-    /* ---- v65: public labels and the expected result ---- */
+    /* ---- v66: public labels and the expected result ---- */
 
     @Bean
     com.skillmasterai.modules.skill.internal.LabelRepository labelRepository(JdbcClient jdbc) {

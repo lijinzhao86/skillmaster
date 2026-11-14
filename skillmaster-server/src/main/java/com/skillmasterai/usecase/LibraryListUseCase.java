@@ -142,7 +142,7 @@ public class LibraryListUseCase {
             }
         }
 
-        // **An unknown attribute word is a 400, not an empty page** (v65): a person picks these from
+        // **An unknown attribute word is a 400, not an empty page** (v66): a person picks these from
         // the vocabulary, so a word that is not in it is a typo to report by name — the same answer
         // the public plane gives, from the same vocabulary.
         List<String> labelIds = new ArrayList<>();

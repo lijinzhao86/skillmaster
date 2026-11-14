@@ -394,7 +394,7 @@ describe('searching', () => {
   })
 
   it('filters by attribute and says what was filtered, without a count', async () => {
-    /* v65: `label` is the second filter, repeated and ANDed, and the chip on a result row is the
+    /* v66: `label` is the second filter, repeated and ANDed, and the chip on a result row is the
        way in. The head names the filter in words — the short names, not the wire keys — and 清除
        is the way back. */
     const { container, requests } = await showDiscover(
@@ -477,7 +477,7 @@ describe('searching', () => {
     )
 
     expect(requests[0]?.path).toBe('/web/discover?q=pdf')
-    /* v65: the total still cuts the pages, but it is not printed — no "N 个结果" in the head and
+    /* v66: the total still cuts the pages, but it is not printed — no "N 个结果" in the head and
        no "共 N 个" in the pager (PRD A15). The head says which question this is instead. */
     expect(container.querySelector('.count')).toBeNull()
     expect(container.querySelector('.pager-count')).toBeNull()
@@ -528,7 +528,7 @@ describe('searching', () => {
   })
 
   it('names the filtered shelf from the vocabulary, even when nothing matched', async () => {
-    /* v65: the head must not print the internal key when a filter returns no rows, and the name
+    /* v66: the head must not print the internal key when a filter returns no rows, and the name
        must not depend on which rows the page happens to hold. */
     const { container } = await showDiscover(
       '?tag=office-efficiency',
@@ -591,7 +591,7 @@ describe('searching', () => {
   })
 
   it('says these are search results, and never how many the public corpus holds', async () => {
-    /* A semantic answer carries no `total`, and since v65 no answer prints a count at all
+    /* A semantic answer carries no `total`, and since v66 no answer prints a count at all
        (2026-11-14 用户定). The head is what tells this list apart from 为你推荐; with no page
        there is no pager, whatever the row count. */
     const ten = Array.from({ length: 10 }, (_, index) => card({ name: `found-${index}` }))

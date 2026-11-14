@@ -254,7 +254,7 @@ func TestListDeletedRefusalsAndTheImpossibleSource(t *testing.T) {
 		t.Errorf("status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 
-	// v65: the deleted view refuses the attribute filter by the same rule, and `skills list` never
+	// v66: the deleted view refuses the attribute filter by the same rule, and `skills list` never
 	// takes it at all — the attribute filter belongs to `skills search`.
 	fake.requests = nil
 	_, listStderr, listStatus := runCaptured(t, "skills", "list", "--label", "runtime:python")
@@ -372,7 +372,7 @@ func TestCategoriesPrintsTheVocabularyInOrderAndMarksStopped(t *testing.T) {
 	})
 
 	out := mustRun(t, "skills", "categories", "--no-login")
-	// v65: the public count is gone from this table (and from the console) — one column, one word
+	// v66: the public count is gone from this table (and from the console) — one column, one word
 	// per row. The wire still carries `public_total`; this command stops printing it.
 	want := "| 分类 |\n|---|\n| 文档与演示 |\n| 运维与云（停用） |\n"
 	if out != want {

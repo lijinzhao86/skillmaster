@@ -1,9 +1,9 @@
-# v65-skill-labels · 技术设计
+# v66-skill-labels · 技术设计
 
 > **最后更新**：2026-11-14
 > **状态**：设计完成（第 3 关）
 > **所属版本**：[`README.md`](README.md)
-> **决策**：[ADR 0191](../../decisions/0191-public-categories-are-thirteen-shelves.md) · [ADR 0192](../../decisions/0192-public-labels-are-extensible-claims.md) · [ADR 0193](../../decisions/0193-public-labels-are-agent-produced-and-sampling-audited.md) · [ADR 0194](../../decisions/0194-labels-p0-narrows-two-adrs.md)（对前三者的 P0 收窄）
+> **决策**：[ADR 0192](../../decisions/0192-public-categories-are-thirteen-shelves.md) · [ADR 0193](../../decisions/0193-public-labels-are-extensible-claims.md) · [ADR 0194](../../decisions/0194-public-labels-are-agent-produced-and-sampling-audited.md) · [ADR 0195](../../decisions/0195-labels-p0-narrows-two-adrs.md)（对前三者的 P0 收窄）
 > **这一版只写与 [`current/`](../../current/README.md) 的差异。** 模块边界、表现状与命令语法见 [`system.md`](../../current/system.md)、[`schema.md`](../../current/schema.md)、[`cli.md`](../../current/cli.md)；界面规格见 [`design/README.md`](../../../design/README.md)。ADR 的理由不复述，只链接。
 
 ## 架构
@@ -128,7 +128,7 @@
 - `runtime`：21 个非默认值 + `prompt-only` 默认值；分组 `language` / `os` / `tool` / `credential`。
 - `pricing_type`：`free`（不展示）/ `paid`（付费）。
 
-`output_type` 不做（ADR 0192 #3）：预期结果已经说了「得到什么」，再挂一个粗粒度产出类目是重复。后续若加，按「插词表行」的同一路径，不改表结构。
+`output_type` 不做（ADR 0193 #3）：预期结果已经说了「得到什么」，再挂一个粗粒度产出类目是重复。后续若加，按「插词表行」的同一路径，不改表结构。
 
 `prompt-only` 与 `free` 的 `skill_label` 行要写（筛选要用），但读模型不返回、界面不画。
 
@@ -180,7 +180,7 @@ ai-collaboration    AI 协作        13
 4. 按映射表更新 `skill.category_key`：`UPDATE skill SET category_key = m.new_key FROM skill_category_mapping m WHERE skill.category_key = m.old_key`。
 5. 回滚（迁移脚本注释里是同一条 SQL）：按快照逐 skill 恢复；**清空全部 13 个新货架**——快照恢复之后还指着新 key 的，都是迁移窗口内新建或改类的 skill，它们没有旧词可回，不清就会让下一步 `DELETE` 撞外键（改名货架上的 skill 也没有快照行）；然后删 13 行、按 `old_state` / `old_sort_order` 恢复旧 10 行、删两张迁移表。迁移窗口之后若有人改过分类，回滚会把它清掉——这是回滚的已知代价。
 
-**Dry-run**：`skillmaster-server/scripts/dry-run-v65-category-migration.sh <库名>` 在一个事务里执行 V51、打印映射 / 13 个新词 / **13 个新货架各会移入多少 skill**（从快照统计，纯新货架也占一行、值为 0），然后 `ROLLBACK`；PostgreSQL 的 DDL 是事务性的，回滚后不留表、行或 Flyway 历史（A10）。
+**Dry-run**：`skillmaster-server/scripts/dry-run-v66-category-migration.sh <库名>` 在一个事务里执行 V52、打印映射 / 13 个新词 / **13 个新货架各会移入多少 skill**（从快照统计，纯新货架也占一行、值为 0），然后 `ROLLBACK`；PostgreSQL 的 DDL 是事务性的，回滚后不留表、行或 Flyway 历史（A10）。
 
 旧 `ops` 在 V28 是 `stopped`；回滚要恢复 `stopped`，不是 `enabled`，所以映射表带 `old_state`。真实 13 类都 `enabled`；设计件里那个 stopped 的 `ops` 只用于演示禁用态。
 
@@ -275,13 +275,13 @@ CLI 不自己判断标签对错；**所有命令都面向用户，不提供运�
 - **低**：`< 0.50` → 不落库、不展示；没有证据同样不落库。
 - `category` 单选；高置信直接写 `skill.category_key`，中置信进 review 的「分类」簇，低置信留空。
 - `outcome` 最多 200 码点；超长重试一次，再超长截断并记 `partial`。
-- **运行环境只按「运行时真的缺什么」抽取**（ADR 0192 #9）。证据必须是命令、前置条件或安装步骤；简介里出现关键词不算：
+- **运行环境只按「运行时真的缺什么」抽取**（ADR 0193 #9）。证据必须是命令、前置条件或安装步骤；简介里出现关键词不算：
   - `gpu`：本机/本地集群 NVIDIA GPU（`torchrun`、`nvidia-smi`、CUDA、DGX Spark）；云 GPU / serverless GPU 归 `online-service` + `api-key`。
   - `docker`：skill 自己的步骤运行 `docker` / 容器；只写 Dockerfile、生成 compose / K8s 清单不算。
   - `database`：步骤连接或执行到数据库（`EXPLAIN`、迁移、复制、监控）；教 SQL、设计 schema、查公开数据库 API 不算；`database-lookup` 是 `online-service` + `api-key`。
   - 正反例进金标集：`orchestra-training-llms-megatron`（Docker + GPU）、`jeffallan-sql-pro`（数据库）、`jeffallan-devops-engineer`（不标 Docker）、`database-lookup`（不标数据库）、`orchestra-modal-serverless-gpu`（不标 GPU）。
 
-阈值是**初始值**，由 100–200 条金标集校准（[ADR 0193](../../decisions/0193-public-labels-are-agent-produced-and-sampling-audited.md)）；校准后写回配置，不改代码。
+阈值是**初始值**，由 100–200 条金标集校准（[ADR 0194](../../decisions/0194-public-labels-are-agent-produced-and-sampling-audited.md)）；校准后写回配置，不改代码。
 
 ### 运营覆盖文件
 
@@ -314,15 +314,15 @@ skills:
 ## 开放问题
 
 1. **抽取模型与成本**：用哪个模型 / 供应商、每次的 token 上限、批量与并发？当前倾向：复用现有 embedding provider 的 key，单 skill 一次结构化输出；P1 先用 100–200 条金标集实测单条成本，超过预算再换小模型。
-2. **阈值**：高 / 中的 0.85 / 0.50 是否合适？当前倾向：先用这两个值（与 ADR 0193 一致），金标集校准；95% 是 precision 目标，recall 只影响覆盖率。
+2. **阈值**：高 / 中的 0.85 / 0.50 是否合适？当前倾向：先用这两个值（与 ADR 0194 一致），金标集校准；95% 是 precision 目标，recall 只影响覆盖率。
 3. **`outcome` 上限**：200 码点是否足够？当前倾向：200（与 `when_to_use` 同一条 ADR 0181 上限），prompt 要求一句话；超长重试 / 截断。
-4. **分类映射抽查**：旧 10 的映射是否每一组都按「主要产出」？当前倾向：按 ADR 0191 §决定 5 执行，dry-run 后运营抽查 100 条；发现错分先改映射表，再重跑迁移。
+4. **分类映射抽查**：旧 10 的映射是否每一组都按「主要产出」？当前倾向：按 ADR 0192 §决定 5 执行，dry-run 后运营抽查 100 条；发现错分先改映射表，再重跑迁移。
 5. **分类也走三档吗**：分类是单选，是否需要 `pending`？当前倾向：高置信直接写，中置信进异常队列 / CI 报告的分类簇，低置信留空；不阻塞标签。
 6. **语义检索的 id 集**：`admissibleIds` 在公域规模下会不会太大？当前倾向：公域规模未核实，先用 id 集（与 v19 的 category / tag 同路径）；超过实测阈值再在 M13 的 SQL 里加 `EXISTS`，那要先改模块规则 / ADR。
 7. **embedding 重算**：`outcome` / 标签变化是否每次都重嵌？当前倾向：只在 `EmbeddingTextSource` 的文本 hash 变化时重嵌；标签是结构化过滤，短名 / 完整语义进文本是为了「搜 Python 能找到」。
 8. **版本与旧标签**：新版本发布后，旧 agent 标签是否展示？当前倾向：agent 行只在 `evaluated_version_id = current_version_id` 时展示，运营 `confirmed` 跨版本保留；抽取完成前信息页不画预期结果块。
 9. **私有 skill**：私有 skill 是否也抽标签？当前倾向：不抽；只跑公域；私有分类仍由作者选；我的标签（私人标签）完全不动。
-10. **维度名 / 分组放哪**：`label_definition` 每行重复 `dimension_name` / `group_key`，还是单开 `label_dimension` 表？当前倾向：先按 ADR 0192 的两表，维度只有两个；改名走词表迁移；维度继续长再加表（需 ADR）。
+10. **维度名 / 分组放哪**：`label_definition` 每行重复 `dimension_name` / `group_key`，还是单开 `label_dimension` 表？当前倾向：先按 ADR 0193 的两表，维度只有两个；改名走词表迁移；维度继续长再加表（需 ADR）。
 11. **真实词表要不要 stopped 词**：设计件的 `ops` 是为了演示禁用态；真实 13 类都 enabled。当前倾向：不保留 stopped；禁用态只在设计件测试。
 12. **排序权重**：`outcome` 与 `description` 同权还是略高？当前倾向：先同权，不改排序算法；有搜索日志再加权。
 13. **覆盖冲突的留痕**：运营覆盖与 Agent 结果冲突时，`skill_label` 被 `UNIQUE (skill_id, definition_id)` 覆盖，旧值不留；是加 `actor` 列（`updated_at` 已在），还是单开历史表？当前倾向：P2 随运营覆盖一起落，P0 只保证覆盖行是 `source=operator` / `confirmed`；先记在这里，P2 落地前补 DDL 与 ADR 头注。

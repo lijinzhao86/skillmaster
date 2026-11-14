@@ -319,14 +319,14 @@ export interface AuthoredSkill {
    * A snapshot of the source address and version at copy time (ADR 0173).
    */
   copied_from?: { address: string; version: string } | null
-  /** v65: the platform's one-line expected result; absent when there is none. */
+  /** v66: the platform's one-line expected result; absent when there is none. */
   outcome?: string | null
-  /** v65: the displayed attributes, short names only; absent when there are none. */
+  /** v66: the displayed attributes, short names only; absent when there are none. */
   labels?: SkillLabel[]
 }
 
 /**
- * One displayed attribute (v65): **the dimension (`key`) and the value** — `key + ':' + value` is
+ * One displayed attribute (v66): **the dimension (`key`) and the value** — `key + ':' + value` is
  * the filter key `?label=` takes (`runtime:python`) — the short name the console draws, and the
  * full sentence the extractor recorded.
  *
@@ -685,7 +685,7 @@ export interface SkillCard {
   public_tags: PublicTagRef[]
   my_tags: MyTagRef[]
   /**
-   * v65: the platform's one-line expected result and the displayed attributes. **The outcome does
+   * v66: the platform's one-line expected result and the displayed attributes. **The outcome does
    * not go on a result row** — the row answers "what is this", and the information page answers
    * "what do I get". The attributes are drawn on the row's third line, left of the public tags.
    */

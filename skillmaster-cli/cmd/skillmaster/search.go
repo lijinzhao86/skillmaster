@@ -179,7 +179,7 @@ func emptyLibraryLine(options queryArgs) string {
 //   - **`withReading`** prints 「描述 - 适用场景」. `skills search` always sets it — relevance is
 //     judged by exactly that text. `skills list` sets it only under `--verbose` (v31): an inventory
 //     is an address list, and descriptions have their own commands (`show`, and `--verbose` itself).
-//   - **`withAttributes`** prints 「属性：短名」 (v65). Only `skills search` sets it: a listing keeps
+//   - **`withAttributes`** prints 「属性：短名」 (v66). Only `skills search` sets it: a listing keeps
 //     its old shape, and the attributes are what a searcher compares candidates by.
 //   - **`verbose`** adds the source / state / version / updated line (PRD #51). It goes below the
 //     reading, so a caller that reads the first line still gets the address alone.
@@ -209,11 +209,11 @@ func printCards(cards []api.Card, withReading, withAttributes, verbose bool) {
 
 // attributeNames is how many short names a search result prints before the rest become `+N`.
 //
-// **Three is the design's number, and the console draws the same cut** (v65 PRD A13): a row is read
+// **Three is the design's number, and the console draws the same cut** (v66 PRD A13): a row is read
 // to rule candidates out, and a fourth word costs a line without changing that decision.
 const attributeNames = 3
 
-// attributesLine is the one extra row a search result carries (v65): the skill's displayed
+// attributesLine is the one extra row a search result carries (v66): the skill's displayed
 // attributes. **Short names only** — the full sentences (`需要 Python`) live in `skills labels` and
 // are what the extractor recorded, not what a one-line comparison is for.
 func attributesLine(card api.Card) string {

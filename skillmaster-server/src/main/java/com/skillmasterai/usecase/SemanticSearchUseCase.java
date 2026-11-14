@@ -436,7 +436,7 @@ public class SemanticSearchUseCase {
             }
             myTagIds.add(definition.get().id());
         }
-        // **An unknown attribute word is a 400 on every path** (v65 TD §接口): the words come from
+        // **An unknown attribute word is a 400 on every path** (v66 TD §接口): the words come from
         // the vocabulary, so a misspelling is the caller's to fix, not "nothing was similar
         // enough". Categories and tags keep the empty-answer rule — a category key the console no
         // longer shows is a stale link, not a typo the caller made here.

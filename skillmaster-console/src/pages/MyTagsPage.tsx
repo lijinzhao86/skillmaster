@@ -37,7 +37,7 @@ import {
  *
  * The private list is ordered by attachment count descending, then name — it is read by "how much is
  * it used", and each row still says 「用在 N 个 skill 上」. **The public list is ordered by name**
- * (v65): its rows no longer carry a count, so a usage order would look arbitrary; each row's action
+ * (v66): its rows no longer carry a count, so a usage order would look arbitrary; each row's action
  * is the way to the skills wearing the word.
  */
 
@@ -466,7 +466,7 @@ export default function MyTagsPage() {
       tagKey(tag.description ?? '').includes(lower),
   )
 
-  /* **By name, since the count is gone** (v65): ordering by a number the row no longer shows
+  /* **By name, since the count is gone** (v66): ordering by a number the row no longer shows
      would look arbitrary. The private list keeps usage order — it still prints 「用在 N 个上」. */
   const publicOrdered = [...publicTags].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   const publicShown = publicOrdered.filter((tag) => lower === '' || tagKey(tag.name).includes(lower))
@@ -643,7 +643,7 @@ export default function MyTagsPage() {
                     <div className="skill-line">
                       <span className="tag-name">{'#' + tag.name}</span>
                       <span className="spacer" />
-                      {/* **An entry, not a number** (v65): how many skills carry the word is the
+                      {/* **An entry, not a number** (v66): how many skills carry the word is the
                           public corpus again, and the row's useful fact is where to see them. */}
                       <a
                         className="tag-action"

@@ -61,7 +61,7 @@ public class SkillCardAssembler {
         Map<String, List<SkillTagService.PublicTagView>> publicTags =
                 tags.publicTagsOfSkills(ids);
         Map<String, List<SkillTagService.MyTagView>> myTags = tags.myTagsOfSkills(userId, ids);
-        // v65: the same batch rule as tags — one query for the whole page, never one per card.
+        // v66: the same batch rule as tags — one query for the whole page, never one per card.
         Map<String, List<com.skillmasterai.modules.skill.LabelValue>> publicLabels =
                 labels.labelsOfSkills(ids);
         Map<String, String> outcomes = labels.outcomesOf(ids);

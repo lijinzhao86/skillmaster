@@ -107,7 +107,7 @@ export default function SkillTagGroups({
                   options: categories.map((entry) => ({
                     value: entry.key,
                     label: entry.name,
-                    /* **No public count** (v65): how many public skills sit on a shelf is an
+                    /* **No public count** (v66): how many public skills sit on a shelf is an
                        internal signal, and the menu is a picker, not a report. */
                     /* A stopped word cannot be newly assigned; one already on it stays. */
                     disabled: entry.state === 'stopped' && category?.key !== entry.key,

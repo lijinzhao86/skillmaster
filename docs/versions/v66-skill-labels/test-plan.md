@@ -1,4 +1,4 @@
-# v65-skill-labels · 测试方案
+# v66-skill-labels · 测试方案
 
 > **最后更新**：2026-11-14
 > **所属版本**：[`README.md`](README.md)
@@ -33,14 +33,14 @@
 
 - 前置：空测试库；Flyway 迁移到 V50；库里有一条 `skill.category_key = 'doc'` 的记录，一条 `'ops'`（旧 stopped）记录。
 - 步骤：
-  1. **先在停在 V50 的库上**跑 `skillmaster-server/scripts/dry-run-v65-category-migration.sh <库名>`：打印映射、13 个新词、每个新货架按快照统计的移入数，随后 `ROLLBACK`。
-  2. 执行 V51 迁移。
+  1. **先在停在 V50 的库上**跑 `skillmaster-server/scripts/dry-run-v66-category-migration.sh <库名>`：打印映射、13 个新词、每个新货架按快照统计的移入数，随后 `ROLLBACK`。
+  2. 执行 V52 迁移。
   3. 查 `skill_category`：13 个新 key 为 `enabled`，旧 10 个为 `retired`。
   4. 查 `skill_category_mapping`：10 行，`doc → office-efficiency`、`ops → it-ops-security` 等全部可查；`skill_category_assignment_snapshot` 里两条 skill 各记着自己的旧 key。
   5. 查两条 skill 的 `category_key`：分别变为 `office-efficiency` 与 `it-ops-security`。
   6. 回滚：按迁移脚本注释先执行前两条 SQL（快照恢复 → **13 个新货架全部置空**），确认没有 skill 再指向新 key；再执行删除 13 行、恢复旧 10 行 `state` / `sort_order`、删两张辅助表。删除与词表状态恢复会改静态词表，**不在 IT 里跑**，由人在 V50 临时库上整段执行一次。
   7. 再查 `skill.category_key` 与旧词状态。
-- 期望：dry-run 不写任何表（结束查不到 `skill_category_mapping`）；迁移后 13 + 10 行、映射 10 行、两条 skill 落到新货架；回滚按**每个 skill 自己的旧 key** 恢复（`doc` 与 `office` 合并后仍各回各的），迁移后新建的 skill 被置空而不是让 DELETE 撞外键，旧 state（含 `ops = stopped`）恢复；`description` / `when_to_use` / `frontmatter` 不由本迁移写入，前后面貌相同（由「V51 只更新 `category_key`」构造保证，未单独自动化）。
+- 期望：dry-run 不写任何表（结束查不到 `skill_category_mapping`）；迁移后 13 + 10 行、映射 10 行、两条 skill 落到新货架；回滚按**每个 skill 自己的旧 key** 恢复（`doc` 与 `office` 合并后仍各回各的），迁移后新建的 skill 被置空而不是让 DELETE 撞外键，旧 state（含 `ops = stopped`）恢复；`description` / `when_to_use` / `frontmatter` 不由本迁移写入，前后面貌相同（由「V52 只更新 `category_key`」构造保证，未单独自动化）。
 - 证据：`SkillLabelMigrationIT`（3 条：词表与映射、无旧指针、按快照恢复 + 13 键置空不留外键引用）；dry-run 与整段回滚在 V50 临时库实测（2026-11-14，见 T18 的数字）。
 
 ### T2 · 词表 seed 与「新增维度只插行」（A2）
@@ -129,7 +129,7 @@
 
 - 前置：抽取任务可用；金标样本含 `orchestra-training-llms-megatron`、`jeffallan-sql-pro`、`jeffallan-devops-engineer`、`database-lookup`、`orchestra-modal-serverless-gpu`。
 - 步骤：跑金标集；检查每个值的 `confidence` / `evidence` / `review_state`。
-- 期望：高置信写 `auto`；中置信 `pending` 不展示；低置信或无证据不落库；GPU/Docker/数据库按 ADR 0192 的正反例；`outcome` 超 200 码点重试后截断并记 `partial`。
+- 期望：高置信写 `auto`；中置信 `pending` 不展示；低置信或无证据不落库；GPU/Docker/数据库按 ADR 0193 的正反例；`outcome` 超 200 码点重试后截断并记 `partial`。
 - 状态：**未执行（P1）**。
 
 ### T12 · 抽样与金标集（A7；P2）
@@ -177,13 +177,13 @@
 ### T18 · 分类迁移 dry-run（A1、A10）
 
 - 前置：V50 测试库。
-- 步骤：在停在 V50 的库上跑 `skillmaster-server/scripts/dry-run-v65-category-migration.sh <库名>`。
+- 步骤：在停在 V50 的库上跑 `skillmaster-server/scripts/dry-run-v66-category-migration.sh <库名>`。
 - 期望：dry-run 只读、打印 10 条映射、13 个新词与 **13 个新货架各一行**的移入数（按快照统计，纯新货架也为 0 而不是缺行）；事务回滚后不写 `skill_category_mapping`、`skill_category_assignment_snapshot`，也不改 `skill.category_key`；正式执行只写一次。
 - 证据：脚本（2026-11-14 在 V50 临时库实测；库里有 `doc`、`office`、`ops` 三条已归类 skill 与一条无分类 skill：dry-run 打印映射 10 行、13 个新词、13 行移入数（`office-efficiency` 2、`it-ops-security` 1、其余 0）、无分类 1；结束后 `skill_category` 仍 10 行，`to_regclass('public.skill_category_mapping')` 为空）；同一库上按注释跑完整回滚：`category_key` 恢复为 `doc` / `office` / `ops`，旧 10 词的 `state` / `sort_order` 复原（`ops = stopped`），两张辅助表删除；`SkillLabelMigrationIT` 覆盖正式迁移后的词表与快照回滚。
 
 ## 环境与数据
 
-- **数据库**：Docker `skillmaster-postgres`；本分支专用 `skillmaster_test_v65`（见 `.dev-sop/profile.md` 的一库一栈规则）。测试库可抛弃，Flyway 每次重建。
+- **数据库**：Docker `skillmaster-postgres`；本分支专用 `skillmaster_test_v66`（见 `.dev-sop/profile.md` 的一库一栈规则）。测试库可抛弃，Flyway 每次重建。
 - **服务端数据**：`V2` seed 的 `demo` 用户与命名空间；测试用 `publicSkill(...)` / `privateSkill(...)` 造公域与私有 skill；标签用 SQL 直接插入 `label_definition` / `skill_label`，不依赖抽取任务。
 - **CLI 数据**：本地测试服务 + 静态测试令牌；`--label` 用例不依赖真实模型。
 - **控制台数据**：设计件夹具；`console-states` 使用 `design/skillmaster-控制台演示.html`。
@@ -191,12 +191,12 @@
 
 ## 结果
 
-- **P0 服务端**：T1–T6、T14、T15（空值）、T16、T18 通过。证据：`SkillLabelApiIT`（7 条）、`SkillLabelMigrationIT`（3 条）、`WebDiscoverSemanticIT`（11 条，含语义标签与未知标签 400）；受影响的旧测试（`LibraryApiIT` / `PublicTagCategoryApiIT` / `V14SmokeIT` / `MyTagApiIT` / `WebOrganizeIT` / `SkillSearchIT` / `SkillCopyIT` / `DiscoverRecommendedIT`）在 `skillmaster_test_v65` 上全绿；全量 `./mvnw verify`（含 failsafe 的 IT）170 个测试类 / 1323 条、0 失败。`TagSchemaMigrationIT` 的词表断言随 V51 改为「13 个 enabled + 10 个 retired」；顺带修了两个与本版无关的测试对日期/分区的依赖（`UsageHistoryIT` 自建它要写的每个周一分区，`ActivityArchiveJobIT` 的旧分区改按周一对齐）。
+- **P0 服务端**：T1–T6、T14、T15（空值）、T16、T18 通过。证据：`SkillLabelApiIT`（7 条）、`SkillLabelMigrationIT`（3 条）、`WebDiscoverSemanticIT`（11 条，含语义标签与未知标签 400）；受影响的旧测试（`LibraryApiIT` / `PublicTagCategoryApiIT` / `V14SmokeIT` / `MyTagApiIT` / `WebOrganizeIT` / `SkillSearchIT` / `SkillCopyIT` / `DiscoverRecommendedIT`）在 `skillmaster_test_v66` 上全绿；全量 `./mvnw verify`（含 failsafe 的 IT，合并 main 后）172 个测试类 / 1344 条、0 失败。`TagSchemaMigrationIT` 的词表断言随 V52 改为「13 个 enabled + 10 个 retired」；顺带修了两个与本版无关的测试对日期/分区的依赖（`UsageHistoryIT` 自建它要写的每个周一分区，`ActivityArchiveJobIT` 的旧分区改按周一对齐）。
 - **P0 CLI**：T8、T9、T10、T14 通过。证据：`cmd/skillmaster/labels_test.go`（7 条）、`skill_show_test.go`（字段顺序与「兼容性」）、`v14_test.go`（categories 无公域计数、`skills list` 拒绝 `--label`）、`search_v19_test.go`（旧请求形状不变）；`go test ./...` 全绿，`gofmt -l .` 为空，`scripts/check-file-size.mjs` 通过。
 - **P0 设计件**：T7 通过（`console-states.mjs` 的计数与结果页头断言）；A9 的 `home-check` 通过，且 `design/src/home` 与 `skillmaster-site/src` 的源码 grep 均无「1000+」这一承诺。
 - **P0 生产控制台**：T17 已实现、测试全绿（48 文件 / 766 条），**视觉验收未做**（需要人在浏览器里看）。属性非空的展示由组件测试的 mock 覆盖，真实公域数据在 P1 回填后才有。
 - **P1**（T11）与 **P2**（T12、T13）：**未执行**。T15 的写入路径（201 码点）属于 P1，未执行。
-- **dry-run 证据**：`skillmaster-server/scripts/dry-run-v65-category-migration.sh` 在 V50 临时库实测通过（2026-11-14）。
+- **dry-run 证据**：`skillmaster-server/scripts/dry-run-v66-category-migration.sh` 在 V50 临时库实测通过（2026-11-14）。
 
 ## 已知问题
 

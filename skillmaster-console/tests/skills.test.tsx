@@ -119,7 +119,7 @@ describe('one skill: 信息', () => {
     expect(text(blocks[1])).toContain('需要拆分或合并 PDF 时')
     expect(text(blocks[2])).toContain('我的适用场景')
     expect(text(blocks[2])).toContain('搜索时先按你的说法找')
-    // v65: 预期结果 after the two 适用场景 blocks, then the author's 「兼容性」 (renamed from 运行环境).
+    // v66: 预期结果 after the two 适用场景 blocks, then the author's 「兼容性」 (renamed from 运行环境).
     expect(text(blocks[3])).toContain('预期结果')
     expect(text(blocks[3])).toContain('一份拆好的 PDF，以及每页对应的原文页码。')
     expect(text(blocks[4])).toContain('兼容性')
@@ -429,7 +429,7 @@ describe('one skill: the three word groups (v14)', () => {
     expect(
       (container.querySelector('.menu-item[data-value="it-ops-security"]') as HTMLButtonElement).disabled,
     ).toBe(true)
-    // v65: the menu is a picker, not a report — no public count beside a word.
+    // v66: the menu is a picker, not a report — no public count beside a word.
     expect(
       container.querySelector('.menu-item[data-value="office-efficiency"] .menu-number'),
     ).toBeNull()

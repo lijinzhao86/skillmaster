@@ -22,7 +22,7 @@ export default function SkillSymbols() {
           strokeLinecap="round"
         />
       </symbol>
-      {/* v65: 预期结果 — a target, not a paragraph: two rings and a centre. */}
+      {/* v66: 预期结果 — a target, not a paragraph: two rings and a centre. */}
       <symbol id="outcomeMark" viewBox="0 0 24 24" fill="none">
         <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.8" />
         <circle cx="12" cy="12" r="3.6" stroke="currentColor" strokeWidth="1.8" />

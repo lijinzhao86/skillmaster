@@ -45,7 +45,7 @@ export default function Pager({
   sizeOptions?: number[]
   onPageSize?: (size: number) => void
   /**
-   * v65: whether the "共 N 个，第 X–Y 个" sentence is drawn. The public results turn it off — the
+   * v66: whether the "共 N 个，第 X–Y 个" sentence is drawn. The public results turn it off — the
    * public corpus size is an internal signal (PRD A15) — and the numbers stay right-aligned.
    */
   showTotal?: boolean

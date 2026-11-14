@@ -1,4 +1,4 @@
-// v65 console click-through: drive the real front end (Vite :5173) against the real server (:8080)
+// v66 console click-through: drive the real front end (Vite :5173) against the real server (:8080)
 // the way a person would, and shoot each state.
 //
 //   CLICK_PHONE=... CLICK_PASSWORD=... npm start
@@ -7,7 +7,7 @@
 // does not stop at the first failure, and the exit code is non-zero when one fails.
 //
 // **Not part of CI.** It needs a live stack, a seeded demo skill (see seed.sql) and a real account.
-// `qa/role-matrix` covers the authorization ladder; this file covers what v65 changed on the screen.
+// `qa/role-matrix` covers the authorization ladder; this file covers what v66 changed on the screen.
 
 import { createRequire } from 'node:module'
 import { mkdirSync } from 'node:fs'

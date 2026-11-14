@@ -46,9 +46,9 @@ public record SkillCardView(
         Category category,
         List<PublicTag> publicTags,
         List<MyTag> myTags,
-        /** v65: the platform's one-line expected result, or null. Never a replacement for description. */
+        /** v66: the platform's one-line expected result, or null. Never a replacement for description. */
         String outcome,
-        /** v65: displayed platform attributes, short names only; empty when none. */
+        /** v66: displayed platform attributes, short names only; empty when none. */
         List<com.skillmasterai.modules.skill.LabelValue> labels) {
 
     public SkillCardView {

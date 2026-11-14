@@ -152,9 +152,10 @@ public final class ModuleMap {
             new Module("M17", "activity", MODULES_PACKAGE + ".activity",
                     Set.of("activity_event", "skill_collaborator_day")),
             // M18 is v64's feedback inbox: one document a person sends the platform. It owns the
-            // row and its archive pointer; the notification is M14's, the object is M12's.
+            // row, its archive pointer, and (v65) the attachment metadata. The notification is
+            // M14's; the attachment bytes are named objects in M6's private bucket.
             new Module("M18", "feedback", MODULES_PACKAGE + ".feedback",
-                    Set.of("user_feedback")));
+                    Set.of("user_feedback", "feedback_attachment")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -200,7 +201,8 @@ public final class ModuleMap {
             Map.entry("M17", Set.of("ActivityEvent", "ActivityKinds", "ActivityRecorder",
                     "ArchiveSettings", "InvokeActivity", "SearchActivity", "SearchHit",
                     "UsageHistory")),
-            Map.entry("M18", Set.of("Feedback", "FeedbackConsent", "FeedbackSafety",
+            Map.entry("M18", Set.of("Feedback", "FeedbackAttachment", "FeedbackAttachmentDraft",
+                    "FeedbackAttachmentSafety", "FeedbackConsent", "FeedbackSafety",
                     "FeedbackService")));
 
     /**

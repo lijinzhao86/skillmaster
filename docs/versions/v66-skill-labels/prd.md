@@ -1,4 +1,4 @@
-# v65-skill-labels · 产品需求
+# v66-skill-labels · 产品需求
 
 > **最后更新**：2026-11-14
 > **所属版本**：[`README.md`](README.md)
@@ -136,9 +136,9 @@
 | A7 | 每周抽 30–50 条自动通过的标签；准确率 ≥ 95%；100–200 条金标集回归通过 | `deploy/label-audit.yml` + CI 报告；金标集运行结果 |
 | A8 | 低置信标签不展示；中置信标签进异常队列 | API/DB 抽样；CI 报告能看到中置信簇 |
 | A9 | 首页与官网不再出现「1000+ 个精选 skill」 | `design/src/home` 与 `skillmaster-site/src` 的界面文案 grep 无该句；`home-check` 通过（官网暂无自动检查） |
-| A10 | 旧分类迁移可 dry-run、可回滚 | `skillmaster-server/scripts/dry-run-v65-category-migration.sh` 在事务内执行并回滚；回滚按 `skill_category_assignment_snapshot` 逐 skill 恢复并验证 |
+| A10 | 旧分类迁移可 dry-run、可回滚 | `skillmaster-server/scripts/dry-run-v66-category-migration.sh` 在事务内执行并回滚；回滚按 `skill_category_assignment_snapshot` 逐 skill 恢复并验证 |
 | A11 | 同一个 skill 在列表、搜索、推荐三处的分类与标签一致 | 三个读接口对同一 skill 返回同一组值 |
-| A12 | 原有 `description`、`when_to_use`、frontmatter 一个字没改 | V51 只 `UPDATE skill.category_key`，不出现这三列；未做前后 diff 的自动化用例（构造保证） |
+| A12 | 原有 `description`、`when_to_use`、frontmatter 一个字没改 | V52 只 `UPDATE skill.category_key`，不出现这三列；未做前后 diff 的自动化用例（构造保证） |
 | A13 | 运行环境是多选：同时需要 Node.js 与 Python 的 skill 在列表与信息页各显示两枚；列表最多三枚，第四枚起收成 `+N`，点开是全部；纯提示词与免费不显示；胶囊短名按类别着色 | `console-states --only discover` 的 `screenshot-annotator + runtime:node` 用例（三枚 + `+1` + 浮层四枚）；信息页 `runtime:python` 用例 |
 | A14 | `gpu` / `docker` / `database` 按「运行时真的缺什么」抽取，不按主题抽取；云 GPU、只写 Dockerfile、教 SQL / 查公开数据库 API 都不误标 | 金标集包含正例 `orchestra-training-llms-megatron`（Docker + GPU）、`jeffallan-sql-pro`（数据库）；反例 `jeffallan-devops-engineer`（不标 Docker）、`database-lookup`（不标数据库）、`orchestra-modal-serverless-gpu`（不标 GPU）；逐条核对证据行 |
 | A15 | **控制台不显示公域计数**：分类菜单、公开标签清单的每一行、搜索结果页头与分页条都不带数字（标签清单页头的条数仍保留）；分类筛选、属性筛选与公开标签入口仍可用 | `console-states --only detail` 的分类菜单 `.menu-number` 为 0；`--only my-tags` 的公开标签行没有 `.tag-count`，每行有「查看 skill」链接；`--only discover` 的 `#page-discover .count` 与 `#discoverPager .pager-count` 都为空 |
@@ -169,12 +169,12 @@
 | `design/src/console/` 的结果行、信息页、分类菜单、夹具 | **是**（`styles.css`、`fixtures/*`、`ResultCard`） | 全控制台 |
 | `skillmaster-cli` 的 `declarations*.go`、`skills search`、`skill show` | **是** | 所有 CLI 用户 |
 | `skillmaster-site` 首页文案 | 否 | 官网 |
-| `docs/research/`、`docs/decisions/0191–0194`、`docs/versions/v65-skill-labels/` | 否 | 文档 |
+| `docs/research/`、`docs/decisions/0192–0195`、`docs/versions/v66-skill-labels/` | 否 | 文档 |
 
 ## 依赖与前置
 
-- **决策**：[ADR 0191](../../decisions/0191-public-categories-are-thirteen-shelves.md)（13 类）、[ADR 0192](../../decisions/0192-public-labels-are-extensible-claims.md)（可扩展标签、运行环境多选与四层分离）、[ADR 0193](../../decisions/0193-public-labels-are-agent-produced-and-sampling-audited.md)（自动打标与抽样验收）。
-- **收窄与取代**：ADR 0194 记了 P0 对 0192 / 0193 的四点收窄；ADR 0191 取代 ADR 0078 的「10 个词」与「公域由作者选」两半，以及「`skills categories` 打印公域计数」一句；平级、单选、无父子继续成立。
+- **决策**：[ADR 0192](../../decisions/0192-public-categories-are-thirteen-shelves.md)（13 类）、[ADR 0193](../../decisions/0193-public-labels-are-extensible-claims.md)（可扩展标签、运行环境多选与四层分离）、[ADR 0194](../../decisions/0194-public-labels-are-agent-produced-and-sampling-audited.md)（自动打标与抽样验收）。
+- **收窄与取代**：ADR 0195 记了 P0 对 0193 / 0194 的四点收窄；ADR 0192 取代 ADR 0078 的「10 个词」与「公域由作者选」两半，以及「`skills categories` 打印公域计数」一句；平级、单选、无父子继续成立。
 - **词表来源**：SkillHub 公共 API 的 12 个一级分类（2026-11-13 快照）；一次性抄入我们的迁移，不建实时同步。
 - **抽取前置**：需要一个能读 `SKILL.md` 与文件清单的模型；模型、成本与阈值在第 3 关定，并用 100–200 条金标集实测。
 - **界面权威**：`design/` 必须先改（第 2 关），实现照设计件搬；设计稿没覆盖的态先问，不自创。

@@ -177,14 +177,14 @@ func printSkillShow(address string, meta api.Metadata, tags api.SkillTags,
 	if myWhenToUse != "" {
 		fmt.Printf("  我的适用场景：%s\n", myWhenToUse)
 	}
-	// v65: the platform's reading sits after the author's and the caller's, before the facts below.
+	// v66: the platform's reading sits after the author's and the caller's, before the facts below.
 	// The two are different claims — 「预期结果」 is what using it produces, 「兼容性」 is the author's
 	// runtime note — so neither replaces the other, and the author's wording keeps its own line.
 	if meta.Outcome != "" {
 		fmt.Printf("  预期结果：%s\n", meta.Outcome)
 	}
 	if meta.Compatibility != "" {
-		// Renamed from 「运行环境」 in v65: the platform's attributes are what say which runtime a
+		// Renamed from 「运行环境」 in v66: the platform's attributes are what say which runtime a
 		// skill needs, and this line is the author's own free-form note. 兼容性 says that without
 		// claiming to be the vocabulary.
 		fmt.Printf("  兼容性：%s\n", meta.Compatibility)

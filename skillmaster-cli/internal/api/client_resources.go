@@ -212,7 +212,7 @@ type Metadata struct {
 	WhenToUse string `json:"when_to_use"`
 	// Compatibility is the runtime requirements from the frontmatter's top level, or empty.
 	Compatibility string `json:"compatibility"`
-	// v65: the platform's one-line expected result and its displayed attributes. Both are the
+	// v66: the platform's one-line expected result and its displayed attributes. Both are the
 	// platform's reading, not the author's — `description` and `when_to_use` above stay untouched.
 	Outcome string  `json:"outcome"`
 	Labels  []Label `json:"labels"`
@@ -429,7 +429,7 @@ type Card struct {
 	Category            *Category `json:"category"`
 	PublicTags          []Tag     `json:"public_tags"`
 	MyTags              []Tag     `json:"my_tags"`
-	// v65: what using the skill is expected to produce, and the attributes a reader compares rows
+	// v66: what using the skill is expected to produce, and the attributes a reader compares rows
 	// by. The outcome is read only by `skill show` — the list keeps its `description - when_to_use`
 	// reading — while the attributes get one line under a search result.
 	Outcome string  `json:"outcome"`

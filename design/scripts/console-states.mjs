@@ -2693,7 +2693,7 @@ const skillAt = async (query) => {
       return `${term} ${value}`
     }),
     infoTags: [...document.querySelectorAll('#infoTags .chip')].map((chip) => chip.textContent),
-    /* **v65：预期结果与属性标签**。预期结果排在适用场景之后；属性标签在右栏，每个值可点。 */
+    /* **v66：预期结果与属性标签**。预期结果排在适用场景之后；属性标签在右栏，每个值可点。 */
     outcomeText: document.getElementById('infoOutcomeText')?.textContent?.trim() ?? null,
     outcomeAfterWhen: (() => {
       const when = document.getElementById('infoWhen')
@@ -8185,7 +8185,7 @@ discoverGroup: {
     byPublicTag.cards.map((card) => card.name).join(','),
   )
 
-  /* **v65：属性标签可以筛选**；发现页不新增筛选栏，筛选入口是结果行/信息页上的胶囊。 */
+  /* **v66：属性标签可以筛选**；发现页不新增筛选栏，筛选入口是结果行/信息页上的胶囊。 */
   const byLabel = await discoverAt('?page=discover&label=pricing_type:paid')
   check(
     '发现：属性标签可以筛选（pricing_type:paid），并落到结果页而不是推荐段',

@@ -351,6 +351,25 @@ public enum ErrorCode {
     /** No such receipt, or it belongs to somebody else. */
     FEEDBACK_NOT_FOUND("feedback_not_found"),
 
+    /* ---- v65: the images and short videos attached to a feedback ---- */
+    /** More than {@code FeedbackAttachmentSafety.MAX_ATTACHMENTS} files on one document. */
+    FEEDBACK_ATTACHMENT_TOO_MANY("feedback_attachment_too_many"),
+    /** One file is above the image or video ceiling; ships the name, actual and limit in bytes. */
+    FEEDBACK_ATTACHMENT_TOO_LARGE("feedback_attachment_too_large"),
+    /** The sum of all attachments is above {@code FeedbackAttachmentSafety.MAX_TOTAL_BYTES}. */
+    FEEDBACK_ATTACHMENT_TOTAL_TOO_LARGE("feedback_attachment_total_too_large"),
+    /** The file header is not one of the seven accepted types; the extension is not consulted. */
+    FEEDBACK_ATTACHMENT_TYPE("feedback_attachment_type"),
+    /** A zero-byte file. */
+    FEEDBACK_ATTACHMENT_EMPTY("feedback_attachment_empty"),
+    /** The uploaded part could not be read or written to the spool file. */
+    FEEDBACK_ATTACHMENT_UNREADABLE("feedback_attachment_unreadable"),
+    /**
+     * This deployment has no object storage, or OSS refused the write. 503: the caller's action is
+     * to retry later, and a text-only submission still works.
+     */
+    FEEDBACK_ATTACHMENT_UNAVAILABLE("feedback_attachment_unavailable"),
+
     INTERNAL_ERROR("internal_error");
 
     private final String wireName;

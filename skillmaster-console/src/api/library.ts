@@ -73,13 +73,13 @@ export function listLibrary(query: LibraryQuery = {}): Promise<ApiResult<Library
 /**
  * The public results. `tag` carries **one category key** (the shelving a result row links to); the
  * attribute labels are a second filter (`label`, "and"), because a skill either has an attribute or
- * does not and two attributes both have to hold (v65, ADR 0192). Public tags are not a discover
+ * does not and two attributes both have to hold (v66, ADR 0193). Public tags are not a discover
  * filter. Pages at six.
  */
 export interface DiscoverQuery {
   q?: string
   tag?: string[]
-  /** v65: `dimension:value`, repeated; the server resolves the words against its vocabulary. */
+  /** v66: `dimension:value`, repeated; the server resolves the words against its vocabulary. */
   label?: string[]
   p?: number
 }

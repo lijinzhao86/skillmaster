@@ -55,6 +55,11 @@ Deploy 在碰服务器之前就失败。job summary 会写明「部署哪个、�
 `Deploy` 探针不过就自己切回上一版，并在 job summary 里写「probe failed; returned to …」。手动回滚是
 `release: <已有 sha>` + `confirm_rollback=rollback`。
 
+**变量也是回滚的一部分。** 每次 Deploy 都按当前仓库变量重写 `server.env`，回滚也不例外。若某项
+变量的当前取值会让旧 jar 起不来（v63 把 `SKILLMASTER_SITE_ORIGIN` 改成逗号列表，ADR 0190 之前的
+jar 遇到逗号会拒绝启动），先把该变量改回旧 jar 能接受的值，再 dispatch 回滚；否则回滚会在启动
+失败后自动切回当前 release——线上不中断，但回滚没有发生。
+
 2026-11-11 发生过一次版本错位：v59（`a9eed7e`）的部署还在探针期间（02:06:18），另一个 dispatch 用
 `release: 36d0e62df9635af2b44c4064c6a533b1608e35db` 开始了一次回滚；v59 在 02:06:29 报成功，02:06:50
 那次回滚的切换才把生产换成 36d0e62，v59 **没有触发自动回滚**。这次是「后一次 dispatch 覆盖前一次」；

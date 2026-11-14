@@ -65,9 +65,9 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             Category category,
             List<PublicTag> publicTags,
             List<MyTag> myTags,
-            /** v65: the platform's one-line expected result; omitted when absent. */
+            /** v66: the platform's one-line expected result; omitted when absent. */
             @JsonInclude(JsonInclude.Include.NON_NULL) String outcome,
-            /** v65: displayed attributes, short names only; omitted when the skill has none. */
+            /** v66: displayed attributes, short names only; omitted when the skill has none. */
             @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Label> labels,
             // Omitted when there is no score, rather than sent as null: the card is the layer every
             // skill is loaded for, and a keyword hit has no similarity to report. A client cannot
@@ -146,7 +146,7 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
     }
 
     /**
-     * v65: one displayed platform attribute. {@code full} is for the CLI, not the console capsule;
+     * v66: one displayed platform attribute. {@code full} is for the CLI, not the console capsule;
      * {@code filterable} tells the interface whether the word may be drawn as a filter link.
      */
     public record Label(String key, String value, String label, String full, String group,

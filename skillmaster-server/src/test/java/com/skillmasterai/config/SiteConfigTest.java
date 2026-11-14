@@ -18,6 +18,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 class SiteConfigTest {
 
     private static final String SITE = "https://www.skillmasterai.com";
+    private static final String HOME = "https://home.skillmasterai.com";
 
     private static CorsConfigurationSource source(String origin) {
         return new SiteConfig().corsConfigurationSource(origin);
@@ -69,14 +70,36 @@ class SiteConfigTest {
         assertThat(read.getAllowedOrigins()).containsExactly(SITE);
     }
 
-    /** A wildcard or a list is a typo with no visible symptom, so it stops the boot instead. */
+    /**
+     * Two names serve the landing page during the handover (ADR 0190). The list is explicit: a
+     * wildcard or an empty entry is a typo with no visible symptom, so it stops the boot instead.
+     */
     @Test
-    void aWildcardOrAListOfOriginsIsRefused() {
+    void aListOfOriginsIsAllowedButAWildcardAndEmptyEntriesAreRefused() {
+        CorsConfiguration read = ((UrlBasedCorsConfigurationSource) source(" " + SITE + " , " + HOME + "/ "))
+                .getCorsConfiguration(
+                        new org.springframework.mock.web.MockHttpServletRequest("GET", "/web/session"));
+
+        assertThat(read.getAllowedOrigins()).containsExactly(SITE, HOME);
+
+        CorsConfiguration deduped = ((UrlBasedCorsConfigurationSource) source(SITE + "," + SITE))
+                .getCorsConfiguration(
+                        new org.springframework.mock.web.MockHttpServletRequest("GET", "/web/session"));
+        assertThat(deduped.getAllowedOrigins()).containsExactly(SITE);
+
         assertThatThrownBy(() -> source("*"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("skillmaster.site.origin");
-        assertThatThrownBy(() -> source(SITE + ",https://example.com"))
-                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> source(SITE + ","))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("skillmaster.site.origin");
+        assertThatThrownBy(() -> source("," + SITE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("skillmaster.site.origin");
+        // Whitespace inside an entry is a typo too — trimming only removes the ends.
+        assertThatThrownBy(() -> source(SITE + " https://example.com"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("skillmaster.site.origin");
     }
 
     /**

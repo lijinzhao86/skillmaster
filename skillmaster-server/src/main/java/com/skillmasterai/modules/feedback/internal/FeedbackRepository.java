@@ -1,6 +1,7 @@
 package com.skillmasterai.modules.feedback.internal;
 
 import com.skillmasterai.modules.feedback.Feedback;
+import com.skillmasterai.modules.feedback.FeedbackAttachment;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -21,6 +22,9 @@ public final class FeedbackRepository {
     private static final String COLUMNS = "id, receipt, user_id, skill_address, content, "
             + "content_sha256, consent_version, consent_at, source, diagnostics, archive_key, "
             + "archived_at, created_at";
+
+    private static final String ATTACHMENT_COLUMNS = "id, feedback_id, position, filename, "
+            + "media_type, size_bytes, sha256, object_key, created_at";
 
     private final JdbcClient jdbc;
     private final ObjectMapper json;
@@ -95,6 +99,50 @@ public final class FeedbackRepository {
                 .param("receipt", receipt)
                 .param("userId", userId)
                 .update();
+    }
+
+    /**
+     * One attachment row. The feedback row must already exist in this transaction; a failure
+     * rolls the whole submission back, which is why the caller uploads the bytes first and
+     * cleans them up when this throws.
+     */
+    public int insertAttachment(FeedbackAttachment attachment) {
+        return jdbc.sql("""
+                INSERT INTO feedback_attachment
+                    (id, feedback_id, position, filename, media_type, size_bytes, sha256,
+                     object_key, created_at)
+                VALUES
+                    (:id, :feedbackId, :position, :filename, :mediaType, :sizeBytes, :sha256,
+                     :objectKey, :createdAt)
+                """)
+                .param("id", attachment.id())
+                .param("feedbackId", attachment.feedbackId())
+                .param("position", attachment.position())
+                .param("filename", attachment.filename())
+                .param("mediaType", attachment.mediaType())
+                .param("sizeBytes", attachment.sizeBytes())
+                .param("sha256", attachment.sha256())
+                .param("objectKey", attachment.objectKey())
+                .param("createdAt", attachment.createdAt())
+                .update();
+    }
+
+    /** The attachments of one feedback, in the order they were submitted. */
+    public List<FeedbackAttachment> findAttachments(String feedbackId) {
+        return jdbc.sql("SELECT " + ATTACHMENT_COLUMNS + " FROM feedback_attachment"
+                        + " WHERE feedback_id = :feedbackId ORDER BY position")
+                .param("feedbackId", feedbackId)
+                .query((rs, rowNum) -> new FeedbackAttachment(
+                        rs.getString("id"),
+                        rs.getString("feedback_id"),
+                        rs.getInt("position"),
+                        rs.getString("filename"),
+                        rs.getString("media_type"),
+                        rs.getLong("size_bytes"),
+                        rs.getString("sha256"),
+                        rs.getString("object_key"),
+                        rs.getString("created_at")))
+                .list();
     }
 
     public int countSince(String userId, String since) {

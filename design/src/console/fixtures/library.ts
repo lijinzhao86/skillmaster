@@ -15,7 +15,7 @@ import { LADDER, type Rung } from './skill'
  */
 
 /**
- * 公开分类：平台词表，**平级 13 个词，每个 skill 最多贴一个**（2026-11-13，v65 / ADR 0191）。
+ * 公开分类：平台词表，**平级 13 个词，每个 skill 最多贴一个**（2026-11-13，v66 / ADR 0192）。
  * 前 12 个与 SkillHub 一级类目同名同义；第 13 个「AI 协作」是我们补的元技能货架。
  * 另留一个 `ops`（运维与云）作为**停用旧词**，只用于演示「停用态」；产品迁移后不再新增它。
  *
@@ -513,9 +513,9 @@ export const DISCOVER: DiscoverSkill[] = [
 ]
 
 /**
- * **v65：预期结果与属性标签的演示替身。**
+ * **v66：预期结果与属性标签的演示替身。**
  *
- * 产品里它们来自平台的标签模型（`label_definition` + `skill_label`，见 ADR 0192），
+ * 产品里它们来自平台的标签模型（`label_definition` + `skill_label`，见 ADR 0193），
  * 不写在 `SKILL.md` 里；演示件没有服务端，所以按名字挂一份。
  * 没有 profile 的 skill 就是「预期结果为空、属性为空」——结果行回退原描述，信息页不画这两块。
  */
@@ -532,7 +532,7 @@ export interface LabelValue {
   fullLabel: string
   /** 颜色与图标的类别。 */
   group: LabelGroup
-  /** 默认 true；false 是「可展示、不可筛」的词，胶囊画成不可点的样子（v65）。 */
+  /** 默认 true；false 是「可展示、不可筛」的词，胶囊画成不可点的样子（v66）。 */
   filterable?: boolean
 }
 

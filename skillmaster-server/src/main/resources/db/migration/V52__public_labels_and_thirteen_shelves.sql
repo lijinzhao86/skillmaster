@@ -225,7 +225,7 @@ COMMENT ON TABLE label_audit_sample IS
 -- ---------------------------------------------------------------------------
 -- Vocabulary seed
 -- ---------------------------------------------------------------------------
--- The authority for the values and their full meanings is docs/versions/v65-skill-labels/prd.md.
+-- The authority for the values and their full meanings is docs/versions/v66-skill-labels/prd.md.
 -- The ids are dimension:value so the wire form and the stored identity are the same string.
 
 INSERT INTO label_definition

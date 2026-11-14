@@ -269,7 +269,7 @@ describe('editing in place', () => {
 
 describe('the public list', () => {
   it('is read-only, orders by name, and offers a way to the skills', async () => {
-    /* v65: the row no longer carries a public count — the public corpus size is internal — so the
+    /* v66: the row no longer carries a public count — the public corpus size is internal — so the
        order cannot be "by count" either. 查看 skill is the row's action, and it filters the
        library by that word. */
     const { container } = await showTags(

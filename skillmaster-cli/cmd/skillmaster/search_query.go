@@ -37,7 +37,7 @@ type queryArgs struct {
 	categories   []string
 	myTags       []string
 	publicTags   []string
-	// labels are attribute definitions in their `dimension:value` form (v65), repeated and ANDed.
+	// labels are attribute definitions in their `dimension:value` form (v66), repeated and ANDed.
 	// The words are the server's vocabulary; this parser only carries them.
 	labels  []string
 	sources []string
@@ -173,7 +173,7 @@ func parseQueryArgs(args []string, search bool) (queryArgs, error) {
 			options.publicTags = append(options.publicTags, item)
 			i++
 		case "--label":
-			// **A listing is an inventory, not a question** (v65 TD §CLI): `skills list` keeps its
+			// **A listing is an inventory, not a question** (v66 TD §CLI): `skills list` keeps its
 			// shape, and the attribute filter lives on `skills search --scope library --label`.
 			if !search {
 				return queryArgs{}, usagef("skills list 不接受 --label；按属性筛库内 skill 用 skills search --scope library --label。%s", usageAt(path))

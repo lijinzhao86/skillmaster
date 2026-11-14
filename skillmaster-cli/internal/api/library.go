@@ -50,7 +50,7 @@ type TagCount struct {
 	PublicTotal int    `json:"public_total"`
 }
 
-// Label is one displayed attribute (v65): **the dimension (`Key`) and the value**, which together
+// Label is one displayed attribute (v66): **the dimension (`Key`) and the value**, which together
 // spell the filter key `Key + ":" + Value` (`runtime:python`), plus the two names the vocabulary
 // carries. **`Label` is the short name the console and the CLI list draw**; `Full` is the sentence
 // the terminal's vocabulary command may print. Neither is derived here — the words are the
@@ -62,7 +62,7 @@ type Label struct {
 	Full  string `json:"full"`
 	Group string `json:"group"`
 	// Filterable is false for a word the vocabulary shows but does not let a caller filter on.
-	// Since v65 the server always sends it; the CLI prints the word as text either way.
+	// Since v66 the server always sends it; the CLI prints the word as text either way.
 	Filterable bool `json:"filterable"`
 }
 
@@ -142,7 +142,7 @@ type QueryOptions struct {
 	MyTags     []string
 	PublicTags []string
 	Sources    []string
-	// Labels are attribute definitions in their `dimension:value` form (v65), repeated and ANDed.
+	// Labels are attribute definitions in their `dimension:value` form (v66), repeated and ANDed.
 	// **Sent as typed**: the vocabularies are the server's, and resolving a word here would be a
 	// second reader of the same table.
 	Labels []string
@@ -240,7 +240,7 @@ func (c Client) Categories(ctx context.Context) ([]CategoryRow, error) {
 	return answer.Categories, nil
 }
 
-// Labels reads the platform's attribute vocabulary (v65). The whole vocabulary arrives in one
+// Labels reads the platform's attribute vocabulary (v66). The whole vocabulary arrives in one
 // response — it is dozens of rows, not a page — and it carries no public count: corpus size is an
 // internal signal, and both the console and these commands leave it out (PRD A15).
 func (c Client) Labels(ctx context.Context) ([]LabelRow, error) {

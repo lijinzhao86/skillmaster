@@ -87,7 +87,7 @@ public record SkillMetaResponse(
            warns on every invoke/run that lands here and points at `skill copy`. */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         String offlinePendingUntil,
-        /* v65: the platform's one-line expected result and displayed attributes. Both are omitted
+        /* v66: the platform's one-line expected result and displayed attributes. Both are omitted
            when absent, so an older server and a skill with no claims look the same to a client. */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
         String outcome,
@@ -157,7 +157,7 @@ public record SkillMetaResponse(
                 null, java.util.List.of());
     }
 
-    /** v65: the same metadata plus the platform claims, assembled by M12 before the response. */
+    /** v66: the same metadata plus the platform claims, assembled by M12 before the response. */
     public static SkillMetaResponse of(SkillDetail detail, ObjectMapper objectMapper,
             boolean credentialMayWrite,
             com.skillmasterai.modules.skill.SourceService sources,

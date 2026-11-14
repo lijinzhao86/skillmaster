@@ -54,7 +54,7 @@ class TagSchemaMigrationIT {
                     rows.add(rs.getString(1));
                 }
             }
-            // v65 (ADR 0191): 13 enabled shelves first, then the 10 old words retired behind them.
+            // v66 (ADR 0192): 13 enabled shelves first, then the 10 old words retired behind them.
             // `ops` keeps its old stopped fact only in `skill_category_mapping`; the row itself is
             // retired now.
             assertThat(rows).hasSize(23).startsWith("office-efficiency:enabled")
