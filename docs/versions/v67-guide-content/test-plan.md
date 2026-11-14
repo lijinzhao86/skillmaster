@@ -130,6 +130,7 @@
 | T8 | 通过 | 42 个文件、1982 行；正文最长 97 行；`SKILL.md` 102 行（索引上限 150） |
 | T9 | 通过 | `go test ./...` 全绿；`impact.py --check` 退出 0；`generate.py --check` 无漂移；`check-file-size.mjs` 通过 |
 | T10 | 通过 | `scripts/guide-regression.sh` 六步全绿 |
+| T11 | 通过 | 线上 `skillmaster/skillmaster-guide@1.1.0`（`skmr version list --status live`）：提交 `XNGJR3PN`、`skill check` 通过、网页确认上线 |
 
 **T6 的运行间波动**：同一版多次运行里，路由稳定在 100%；作答出现过 95.1%、98% 与 100%，差异来自模型的同义改写。`must` 已按「页面里出现、模型会照抄」校准；单次运行只够看系统性缺口，跨版本比较按技术设计 Q1 跑 3 次取中位数。
 
