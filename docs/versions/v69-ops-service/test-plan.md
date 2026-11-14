@@ -105,13 +105,21 @@ docker exec skillmaster-postgres psql -U skillmaster -d postgres \
 
 | 用例 | 结果 | 证据 |
 |---|---|---|
-| T1–T3、T7–T9 | 未执行 | 需要两套栈与数据库；实现完成后按「环境与数据」跑 |
-| T4 | 部分执行 | 源码里已无 `GitHubContentSource` / `SyncPipeline` / `SyncSourcesLoader`，`skillmaster.sync.*` 已删；启动验证未跑 |
-| T5 | 未执行 | `/internal` 已删，404 未实测 |
-| T6 | 部分执行 | `InnerPlaneFilterTest` 覆盖端口隔离与令牌（6 个用例全绿）；线上私网/安全组待 T6b |
-| T10 | 未执行 | 用户可见行为快照未做 |
+| T1 | 部分执行 | 线上 ops 起来后 `/actuator/health` 为 `UP`，`docker` 健康检查 `healthy`；「停库后 `DOWN` 而不退出」未演练 |
+| T2 | 通过 | 空库 `skillmaster_ops` 首次启动时 Flyway 建了 `job_run`、`import_entry`、`job_lock`；容器重建后日志为 `Schema "public" is up to date. No migration necessary.` |
+| T3 | 通过 | 线上全量导入跑完：935 条，`created` 10、`replayed` 899、`blocked` 9、`failed` 17、`status=partial`；10 个新建 `skill_id` 在生产库 `skill` 表里逐条命中 |
+| T4 | 通过 | 源码已无 `GitHubContentSource` / `SyncPipeline` / `SyncSourcesLoader`，`skillmaster.sync.*` 已删；生产服务端以新的 `server.env`（无 `SKILLMASTER_SYNC_*`）启动并通过探针 |
+| T5 | 通过（判据修正） | `POST /internal/sync/run` 经 nginx 得到 `405`（静态目录不接受 POST），服务端 8080 上 `POST /inner/v1/sync/submissions` 为 `404`——旧入口不再存在；`sync-trigger.yml` 已不含服务端地址 |
+| T6 | 通过 | `InnerPlaneFilterTest` 6 个用例全绿；线上实测：8080 上 `/inner` → `404`，8081 上无令牌 → `401`、错令牌 → `401`、对令牌 → `415`（缺 multipart），8081 上 `/web/` → `404` |
+| T6b | 通过 | console/www/home 三个域名的 `/inner/` 均为 `404`；不在白名单的机器连 8081 超时（安全组只放行 `172.16.1.220/32`） |
+| T7 | 通过 | 同一 `(binding, revision)` 重放 899 条，全部 `replayed`，未新增版本 |
+| T8 | 部分执行 | 互斥（`409 busy`）与逐条失败原因导出未演练；`GET /runs` 空表与有记录两种状态都验证过 |
+| T9 | 部分执行 | 离线镜像 `docker load` → `docker compose up -d` → `healthy`，全程未连 Docker Hub；回滚到上一镜像未演练（首次部署，没有上一版） |
+| T10 | 部分执行 | 合入 main 的四套 workflow 全绿；用户可见行为没有做响应快照对比 |
 
-已跑过的机器检查（审计收尾时）：`skillmaster-ops` 的 `mvn test` 全绿（含 `ArchitectureTest`、`SubmissionZipTest`、迁移过来的抓取/扫描/许可证/白名单用例）；`skillmaster-server` 的 `mvn test-compile` 与 `InnerPlaneFilterTest`、`SkillmasterPropertiesTest` 通过；三条文档检查与文件行数闸全绿。带数据库的集成测试（含 `SyncTriggerDisabledIT`）与设计件/控制台的 `tsc` 未跑：本 worktree 没有测试库口令，也没有装 node_modules。
+机器检查：`skillmaster-ops` 的 `mvn test` 全绿（含 `ArchitectureTest`、`SubmissionZipTest`、迁移过来的抓取/扫描/许可证/白名单用例）；v69 合并点（`fe06361`）上服务端全量回归 775 个用例全绿；三条文档检查与文件行数闸全绿。线上部署的是 `63db993`（v69 合并点之上再合并了云端设备登录那条分支），该提交的 Server / Console / Site / CLI / Docs / Shell / Arch / Ops 八套 workflow 全绿。
+
+`failed` 的 17 条全部是 `invalid_skill_md`（来源目录里没有 `SKILL.md`，如 `browser-act/skills` 的 `solutions/*` 下若干目录），`blocked` 的 9 条全部是安全规则命中（`pipe_to_shell` 8 条、`executable_binary` 1 条）。两类都不是本版引入的行为差异。
 
 ## 已知问题
 

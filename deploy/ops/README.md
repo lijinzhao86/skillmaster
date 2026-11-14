@@ -14,6 +14,9 @@ second ECS
 ```
 
 - One container, `restart: unless-stopped`, health check on `/actuator/health`.
+- `mem_limit: 1g`. The machine is shared with MOSS (its container is capped at 2 GiB on a
+  3.5 GiB host), and the image runs `-XX:MaxRAMPercentage=70`: without a cap the JVM would size
+  its heap from the whole machine.
 - **Nothing is published on a public interface.** The compose file maps the port to the host's
   loopback, and the security group opens 22 only.
 - The image is built by CI. The host is a mainland instance and cannot reach Docker Hub, so the
@@ -26,6 +29,7 @@ second ECS
 | `/etc/skillmaster-ops/ops.env` | environment, `0600 root`, written by the operator from the variables below (the `Ops` workflow only builds and publishes the image) |
 | `/etc/skillmaster-ops/sync-sources.yml` | the import whitelist, `0644 root`, copied from this directory by hand |
 | `/opt/skillmaster-ops/compose.yaml` | the compose file, copied from this directory |
+| `/opt/skillmaster-ops/.env` | one line, `OPS_IMAGE=<tag>`: the image this host runs. Compose reads it from the project directory, so `docker compose up -d` alone is enough. It survives a `git` copy of the compose file, which is why the tag is not in that file |
 
 ## The four facts the service needs
 
