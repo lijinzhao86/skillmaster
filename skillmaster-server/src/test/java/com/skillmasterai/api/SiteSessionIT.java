@@ -26,19 +26,20 @@ import org.springframework.test.context.TestPropertySource;
  * none.
  */
 @TestPropertySource(properties = {
-        "skillmaster.site.origin=https://www.skillmasterai.com",
+        "skillmaster.site.origin=https://www.skillmasterai.com,https://home.skillmasterai.com",
         "skillmaster.site.cookie-domain=skillmasterai.com",
 })
 class SiteSessionIT extends AbstractAccountIT {
 
     private static final String SITE = "https://www.skillmasterai.com";
+    private static final String HOME = "https://home.skillmasterai.com";
     /** Registered by this test alone, so no other test's account is disturbed. */
     private static final String PHONE = "13000000077";
 
-    private HttpResponse<String> preflight(String path) {
+    private HttpResponse<String> preflight(String path, String origin) {
         return browser.request(HttpRequest.newBuilder(uri(path))
                 .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
-                .header("Origin", SITE)
+                .header("Origin", origin)
                 .header("Access-Control-Request-Method", "GET"));
     }
 
@@ -64,16 +65,26 @@ class SiteSessionIT extends AbstractAccountIT {
 
     @Test
     void theSiteMayReadTheSessionButNothingElseOnTheWebPlane() throws Exception {
-        HttpResponse<String> allowed = preflight("/web/session");
+        // Both names serve the landing page during the handover (ADR 0190); the response echoes
+        // whichever one asked.
+        for (String origin : new String[] {SITE, HOME}) {
+            HttpResponse<String> allowed = preflight("/web/session", origin);
 
-        assertThat(allowed.headers().firstValue("Access-Control-Allow-Origin"))
-                .contains(SITE);
-        assertThat(allowed.headers().firstValue("Access-Control-Allow-Credentials"))
-                .contains("true");
+            assertThat(allowed.headers().firstValue("Access-Control-Allow-Origin"))
+                    .as("the rule names %s", origin)
+                    .contains(origin);
+            assertThat(allowed.headers().firstValue("Access-Control-Allow-Credentials"))
+                    .contains("true");
+        }
 
-        HttpResponse<String> denied = preflight("/web/keys");
+        HttpResponse<String> denied = preflight("/web/keys", SITE);
         assertThat(denied.headers().firstValue("Access-Control-Allow-Origin"))
                 .as("only /web/session is registered — a wider rule would be a wider contract")
+                .isEmpty();
+
+        HttpResponse<String> stranger = preflight("/web/session", "https://example.com");
+        assertThat(stranger.headers().firstValue("Access-Control-Allow-Origin"))
+                .as("the list is explicit — a name outside it gets no answer it can read")
                 .isEmpty();
     }
 
@@ -91,13 +102,15 @@ class SiteSessionIT extends AbstractAccountIT {
     void theSessionReadAnswersTheAccountToACrossOriginCaller() throws Exception {
         registerAndSignIn("site-read", "13000000078");
 
-        HttpResponse<String> response = browser.request(
-                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/web/session"))
-                        .GET()
-                        .header("Origin", SITE));
+        for (String origin : new String[] {SITE, HOME}) {
+            HttpResponse<String> response = browser.request(
+                    HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/web/session"))
+                            .GET()
+                            .header("Origin", origin));
 
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).contains("\"username\"");
-        assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).contains(SITE);
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).contains("\"username\"");
+            assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).contains(origin);
+        }
     }
 }

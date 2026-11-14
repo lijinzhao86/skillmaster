@@ -87,4 +87,11 @@
 | `FEEDBACK_SENSITIVE` | `feedback_sensitive` |
 | `FEEDBACK_THROTTLED` | `feedback_throttled` |
 | `FEEDBACK_NOT_FOUND` | `feedback_not_found` |
+| `FEEDBACK_ATTACHMENT_TOO_MANY` | `feedback_attachment_too_many` |
+| `FEEDBACK_ATTACHMENT_TOO_LARGE` | `feedback_attachment_too_large` |
+| `FEEDBACK_ATTACHMENT_TOTAL_TOO_LARGE` | `feedback_attachment_total_too_large` |
+| `FEEDBACK_ATTACHMENT_TYPE` | `feedback_attachment_type` |
+| `FEEDBACK_ATTACHMENT_EMPTY` | `feedback_attachment_empty` |
+| `FEEDBACK_ATTACHMENT_UNREADABLE` | `feedback_attachment_unreadable` |
+| `FEEDBACK_ATTACHMENT_UNAVAILABLE` | `feedback_attachment_unavailable` |
 | `INTERNAL_ERROR` | `internal_error` |

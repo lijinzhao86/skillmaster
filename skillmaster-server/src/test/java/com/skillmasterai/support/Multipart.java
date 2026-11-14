@@ -67,6 +67,20 @@ public final class Multipart {
     }
 
     public HttpRequest.BodyPublisher publisher() {
+        return HttpRequest.BodyPublishers.ofByteArray(completeBody());
+    }
+
+    /**
+     * The same body with no declared length, so the JDK client sends it chunked — the shape the
+     * real CLI uses (it streams through {@code io.Pipe}).
+     */
+    public HttpRequest.BodyPublisher streamingPublisher() {
+        byte[] complete = completeBody();
+        return HttpRequest.BodyPublishers.ofInputStream(
+                () -> new java.io.ByteArrayInputStream(complete));
+    }
+
+    private byte[] completeBody() {
         ByteArrayOutputStream complete = new ByteArrayOutputStream(body.size() + 128);
         complete.writeBytes(body.toByteArray());
         if (!hasName && !omitName) {
@@ -75,7 +89,7 @@ public final class Multipart {
                     + "test version" + CRLF).getBytes(StandardCharsets.UTF_8));
         }
         complete.writeBytes(("--" + boundary + "--" + CRLF).getBytes(StandardCharsets.UTF_8));
-        return HttpRequest.BodyPublishers.ofByteArray(complete.toByteArray());
+        return complete.toByteArray();
     }
 
     private void write(String text) {

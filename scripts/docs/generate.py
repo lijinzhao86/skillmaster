@@ -182,7 +182,8 @@ def gen_limits() -> str:
             "modules/blob/BlobSettings.java；skillmaster-server/src/main/java/"
             "com/skillmasterai/common/SkillFieldLimits.java；skillmaster-server/src/main/java/"
             "com/skillmasterai/modules/feedback/FeedbackSafety.java；skillmaster-server/src/main/"
-            "java/com/skillmasterai/usecase/SubmitFeedbackUseCase.java"
+            "java/com/skillmasterai/modules/feedback/FeedbackAttachmentSafety.java；"
+            "skillmaster-server/src/main/java/com/skillmasterai/usecase/SubmitFeedbackUseCase.java"
         ),
         "# 上限（生成）\n",
         "**服务端**以这些常量为准。CLI 与网页各自保留了一份同值或接近的常量（不由这里读取，"
@@ -275,6 +276,42 @@ def gen_limits() -> str:
         f"| `SubmitFeedbackUseCase.MAX_PER_HOUR` | `{per_hour.group(1)}` | "
         f"{evaluate(per_hour.group(1))} 条/小时 |"
     )
+
+    # v65: the attachment rules. The type allowlist is prose in the TD; the four counts are the
+    # contract a client has to mirror, so they are generated rather than copied.
+    attachment_safety = read(SERVER / "modules/feedback/FeedbackAttachmentSafety.java")
+    attachment_names = (
+        "MAX_ATTACHMENTS",
+        "MAX_IMAGE_BYTES",
+        "MAX_VIDEO_BYTES",
+        "MAX_TOTAL_BYTES",
+    )
+    attachment_limits = {}
+    for name in attachment_names:
+        match = re.search(rf"{name}\s*=\s*([\d_L\s*]+);", attachment_safety)
+        if match is None:
+            fail(f"反馈附件的上限解析不到：FeedbackAttachmentSafety.{name}")
+        attachment_limits[name] = match.group(1).strip()
+    lines.append("")
+    lines.append("## 反馈附件的上限\n")
+    lines.append(
+        "`skmr feedback send --attach` 的四个上限。CLI 保留同值常量用于发送前失败，"
+        "服务端仍是闸；数值改动是改对外契约，按大版本走（ADR 0191）。\n"
+    )
+    lines.append("| 常量 | 原始表达式 | 值 |")
+    lines.append("|---|---|---|")
+    for name, expression in attachment_limits.items():
+        value = evaluate(expression)
+        if value is None:
+            fail(f"无法求值 FeedbackAttachmentSafety.{name} = {expression}")
+        rendered = (
+            f"{value} 个/条"
+            if name == "MAX_ATTACHMENTS"
+            else f"{value} 字节（{human(value)}）"
+        )
+        lines.append(
+            f"| `FeedbackAttachmentSafety.{name}` | `{expression}` | {rendered} |"
+        )
     lines.append("")
     return "\n".join(lines)
 
