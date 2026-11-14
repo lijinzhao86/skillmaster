@@ -1,4 +1,4 @@
-# 找一个 skill 来用
+# 找与列：搜索、浏览我的库
 
 > `skmr skills search "<一句话说清要做的事>"` 按意思找。**默认只搜自己的库**——搜不到某个公开 skill，通常是因为它还没进你的库，不是因为它不存在。
 
@@ -10,7 +10,7 @@
 
 列表里的每一条都只有一句简介，**列出来不等于用得上**。只留正在教「这一步要做的事」的那几条；一条都不留，就换个说法再搜一次。
 
-## 加载
+## 加载这个 skill
 
 ```bash
 skmr skill invoke <命名空间>/<名字>
@@ -19,6 +19,19 @@ skmr skill invoke <命名空间>/<名字>
 - **完成信号**：输出开头带着这个 skill 的地址和版本——它已经生效了，并且这次用到的就是那一版。
 
 之后照它说的做，包括它给出的命令。
+
+## 列出我的库
+
+```bash
+skmr skills list
+skmr skills list --source shared
+skmr skills list --show draft
+skmr skills list --category 文档工具 --public-tag pdf
+```
+
+按来源（`created` / `shared` / `joined`）、状态（`live` / `draft` / `offline` / `pending` / `deleted` / `all`）、分类、标签、名字筛。完整参数见 `skmr skills list --help`。
+
+- **完成信号**：一行一条，末尾是总数。
 
 ## 网页上发现公开 skill
 
@@ -37,10 +50,10 @@ skmr skill join <地址> --yes
 | 搜不到 | 先看是不是没进库：加 `--scope public` 搜公开库；搜到了就 `skmr skill join <地址> --yes` 收进来 |
 | 搜到很多不相关的 | 用 `--category` / `--public-tag` 收窄，或者把查询写得更具体 |
 | 一个都没搜到 | 换说法再搜一次；还是没有，说明这件事不需要 skill，按你自己的能力做 |
-| 已知地址，只想读里面某个文件 | 不用搜，直接 `skmr skill read`，见 [读一个 skill 里的文件](read-files.md) |
+| 已知地址，只想读里面某个文件 | 不用搜，直接 `skmr skill read`；读 `SKILL.md` 要先 `invoke` 过或写版本，见 [读一个 skill 里的文件](read-files.md) |
 
 ## 搜索时要注意的
 
 - **搜索是按意思的**，写成一整句自然语言比堆关键词准；要按字面找，加 `--semantic=false`。
 - **公开库不是默认范围。** 忘了这一点，会用「搜不到」误判「不存在」。
-- **加载过一次不等于加载着。** 它用的是你上次加载时定下的那一版，不是当前线上。
+- **加载后会一直用那一版，直到重新 `invoke`。** 裸地址的读取不会自动跟线上更新。
