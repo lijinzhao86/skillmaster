@@ -1,0 +1,25 @@
+# The operations service: one container on the second ECS.
+#
+# The port is published on the host's loopback only. Inside its own network namespace the
+# service binds 127.0.0.1, which the host cannot reach without the mapping; with the
+# mapping it answers on the host's loopback and nowhere else. CI reaches it over SSH,
+# the same way it used to reach the server's trigger.
+services:
+  ops:
+    image: ${OPS_IMAGE:skillmaster-ops:local}
+    container_name: skillmaster-ops
+    restart: unless-stopped
+    network_mode: bridge
+    ports:
+      - "127.0.0.1:8090:8090"
+    env_file:
+      - /etc/skillmaster-ops/ops.env
+    volumes:
+      # The whitelist is a host file, not an image layer: changing a source must not
+      # need a rebuild.
+      - /etc/skillmaster-ops/sync-sources.yml:/etc/skillmaster-ops/sync-sources.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/actuator/health | grep -q UP"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

@@ -140,7 +140,7 @@
 - T12：`SkillSubmitIT#submittingOverADeletedNameCreatesANewSkillAndLeavesTheTombstoneAlone`、`SkillCopyIT#aDeletedNameIsFreeAgain`、`SkillTransferIT#aDeletedNameIsFreeAgain` **通过**；代码与错误表里已无 `skill_deleted`。
 - T14：服务端 `JoinSkillLibraryUseCase` 返回 409 `skill_offline_pending` 且 `details[0].issue` 是日期，由 T6 用例断言（用库外账号发起）。
 - T13：逐行核对 `prd.md` §控制台操作与 CLI 对应，「只在控制台」的行都在 §不做里写了理由；本版新增的每一处界面动作都有命令或例外记录。**通过**。
-- 同步侧行为随 ADR 0183 改变：`SyncPipelineIT#aSoftDeletedSkillIsCreatedAgainByTheNextSync` 记录「下一次同步会重新创建」，不再跳过。
+- 同步侧行为随 ADR 0183 改变：`导入端到端用例#aSoftDeletedSkillIsCreatedAgainByTheNextSync` 记录「下一次同步会重新创建」，不再跳过。
 
 **CLI**（`skillmaster-cli/`）：`go build ./...` 与 `go test ./...` **全部通过**。`--show pending` 发到线上（`TestListSendsThePendingShowValue`）、`--verbose` 与 `skill show` 的状态带日期（`main_test.go` 的表与 `TestSkillShowNamesTheRampAndItsDate`）、`invoke` 在下线中仍成功并警告（`TestInvokeOnARampLoadsAndWarns`；`run` 复用同一个 `offlinePendingNote`）、`join` 的 `skill_offline_pending` 映射带可执行地址（`TestJoinAndLeaveRefusalsAreNamedByCode` 与错误夹具）、`online` 在下线中打开页面而 `offline` 拒绝（`TestARampIsOpenedByOnlineAndRefusedByOffline`）、`restore` 的新地址回执与 `skill delete` 的成功回执（「名字已释放」与可执行的 `restore` 命令）都有单测。`skill_gone` 的句子在 `ServerError` 层，`show` / `invoke` / `run` 都拿到中文。
 
@@ -155,4 +155,4 @@
 无本版范围内未修缺陷。
 
 - `home-check` 的「隐私政策：有生效日期与版本」在 `main` 上就失败，与本版无关，不计入。
-- 同步侧在官方命名空间重新创建已删除的 skill 是 ADR 0183 的直接后果，已在 `SyncPipelineIT` 中固定；若产品以后希望「删除即永久」需要另开决策。
+- 同步侧在官方命名空间重新创建已删除的 skill 是 ADR 0183 的直接后果，已在 `导入端到端用例` 中固定；若产品以后希望「删除即永久」需要另开决策。

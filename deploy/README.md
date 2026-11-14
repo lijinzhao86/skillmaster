@@ -43,7 +43,6 @@ a custom domain, so nginx is the front door and the bucket is the origin — see
 | `/opt/skillmaster/releases/<sha>/app.jar` | one release, kept so it can be returned to |
 | `/opt/skillmaster/current` | a symlink to the release in service |
 | `/etc/skillmaster/server.env` | the environment, `0600 root`, **rendered by the deploy workflow** |
-| `/etc/skillmaster/sync-sources.yml` | the sync whitelist, `0644 root`, **copied from [`sync-sources.yml`](sync-sources.yml) by the deploy workflow** |
 | `/etc/skillmaster/tls/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/skillmasterai.com/` |
 | `/etc/skillmaster/tls-dl/fullchain.pem`, `privkey.pem` | symlinks into `/etc/letsencrypt/live/dl.skillmasterai.com/` |
 | `/etc/skillmaster/acme/{auth,cleanup}.sh` | the DNS-01 hooks, copied from [`acme/`](acme/) |
@@ -96,89 +95,23 @@ Locally the sealer defaults to `local` and needs a 32-byte key
 (`openssl rand -base64 32` into `SKILLMASTER_SECRET_LOCAL_KEY`); see the repository's
 [`.env.example`](../.env.example).
 
-## Open-source sync (v50)
+## Open-source import (v50 -> v69)
 
-The server can pull skills from a hand-maintained GitHub whitelist into the official namespace,
-as **drafts only**; publishing stays manual. It is off unless the repository variable says
-otherwise.
+The import no longer runs here. Since v69 it is a separate service on the second machine
+([ADR 0199](../docs/decisions/0199-ops-runs-as-its-own-service-and-database.md)); its runbook,
+environment and rollback are in [`ops/README.md`](ops/README.md).
 
-| Setting | Where | Value |
-|---|---|---|
-| `SKILLMASTER_SYNC_ENABLED` | variable | `true` to turn it on |
-| `SKILLMASTER_SYNC_SOURCES_FILE` | variable | `file:/etc/skillmaster/sync-sources.yml` |
-| `SKILLMASTER_SYNC_CRON` | variable | optional; unset means the application default — see [`config.md`](../docs/current/config.md), always read as Beijing time. The value is quoted in `server.env` because it contains spaces; the deploy job rejects one that is not six fields, or contains a quote or a newline |
-| `SKILLMASTER_GITHUB_TOKEN` | secret | required when enabled; raises the API allowance to 5000/h |
-| `SKILLMASTER_SYNC_TRIGGER_TOKEN` | secret | optional for the endpoint (it answers 404 without a token), but the Sync trigger workflow fails before calling it when the secret is unset |
-| `SYNC_TRIGGER_TIMEOUT_MINUTES` | variable | optional; how long the Sync trigger workflow waits for the run to answer, in minutes — default 60, range 2–350. curl's deadline is derived from it and is 30 seconds shorter, so curl gives its answer before anything else ends the step; the job's own ceiling stays at GitHub's six-hour maximum, because a job-level expression is read before any step runs — a bad value would fail the job with no explanation |
-| `SKILLMASTER_SYNC_MAX_REPO_BYTES` | variable | optional; the ceiling on one repository archive, as a positive whole number of bytes of at most 15 digits — unset means the application default (see [`config.md`](../docs/current/config.md)). The largest source in the 2026-11-07 whitelist is 232 MB, so importing it needs this raised past 64 MB |
-| `SKILLMASTER_SYNC_MAX_UNPACKED_BYTES` | variable | optional; the ceiling on one archive unpacked, as a positive whole number of bytes of at most 15 digits — unset means the application default. That same source unpacks to about 280 MB, past the default 256 MB |
+What stays on this machine is the **receiving end**: `POST /inner/v1/sync/submissions` on the
+private connector (VPC address `SKILLMASTER_INNER_ADDRESS`, port 8081, token
+`SKILLMASTER_INNER_TOKEN`), which turns an archive back into a draft through the same submission
+code a person's upload uses. Both variables are required by the deploy workflow; a blank address
+means the connector is never opened. The whitelist lives at
+[`ops/sync-sources.yml`](ops/sync-sources.yml) (the root `sync-sources.yml` is now a stale copy
+and no longer read by anything). ops has its own GitHub token; the server keeps
+`SKILLMASTER_GITHUB_TOKEN` because v49 still refreshes source signals through it.
 
-`SKILLMASTER_SYNC_MAX_FILES`, `SKILLMASTER_SYNC_MAX_FILE_BYTES` and
-`SKILLMASTER_SYNC_MAX_TOTAL_BYTES` are read by the server but are **not** wired into the
-deployment variables yet: editing `server.env` on the host works only until the next deploy
-rewrites the file. Change the defaults in `application.yml` and deploy, or add them to the
-workflow first.
-
-**The sources file is deployed from the repository**, like `server.env`: change
-[`sync-sources.yml`](sync-sources.yml) and deploy. The workflow copies it to
-`/etc/skillmaster/sync-sources.yml` (`root:root`, `0644`, readable by the service user) before switching releases, so a copy
-edited on the host does not survive the next deploy. The deploy job also reads `server.env` before
-switching and fails by name when the configured `file:` path is missing or not readable by the
-`skillmaster` user. The path must be absolute; a bare path (no `file:`) is rejected, and
-`classpath:` is rejected because the copy inside the jar ships empty.
-
-The file is read at **startup**, so a whitelist change takes effect after the deployment restarts
-the service; there is no live reload.
-
-Before changing either file the workflow keeps a `.previous` copy. A failed deploy restores both
-(and removes a file that did not exist before), including when the service does not answer after
-the switch; a successful deploy deletes the backups so an old password or token is not left on the
-host.
-
-An entry may also name the license file explicitly (`license: legal/LICENSE-MIT`) when the
-repository uses a non-standard name or keeps it outside the skill directory's ancestry. The named
-file must exist in the commit being synced; otherwise the entry is blocked with
-`license_path_missing` rather than syncing as "未声明". Without `license`, the nearest
-`LICENSE` / `LICENSE.MD` / `LICENSE.TXT` / `COPYING` / `NOTICE` on the ancestry is used.
-The path is exact and case-sensitive: no leading `/`, `./` or `..` segment, no backslash, no empty
-segment and no trailing `/`.
-
-Changing `license:` only affects revisions that have not been synced yet. A skill already synced
-at the current upstream commit is skipped before download, so correcting its license needs a new
-upstream commit (or a manual fix); the next scheduled run will not rebuild the draft.
-
-**There is no run at startup or after a deploy.** The scheduled run is the cron above; an
-immediate run is `Actions → Sync trigger → Run workflow`, which SSHes to the host and calls the
-loopback endpoint. Trigger and schedule share one guard: a trigger that lands while the scheduled
-run is in progress gets 409 `sync_already_running` (the scheduled job logs
-`sync run skipped: already_running`).
-
-**The deployed file is the 2026-11-07 full import plus later additions.** The file itself lists the
-repositories and configured lines; the naming plan, prefixes and the repositories left out are in
-its comments. How many skills those lines expand to is a run result, not a number kept here. A
-first run turns those addresses into **drafts** in the official namespace and publishes nothing —
-as many as pass the gates, which the run's own counts report. Follow it in the journal;
-`sync run expanding` marks the start of expansion (one source call per `select: all` entry), then a
-progress line every ten skills and one when the run ends:
-
-```bash
-journalctl -u skillmaster --since '15 min ago' | grep -E 'sync (run|progress) '
-```
-
-One line per skill is also written (`sync entry=`); it is what to read when a specific entry needs
-its reason:
-
-```bash
-journalctl -u skillmaster --since '15 min ago' | grep 'sync entry='
-```
-
-A first import outlives a daily increment. That is why the wait is the `SYNC_TRIGGER_TIMEOUT_MINUTES`
-variable rather than a fixed number, and why the Sync trigger workflow follows the run's
-`sync run expanding` / `sync run started` / `sync progress done=` / `sync run finished` lines in
-its own log while the request is open — the endpoint itself answers once, at the end. To retry after fixing a whitelist
-entry, edit the file and trigger again; entries already synced at their current revision are
-skipped before download, while the failed entry is fetched again.
-
+The old sync variables and `skillmaster.sync.*` keys are gone — a leftover in `server.env` is
+ignored, not read.
 ## Plugins the database needs
 
 Migrations are applied by the application's account, which on RDS is an ordinary account.

@@ -13,7 +13,7 @@
 | 3 | 界面权威 | `design/src/`；构建产物是 `design/skillmaster-首页演示.html` 与 `design/skillmaster-控制台演示.html`（入库）。`artifacts/design/` 是检查脚本的截图，被 gitignore，不入库、不作源 | 在 `design/` 跑 `npm run build:home && npm run build:console` 之后，`git status` 对这两个 html 是干净的。**过程规则见 [`design.md`](design.md)** | 机 |
 | 4 | 验证命令 | 见下面「命令表」 | 每条在各自目录里跑得起来 | 机 |
 | 5 | 环境 | Docker Postgres，容器 `skillmaster-postgres`（`compose.yaml`）；每个 worktree 一个库 | 容器在跑、库连得上 | 机 |
-| 6 | 编号 | 版本 `vN`；ADR 四位递增；Flyway `V{N}` | 能算出下一个空号，且不与主干 + 活动分支撞 | 机 |
+| 6 | 编号 | 版本 `vN`；ADR 四位递增；Flyway `V{N}` | **定号前**跑 `python3 scripts/docs/next_number.py`：它扫所有工作区（含未提交）与本地 / `origin` 分支，列出主干之外的占用和下一个空号；`--claim vNN` / `--claim NNNN` / `--claim VNN` 返回非 0 就是已被别人占了。**只看 `main` 或只看自己工作区都会撞号**——版本号已经因此撞过两次 | 机 |
 | 7 | 交付边界 | 一个版本一个绿 PR；合并、撞号改号、集成后重出、全量回归、部署归集成与发布 | —— | 人 |
 
 ### 命令表（第 4 条）

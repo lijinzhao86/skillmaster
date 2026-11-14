@@ -1,3 +1,5 @@
+# STALE since v69: the live copy is deploy/ops/sync-sources.yml. This file is kept only
+# because the v50 documents cite it; nothing reads it and the server workflow no longer ships it.
 # v50 同步来源白名单（2026-11-07 首次全量导入，之后有增补）
 #
 # 本文件能直接得到的是仓库数与 `configured` 行数；展开后的 `entries`（select: all 的 skill 数）

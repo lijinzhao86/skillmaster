@@ -56,7 +56,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties("skillmaster")
 public record SkillmasterProperties(String publicBaseUrl, Search search,
         Account account, SessionPolicy sessions, Sms sms, Tokens tokens, DiffLimits diff,
-        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Sync sync, Secret secret,
+        ApiKeyPolicy apiKeys, BlobSettings blobs, Welcome welcome, Inner inner, Secret secret,
         ArchiveSettings archive) {
 
     public SkillmasterProperties {
@@ -77,7 +77,7 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
         Objects.requireNonNull(blobs, "skillmaster.blobs is required");
         Objects.requireNonNull(apiKeys, "skillmaster.api-keys is required");
         Objects.requireNonNull(welcome, "skillmaster.welcome is required");
-        Objects.requireNonNull(sync, "skillmaster.sync is required");
+        Objects.requireNonNull(inner, "skillmaster.inner is required");
         Objects.requireNonNull(secret, "skillmaster.secret is required");
         Objects.requireNonNull(archive, "skillmaster.archive is required");
     }
@@ -187,18 +187,10 @@ public record SkillmasterProperties(String publicBaseUrl, Search search,
      * exhaust. {@code concurrency} bounds fetch/scan work only — writes stay serial because a
      * submission takes a table lock.
      */
-    public record Sync(
-            @DefaultValue("false") boolean enabled,
-            @DefaultValue("classpath:sync-sources.yml") String sourcesFile,
-            @DefaultValue String githubToken,
-            @DefaultValue String triggerToken,
-            @DefaultValue("5") int concurrency,
-            @DefaultValue("0 0 2 * * *") String cron,
-            @DefaultValue("67108864") long maxRepoBytes,
-            @DefaultValue("512") int maxFiles,
-            @DefaultValue("104857600") long maxFileBytes,
-            @DefaultValue("104857600") long maxTotalBytes,
-            @DefaultValue("268435456") long maxUnpackedBytes) {
+    public record Inner(
+            @DefaultValue String address,
+            @DefaultValue("8081") int port,
+            @DefaultValue String token) {
     }
 
     /**

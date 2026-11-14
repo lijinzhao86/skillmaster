@@ -285,15 +285,12 @@ jobs:
           # is required only when the switch is on (checked below, by name).
           RETRIEVAL_ENABLED: ${{ vars.SKILLMASTER_RETRIEVAL_ENABLED }}
           DASHSCOPE_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
-          # v50. Off unless the variable says otherwise; the token and the sources file are
-          # required only when it is on (checked below, by name).
-          SYNC_ENABLED: ${{ vars.SKILLMASTER_SYNC_ENABLED }}
-          SYNC_SOURCES_FILE: ${{ vars.SKILLMASTER_SYNC_SOURCES_FILE }}
-          SYNC_CRON: ${{ vars.SKILLMASTER_SYNC_CRON }}
-          SYNC_MAX_REPO_BYTES: ${{ vars.SKILLMASTER_SYNC_MAX_REPO_BYTES }}
-          SYNC_MAX_UNPACKED_BYTES: ${{ vars.SKILLMASTER_SYNC_MAX_UNPACKED_BYTES }}
+          # v69. The service-to-service plane. The address is the instance's VPC address; both
+          # values are required here because the import cannot reach the server without them.
+          INNER_ADDRESS: ${{ vars.SKILLMASTER_INNER_ADDRESS }}
+          INNER_TOKEN: ${{ secrets.SKILLMASTER_INNER_TOKEN }}
+          # Still the server's own: v49 refreshes source signals through it.
           GITHUB_TOKEN: ${{ secrets.SKILLMASTER_GITHUB_TOKEN }}
-          SYNC_TRIGGER_TOKEN: ${{ secrets.SKILLMASTER_SYNC_TRIGGER_TOKEN }}
           # v52. The sealer is a variable and must say `huawei` here (`aliyun` is the kept
           # alternative); the CMK, its region and the identity that may use it are the secrets.
           # `local` is refused on the prod profile.
@@ -311,7 +308,7 @@ jobs:
           missing=""
           for name in DB_URL DB_USER DB_PASSWORD PUBLIC_BASE_URL COOKIE_DOMAIN SITE_ORIGIN \
                       PHONE_HMAC_KEY PHONE_ENC_KEY SMS_KEY_ID SMS_KEY_SECRET SMS_SIGN_NAME SMS_TEMPLATE_CODE \
-                      SECRET_SEALER SECRET_KMS_KEY_ID SECRET_KMS_REGION; do
+                      SECRET_SEALER SECRET_KMS_KEY_ID SECRET_KMS_REGION INNER_ADDRESS INNER_TOKEN; do
             if [ -z "${!name}" ]; then missing="$missing $name"; fi
           done
           if [ -n "$missing" ]; then
@@ -328,23 +325,6 @@ jobs:
             exit 1
           fi
 
-          # Open-source sync is off unless the variable says otherwise (v50). The three settings
-          # checked together are the ones its startup validation refuses to start without, so a
-          # deploy that would half-enable it fails here instead.
-          SYNC_ENABLED="${SYNC_ENABLED:-false}"
-          # Spring's @ConditionalOnProperty compares the value with `havingValue` using
-          # equalsIgnoreCase, so "TRUE" enables sync but "yes"/"on"/"1" do not. Mirror exactly
-          # that: normalise case, do not treat other truthy spellings as enabled — doing so would
-          # demand a token for a configuration the application leaves off.
-          SYNC_ENABLED_NORMALIZED="$(printf '%s' "$SYNC_ENABLED" | tr '[:upper:]' '[:lower:]')"
-          if [ "$SYNC_ENABLED_NORMALIZED" = "true" ]; then
-            for name in SYNC_SOURCES_FILE GITHUB_TOKEN; do
-              if [ -z "${!name}" ]; then
-                echo "SKILLMASTER_SYNC_ENABLED is true but $name is not set" >&2
-                exit 1
-              fi
-            done
-          fi
           # The cron expression has no default here: when the variable is unset the line is not
           # written at all, so the application's own default in application.yml applies (the
           # value is in config.md). Writing a duplicated literal here would silently win over it.
@@ -415,10 +395,9 @@ jobs:
             "SKILLMASTER_SMS_LOG_CODES=false" \
             "SKILLMASTER_RETRIEVAL_ENABLED=$RETRIEVAL_ENABLED" \
             "DASHSCOPE_API_KEY=$DASHSCOPE_KEY" \
-            "SKILLMASTER_SYNC_ENABLED=$SYNC_ENABLED" \
-            "SKILLMASTER_SYNC_SOURCES_FILE=$SYNC_SOURCES_FILE" \
             "SKILLMASTER_GITHUB_TOKEN=$GITHUB_TOKEN" \
-            "SKILLMASTER_SYNC_TRIGGER_TOKEN=$SYNC_TRIGGER_TOKEN" \
+            "SKILLMASTER_INNER_ADDRESS=$INNER_ADDRESS" \
+            "SKILLMASTER_INNER_TOKEN=$INNER_TOKEN" \
             > server.env
           # OSS lines exist only when the switch is on, so an unset variable keeps the
           # application defaults (every blob in PostgreSQL, archive disabled) rather than writing
@@ -438,54 +417,6 @@ jobs:
             fi
           fi
 
-          # A cron expression contains spaces, so the value is quoted: both systemd's
-          # EnvironmentFile and `. server.env` strip the quotes and keep the spaces, while an
-          # unquoted line would be sourced as `KEY=0` followed by the command `0`.
-          if [ -n "${SYNC_CRON:-}" ]; then
-            case "$SYNC_CRON" in
-              *"'"*|*$'\n'*)
-                echo "SKILLMASTER_SYNC_CRON must not contain quotes or newlines" >&2
-                exit 1 ;;
-            esac
-            # Spring's cron has six fields (second minute hour day month weekday). A five-field
-            # crontab expression is the common mistake; refuse it here instead of starting the
-            # service and rolling back after the health probe.
-            if [ "$(printf '%s' "$SYNC_CRON" | awk '{print NF}')" != "6" ]; then
-              echo "SKILLMASTER_SYNC_CRON must have six fields (second minute hour day month weekday)" >&2
-              exit 1
-            fi
-            printf '%s\n' "SKILLMASTER_SYNC_CRON='$SYNC_CRON'" >> server.env
-          fi
-          # Optional size ceilings for one synced repository. Unset leaves the application default
-          # (see config.md); a set one is written as given, so 232 MB repositories can be allowed
-          # without editing the jar's defaults.
-          for pair in "SYNC_MAX_REPO_BYTES:SKILLMASTER_SYNC_MAX_REPO_BYTES" \
-                      "SYNC_MAX_UNPACKED_BYTES:SKILLMASTER_SYNC_MAX_UNPACKED_BYTES"; do
-            name="${pair%%:*}"
-            key="${pair#*:}"
-            value="${!name:-}"
-            if [ -n "$value" ]; then
-              # Fifteen digits is 999 TB: anything longer is a typo, and a value past the JVM's
-              # long range would only fail later, at startup.
-              if [ "${#value}" -gt 15 ]; then
-                echo "$key is too large to be a byte count, got '$value'" >&2
-                exit 1
-              fi
-              case "$value" in
-                *[!0-9]*)
-                  echo "$key must be a whole number of bytes, got '$value'" >&2
-                  exit 1
-                  ;;
-                *[!0]*)
-                  ;;
-                *)
-                  echo "$key must be greater than zero, got '$value'" >&2
-                  exit 1
-                  ;;
-              esac
-              printf '%s\n' "$key=$value" >> server.env
-            fi
-          done
           chmod 600 server.env
 
       - name: Deploy
@@ -531,7 +462,7 @@ jobs:
           # later restore that stale file over the current one.
           ssh "${opts[@]}" "$target" '
             set -e
-            for f in server.env sync-sources.yml; do
+            for f in server.env; do
               if [ -f /etc/skillmaster/$f ]; then
                 cp -p /etc/skillmaster/$f /etc/skillmaster/$f.previous
               fi
@@ -548,7 +479,7 @@ jobs:
             # worse than knowing which half did not come back.
             if ! ssh "${opts[@]}" "$target" '
               failed=0
-              for f in server.env sync-sources.yml; do
+              for f in server.env; do
                 if [ -f /etc/skillmaster/$f.previous ]; then
                   cp -p /etc/skillmaster/$f.previous /etc/skillmaster/$f \
                     || { echo "restoring $f failed" >&2; failed=1; }
@@ -570,13 +501,6 @@ jobs:
           scp "${opts[@]}" server.env "$target:/etc/skillmaster/server.env"
           ssh "${opts[@]}" "$target" \
             'chown root:root /etc/skillmaster/server.env && chmod 600 /etc/skillmaster/server.env'
-
-          # v50: the whitelist is part of the deployment, like server.env. It is not a secret, so
-          # it is readable by the service user — the JVM, not root, reads it at startup.
-          scp "${opts[@]}" deploy/sync-sources.yml \
-            "$target:/etc/skillmaster/sync-sources.yml"
-          ssh "${opts[@]}" "$target" \
-            'chown root:root /etc/skillmaster/sync-sources.yml && chmod 0644 /etc/skillmaster/sync-sources.yml'
 
           # Read the two keys with grep, never by sourcing the file: server.env also holds
           # passwords and tokens that are not shell-quoted, and `.` would evaluate them.
@@ -761,7 +685,7 @@ jobs:
           # the previous database password and tokens on the host after every release. They are
           # recreated from the files in service by the next deploy, before it changes anything.
           ssh "${opts[@]}" "$target" \
-            'rm -f /etc/skillmaster/server.env.previous /etc/skillmaster/sync-sources.yml.previous' \
+            'rm -f /etc/skillmaster/server.env.previous' \
             || echo "::warning::could not remove the previous configuration backups" >&2
 
           # Only a deploy that answered earns the right to prune: deleting an older
