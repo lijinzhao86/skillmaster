@@ -10,7 +10,7 @@
 
 ## 验收标准
 
-Guide 的漂移检查与本地链接检查全绿，42 题 Guide 评测达到路由 ≥90%、作答 ≥90%。完整验收见 [`prd.md`](prd.md) §验收与指标。
+Guide 的漂移检查与本地链接检查全绿，43 题 Guide 评测达到路由、作答、通过各 ≥90%。完整验收见 [`prd.md`](prd.md) §验收与指标。
 
 **成立条件**：验收 #1、#2、#6 任一条不满足就不算交付（退役命令清零、四个必需入口、评测达标）。
 
@@ -36,7 +36,7 @@ Guide 的漂移检查与本地链接检查全绿，42 题 Guide 评测达到路�
 | [`prd.md`](prd.md) | 用户与场景、范围、CLI 对应、验收与指标、依赖与前置 |
 | [`technical-design.md`](technical-design.md) | 架构、页面模型、索引预算、评测口径、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果、已知问题 |
-| [`known-issues.md`](known-issues.md) | 本版范围外、留给下一版的 CLI 缺陷 |
+| [`known-issues.md`](known-issues.md) | 本版范围外、留给下一版的 CLI 缺陷（帮助文案两处） |
 
 ## 开放问题
 

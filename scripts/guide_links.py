@@ -5,10 +5,11 @@ What it proves, one line per check:
   - every page is reachable from SKILL.md in one hop (B1);
   - every relative link resolves (E3's local half);
   - every page is at most 100 lines; the index is at most 150 (A5 / B4);
-  - the index is at most 3000 characters, the budget TestHelpBudgets enforces.
+  - the index is at most 3000 characters, the budget TestHelpBudgets enforces;
+  - no page (the Guide or skills/skillmaster) spells the command as `smkr`.
 
 Run from the repository root: python3 scripts/guide_links.py
-Exit code 0 means all four hold. The model eval lives in
+Exit code 0 means all five hold. The model eval lives in
 skillmaster-cli/cmd/skillmaster/guide_eval_test.go; scripts/guide-regression.sh
 runs both.
 """
@@ -105,6 +106,21 @@ def main() -> int:
             fail(item)
     else:
         print("✓ every page is within its line limit")
+
+    typos = []
+    scanned = list(pages)
+    entry_skill = os.path.join(ROOT, "skills", "skillmaster", "SKILL.md")
+    if os.path.isfile(entry_skill):
+        scanned.append(entry_skill)
+    for page in scanned:
+        for number, line in enumerate(open(page, encoding="utf-8"), 1):
+            if "smkr" in line.lower():
+                typos.append(f"{os.path.relpath(page, ROOT)}:{number}")
+    if typos:
+        for item in typos:
+            fail(f"smkr typo: {item}")
+    else:
+        print("✓ no smkr typo")
 
     if len(index_text) > 3000:
         fail(f"SKILL.md has {len(index_text)} characters (limit 3000)")

@@ -322,8 +322,11 @@
       "prompt": "登录报错：浏览器里没有同意；再试又说登录太频繁。",
       "page": "trouble/sign-in.md",
       "must": [
-        "skmr login",
-        "限流"
+        "skmr login"
+      ],
+      "any": [
+        "限流",
+        "频率限制"
       ]
     },
     {
@@ -410,6 +413,18 @@
       "page": "use/read-files.md",
       "must": [
         "skmr skill invoke"
+      ]
+    },
+    {
+      "id": "trouble-feedback-attach",
+      "group": "trouble",
+      "prompt": "消息里已经有一张报错截图的路径，反馈前怎么先取到可提交的稳定路径？",
+      "page": "trouble/feedback.md",
+      "must": [
+        "skmr feedback attach"
+      ],
+      "any": [
+        "--copy"
       ]
     }
   ]

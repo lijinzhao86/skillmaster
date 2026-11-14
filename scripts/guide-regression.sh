@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Guide 回归测试机。改 `skills/skillmaster-guide/` 之后跑这一条。
 #
-#   scripts/guide-regression.sh          # 全套：结构 + 文档 + 42 题模型评测
+#   scripts/guide-regression.sh          # 全套：结构 + 文档 + 43 题模型评测
 #   scripts/guide-regression.sh --fast   # 跳过模型评测（约 2 秒）
 #
 # 退出码 0 表示全部通过；任何一步失败都会立刻退出，并保留那一步的输出。
@@ -53,7 +53,7 @@ if [ "$fast" -eq 1 ]; then
   exit 0
 fi
 
-step "6/6 Guide 评测（42 题，真实模型）"
+step "6/6 Guide 评测（43 题，真实模型）"
 if ! command -v claude >/dev/null 2>&1; then
   echo "找不到 claude，评测无法运行；装好再跑（--fast 可跳这一步）" >&2
   exit 1
@@ -65,4 +65,4 @@ fi
 (cd skillmaster-cli && SKILLMASTER_GUIDE_EVAL=1 SKILLMASTER_GUIDE_EVAL_LIMIT= \
   go test ./cmd/skillmaster -run 'TestGuideEval$' -count=1 -v)
 
-printf '\nGuide 回归通过：结构、链接、文档、生成物与 42 题评测全绿。\n'
+printf '\nGuide 回归通过：结构、链接、文档、生成物与 43 题评测全绿。\n'

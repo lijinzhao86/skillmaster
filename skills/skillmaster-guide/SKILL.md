@@ -43,7 +43,7 @@ when_to_use: 要用 skmr 操作 skill，或搞不清草稿与线上、可见性�
 | 你要做 | 读 |
 |---|---|
 | 起名、改名与描述 | [建一个 skill](author/create.md) |
-| 开一份新草稿（`skmr draft create`） | [开一份新草稿](author/draft-create.md) |
+| 新开草稿（`skmr draft create`） | [开一份新草稿](author/draft-create.md) |
 | 改一个已有的 skill（含丢弃草稿） | [改一个 skill](author/edit.md) |
 | 把本地一整个目录提上去 | [整目录上传](author/upload.md) |
 | 传图片、PDF、Office、音视频 | [传二进制文件](author/media.md) |
@@ -68,7 +68,7 @@ when_to_use: 要用 skmr 操作 skill，或搞不清草稿与线上、可见性�
 | 还没有账号、忘密码、改密码 | [我还没有能用的账号](account/register.md) |
 | 登录（网页、命令行、无浏览器） | [登录](account/sign-in.md) |
 | 换账号、退出 | [凭据：怎么换账号、怎么退出](account/credentials.md) |
-| 让某台机器失效、发 API key | [登录设备与 API key](account/devices.md) |
+| 让机器失效、发 API key | [登录设备与 API key](account/devices.md) |
 | 彻底注销账号 | [注销账号](account/delete.md) |
 
 ## 卡住了
@@ -80,7 +80,7 @@ when_to_use: 要用 skmr 操作 skill，或搞不清草稿与线上、可见性�
 | 加载不了、读不到 | [加载不了、读不到](trouble/invoke.md) |
 | 上线不了 | [上线不了](trouble/release.md) |
 | 连不上、跑不起来、被沙箱拦 | [环境问题](trouble/env.md) |
-| 都试过了还是不行 | [提交一份反馈](trouble/feedback.md) |
+| 都试过还不行 | [提交反馈（可带图片、视频）](trouble/feedback.md) |
 
 ## 上限与写法
 

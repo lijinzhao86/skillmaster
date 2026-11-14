@@ -194,8 +194,8 @@ func loadGuideEvalTable(t *testing.T, root string) guideEvalTable {
 func TestGuideEvalTableIsValid(t *testing.T) {
 	root := helpRepoRoot(t)
 	table := loadGuideEvalTable(t, root)
-	if len(table.Tasks) != 42 {
-		t.Fatalf("the table has %d tasks; the ruler is 42", len(table.Tasks))
+	if len(table.Tasks) != 43 {
+		t.Fatalf("the table has %d tasks; the ruler is 43", len(table.Tasks))
 	}
 
 	guideDir := filepath.Join(root, "skills", "skillmaster-guide")
@@ -269,6 +269,9 @@ func TestGuideEvalTableIsValid(t *testing.T) {
 			if strings.HasPrefix(phrase, "guide/") {
 				t.Errorf("%s asks for a page path in `must`: %q", task.ID, phrase)
 			}
+			if strings.Contains(phrase, "smkr") {
+				t.Errorf("%s spells smkr, not skmr: %q", task.ID, phrase)
+			}
 			if !strings.Contains(pageText, phrase) {
 				t.Errorf("%s requires %q, which is not in %s", task.ID, phrase, task.Page)
 			}
@@ -322,7 +325,7 @@ func guideEvalCommandIssues(line string, table map[string]*guideCommand) string 
 	return ""
 }
 
-// TestGuideEval is the opt-in model run. A table of 42 tasks is expensive; the default is one
+// TestGuideEval is the opt-in model run. A table of 43 tasks is expensive; the default is one
 // run, and `SKILLMASTER_GUIDE_EVAL_LIMIT` can smoke a prefix of the table.
 func TestGuideEval(t *testing.T) {
 	if os.Getenv("SKILLMASTER_GUIDE_EVAL") != "1" {
