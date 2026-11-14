@@ -1,6 +1,6 @@
 # 0193 · 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价
 
-- **状态**：已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 取代**（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点）
+- **状态**：已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 与 [0197](0197-production-tables-hold-only-final-claims.md) 取代**（0197 的存储形状自打标版生效）（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点）
 - **日期**：2026-11-13
 - **所属版本**：[`v66-skill-labels`](../versions/v66-skill-labels/README.md)
 - **依赖**：[0192](0192-public-categories-are-thirteen-shelves.md)（13 个一级分类）、[0181](0181-text-limits-use-unicode-code-points.md)（文本上限按码点）

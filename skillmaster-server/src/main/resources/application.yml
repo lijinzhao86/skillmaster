@@ -186,38 +186,14 @@ skillmaster:
   welcome:
     skills: ${SKILLMASTER_WELCOME_SKILLS:skillmaster/skillmaster-startup,skillmaster/skillmaster-guide}
 
-  # Open-source sync (v50, ADR 0155-0159). Off by default; enabling it needs a
-  # GitHub token and a sources file. `concurrency` only parallelises fetching,
-  # parsing and scanning — writes stay serial, because the version submit takes a
-  # table lock on version_file.
-  sync:
-    enabled: ${SKILLMASTER_SYNC_ENABLED:false}
-    sources-file: ${SKILLMASTER_SYNC_SOURCES_FILE:classpath:sync-sources.yml}
-    github-token: ${SKILLMASTER_GITHUB_TOKEN:}
-    trigger-token: ${SKILLMASTER_SYNC_TRIGGER_TOKEN:}
-    concurrency: ${SKILLMASTER_SYNC_CONCURRENCY:5}
-    # Spring's six-field cron: second minute hour day month weekday, read as Beijing time.
-    # This is the default when the deployment sets no SKILLMASTER_SYNC_CRON; the deploy workflow
-    # writes that variable only when the repository variable is set, so this line stays the one
-    # default rather than a copy that silently loses to a literal in the workflow.
-    cron: ${SKILLMASTER_SYNC_CRON:0 0 2 * * *}
-    max-repo-bytes: ${SKILLMASTER_SYNC_MAX_REPO_BYTES:67108864}
-    # **As loose as an ordinary ingest where it can be.** File count and per-file size are the
-    # platform's own limits (`IngestLimits.STANDARD_MAX_FILES` / `STANDARD_MAX_FILE_BYTES`): a skill
-    # the editor accepts must not be refused by the sync for being the same size. The total is the
-    # 100 MiB a skill is expected to stay under (2026-11-07), still below the ingest's own 512 MiB
-    # total — a deliberate, product-decided difference, not full parity.
-    #
-    # **These are not the first ceilings.** `max-repo-bytes` above caps the compressed archive, and
-    # `max-unpacked-bytes` below caps everything one repository unpacks to; a media-heavy skill can
-    # hit either before this total. A file count above the platform's 512 needs a platform-level
-    # decision, not a sync-only loosening — the draft write would refuse it anyway.
-    max-files: ${SKILLMASTER_SYNC_MAX_FILES:512}
-    max-file-bytes: ${SKILLMASTER_SYNC_MAX_FILE_BYTES:104857600}
-    max-total-bytes: ${SKILLMASTER_SYNC_MAX_TOTAL_BYTES:104857600}
-    # The decompressed ceiling, separate from the skill directory's own total: a tarball can unpack
-    # to gigabytes without a single file exceeding max-file-bytes. This is the bomb defence.
-    max-unpacked-bytes: ${SKILLMASTER_SYNC_MAX_UNPACKED_BYTES:268435456}
+  # The service-to-service plane (v69, ADR 0198). Off unless a private address and a
+  # token are both set: no second connector is added and every `/inner` request is a
+  # 404. The address must be the instance's VPC address, never 0.0.0.0 — the token and
+  # the security group are the other two layers.
+  inner:
+    address: ${SKILLMASTER_INNER_ADDRESS:}
+    port: ${SKILLMASTER_INNER_PORT:8081}
+    token: ${SKILLMASTER_INNER_TOKEN:}
 
   sms:
     # Blank credentials mean no provider is configured, which is a state this runs in on purpose:

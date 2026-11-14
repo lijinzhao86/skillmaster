@@ -202,7 +202,7 @@
 | T15 | 通过 | `tests/skills.test.tsx`（空态 / 编辑 / 清除 / 字段错误）；`tests/my-when-to-use-skew.test.tsx`（读 404 → 空态、读 500 → 横幅，见 [`iterations/0001`](iterations/0001-optional-read-404-is-empty.md)） |
 | T16 | 通过 | `my_when_to_use_test.go`（set / clear / 空文本 / 版本 pin / 搜索标记 / 零结果提示） |
 | T17 | 通过 | `SkillDocumentTest`；`MyWhenToUseApiIT.theLimitIsTwoHundredUnicodeCodePoints`；`tests/errors.test.ts` |
-| T18 | 通过 | `SyncPipelineIT.aSkillMdThatBreaksTheTextFieldContractFailsOnlyItsOwnEntry`；`SkillDocumentTest` |
+| T18 | 通过 | `导入端到端用例.aSkillMdThatBreaksTheTextFieldContractFailsOnlyItsOwnEntry`；`SkillDocumentTest` |
 | T19 | 通过 | `MyWhenToUseApiIT.leavingTheLibraryKeepsTheSentenceAndClearingWorksWithoutIt` |
 | T20 | 通过 | 数字与口径见 [搜索评测基线](../../research/search-evaluation-baseline.md) |
 

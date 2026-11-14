@@ -38,7 +38,7 @@ api/SyncTriggerController   POST /internal/sync/run：只做 token 校验与调�
 ### 并发与调度
 
 - **一次运行**：定时任务与手动触发共用一个 `SyncRunner` 的 guard；已在跑时手动触发返回 409，定时任务记一条 `sync run skipped: already_running`。guard 在 runner 里，不在控制器里——否则两条入口会各判各的。
-- **并发度可配置**：`skillmaster.sync.concurrency`（1–16，默认值见 [`docs/current/config.md`](../../current/config.md)）控制**同时拉取、解析、扫描**的条目数。条目按批处理：一批最多 `concurrency` 条并行做网络与纯计算，做完再**串行写入**，然后处理下一批。
+- **并发度可配置**：同步并发配置（1–16，默认值见 [`docs/current/config.md`](../../current/config.md)）控制**同时拉取、解析、扫描**的条目数。条目按批处理：一批最多 `concurrency` 条并行做网络与纯计算，做完再**串行写入**，然后处理下一批。
 - **写入必须串行，这不是保守**：每次提交走 `underExclusiveWrite`，它对 `version_file` 取 `SHARE ROW EXCLUSIVE` **表锁**；并行写入只会在同一把锁上排队，还多占连接。串行写入让失败归因与日志保持一条一条可读。
 - **内存上界**：一批最多 `concurrency × (max-total-bytes + max-unpacked-bytes)`（两个数字都见 `config.md`）；串行写入时 `SyncDraftWriter` 再复制一份文件集做导入 zip，峰值再加 `1 × max-total-bytes`。整包里只保留配置目录的文件、该目录祖先链上的许可文件，以及清单 `license:` 指定的那一个文件，所以一个满是 vendored LICENSE 的仓库不会把 licence 全读进内存；许可文件（祖先链上的与清单指定的）都不计入 `max-total-bytes`，但每读一份都计入 `max-unpacked-bytes`，所以解压预算同时是保留字节的硬上界。批处理再给下载与扫描加一层背压。
 - **磁盘上界**：一轮里每个仓库有一个整包落在临时目录，`endRun()` 删除；峰值是同时存在过的仓库包之和（2026-11-07 的 whitelist 按各仓库包大小合计约 300 MB），每个包还受 `max-repo-bytes` 约束。

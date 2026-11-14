@@ -172,7 +172,7 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 | 用例 | 结果 | 证据 / 缺什么 |
 |---|---|---|
 | T1 可执行位（上传→分发） | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`、`ArchiveIT.theArchiveDoesNotTrustAStoredMode`（把入库的 `mode` 改成 420，下载仍是 0755）；端到端：`skills/e2e-runner/v51-e2e` 的 `scripts/run_all.sh` 在 `get --all` 后是 `-rwxr-xr-x`，`SKILL.md` 是 `-rw-r--r--` |
-| T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitFollowsThePath`（同一次提交里，zip 不说位时 `scripts/` 下仍 493、zip 标了位时 `notes.txt` 仍 420）。同步：`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths` |
+| T1b 可执行位（入库，两条入口） | 通过 | 上传：`SkillSubmitIT.theExecutableBitFollowsThePath`（同一次提交里，zip 不说位时 `scripts/` 下仍 493、zip 标了位时 `notes.txt` 仍 420）。同步：`导入端到端用例.aSyncedDraftTakesItsModesFromThePaths` |
 | T1c `scripts/` 之外不可执行 | 通过（服务端 + 端到端） | `ArchiveIT.aScriptUnderScriptsIsExecutableInTheArchive`：同一次下载里 `SKILL.md` 没有任何执行位；端到端 `get --all` 后 `SKILL.md` 是 `-rw-r--r--`、`scripts/run_all.sh` 是 `-rwxr-xr-x` |
 | T1（CLI 落盘） | 通过（端到端） | 见 T1 那一行；另外用 `--no-cache` 直接 `./run_all.sh` 也跑通 |
 | T2 退出码一致 | 通过（端到端） | 同一份 skill、同一台机器：本地 `python3 main.py` 与 `skmr run … -- python3 main.py` 输出逐字一致；`python3 -c "sys.exit(7)"` 的退出码原样返回 7 |
@@ -185,7 +185,7 @@ scripts/a/x.py  scripts/b/x.py   歧义用
 | T9a–T9d 沙箱内 doctor | 未执行 | 需要在四家客户端里各跑一次 |
 | T10 符号链接 | 服务端通过、端到端未跑 | 拒绝本身有 `SkillSubmitIT` 的 `symlink_not_allowed` 断言；中文那句在 `issueMessages` 里，手工跑一次 `submit` 才算验完 |
 | T11 断网缓存 | 通过（单元 + 端到端） | 判据有 `TestRunOnlyTreatsATransportFailureAsOffline`；端到端把 `SKILLMASTER_SERVER` 指到不可达端口，仍在 stderr 说明后跑通缓存里的版本 |
-| T14 位由路径决定 | 通过（服务端 + 端到端） | `SkillSubmitIT.theExecutableBitFollowsThePath`、`SyncPipelineIT.aSyncedDraftTakesItsModesFromThePaths`、`VersionEditorIT.aMoveAcrossTheScriptsBoundaryChangesTheStoredMode`（跨 `scripts/` 边界来回改名，位跟着新路径走）；端到端用一棵「磁盘位与规则相反」的树验证过：`scripts/*` 入库 493、`root.sh` 入库 420 |
+| T14 位由路径决定 | 通过（服务端 + 端到端） | `SkillSubmitIT.theExecutableBitFollowsThePath`、`导入端到端用例.aSyncedDraftTakesItsModesFromThePaths`、`VersionEditorIT.aMoveAcrossTheScriptsBoundaryChangesTheStoredMode`（跨 `scripts/` 边界来回改名，位跟着新路径走）；端到端用一棵「磁盘位与规则相反」的树验证过：`scripts/*` 入库 493、`root.sh` 入库 420 |
 | T13 首次确认 | 单元通过 | `TestRunAsksOncePerVersion`；「确认发生在路径解析之后」由 `runSkill` 的调用顺序保证，没有单独用例 |
 | T15 帮助不吞 `--` 之后 | 通过（单元 + 生产手测） | `TestRequestedStopsAtTheSeparator`、`TestHelpIsRecognisedAtEveryPosition`（只在分隔符之前插旗标）、`TestTheUpdateCheckSurvivesAScriptsOwnHelp`（`--` 之后不再跳过自动更新检查）；生产：`skmr run skillmaster/matlab --yes -- python3 validate_project_manifest.py --help` 打印脚本自己的 argparse 帮助、退出 0，`-h` 同；`skmr run … --help` 仍打印 `skmr run` 的帮助 |
 

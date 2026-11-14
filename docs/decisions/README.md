@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 195 条。
+共 199 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -200,6 +200,10 @@
 | [0190](0190-the-site-origin-is-an-explicit-list.md) | 首页入口保留 home，CORS 来源是一个显式列表 | 已采纳 | 2026-11-13 |
 | [0191](0191-feedback-attachments-are-private-unmoderated-objects.md) | 反馈附件是私有、不自动审核的命名对象 | 已采纳 | 2026-11-13 |
 | [0192](0192-public-categories-are-thirteen-shelves.md) | 公域分类是十三个一级货架，单选、无二级 | 已采纳 | 2026-11-13 |
-| [0193](0193-public-labels-are-extensible-claims.md) | 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价 | 已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 取代**（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点） | 2026-11-13 |
-| [0194](0194-public-labels-are-agent-produced-and-sampling-audited.md) | 公域标签由 Agent 自动打，按抽样验收 | 已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 取代**（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点） | 2026-11-13 |
+| [0193](0193-public-labels-are-extensible-claims.md) | 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价 | 已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 与 [0197](0197-production-tables-hold-only-final-claims.md) 取代**（0197 的存储形状自打标版生效）（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点） | 2026-11-13 |
+| [0194](0194-public-labels-are-agent-produced-and-sampling-audited.md) | 公域标签由 Agent 自动打，按抽样验收 | 已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 与 [0197](0197-production-tables-hold-only-final-claims.md) 取代**（0197 的存储形状自打标版生效）（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点） | 2026-11-13 |
 | [0195](0195-labels-p0-narrows-two-adrs.md) | v66 标签 P0 对 0193 / 0194 的四点收窄 | 已采纳 | 2026-11-14 |
+| [0196](0196-label-extraction-reads-public-text-only.md) | 自动打标只读公域已发布文本，默认不外发 | 已采纳 | 2026-11-14 |
+| [0197](0197-production-tables-hold-only-final-claims.md) | 生产表只存最终标签与预期结果，抽取中间态进候选表 | 已采纳 | 2026-11-14 |
+| [0198](0198-api-planes-are-named-by-audience.md) | API 面按使用方命名：oauth / web / api / inner / admin | 已采纳 | 2026-11-14 |
+| [0199](0199-ops-runs-as-its-own-service-and-database.md) | 内容运营作为独立服务与独立库部署 | 已采纳 | 2026-11-14 |

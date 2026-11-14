@@ -1,6 +1,6 @@
 # 0194 · 公域标签由 Agent 自动打，按抽样验收
 
-- **状态**：已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 取代**（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点）
+- **状态**：已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 与 [0197](0197-production-tables-hold-only-final-claims.md) 取代**（0197 的存储形状自打标版生效）（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点）
 - **日期**：2026-11-13
 - **所属版本**：[`v66-skill-labels`](../versions/v66-skill-labels/README.md)
 - **依赖**：[0193](0193-public-labels-are-extensible-claims.md)（标签是可扩展主张）、[0192](0192-public-categories-are-thirteen-shelves.md)（13 个一级分类）

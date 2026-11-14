@@ -29,6 +29,8 @@ description: 本仓库（skillmaster）文档架构与版本化的强制约定�
 
 命名 `vN-主题`（`v1-hosting`、`v2-payments`）：`主题` 用**小写 ASCII 连字符**——版本目录名是长期标识符，会出现在路径与 URL 里。**小版本不体现在目录名上。**（`iterations/` 与 ADR 的文件名 slug 不受此限，可用中文。）
 
+**定号前先查 [`scripts/docs/next_number.py`](../../../scripts/docs/next_number.py)**：它跨所有工作区（含未提交）与本地 / `origin` 分支列出 vN、ADR 号与 Flyway 号的占用。版本号已经因为「只看 `main`」撞过两次——别的会话的版本目录常常还没提交，只查主干查不到。
+
 一个大版本文件夹 = **四份必需文档**（+ 有记录时才有的迭代子目录，+ 一份可选缺陷清单）：
 
 ```
