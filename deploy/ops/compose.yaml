@@ -6,10 +6,18 @@
 # the same way it used to reach the server's trigger.
 services:
   ops:
-    image: ${OPS_IMAGE:skillmaster-ops:local}
+    # `${VAR:-default}`, with the dash. `${VAR:default}` is not a compose substitution and
+    # aborts the whole file ("invalid interpolation format") before any service starts, so the
+    # default has to be spelled the shell way. The tag the host actually runs lives in
+    # `/opt/skillmaster-ops/.env`; this default only catches a first start that forgot it.
+    image: ${OPS_IMAGE:-skillmaster-ops:local}
     container_name: skillmaster-ops
     restart: unless-stopped
     network_mode: bridge
+    # The machine is shared: MOSS runs here in a 2 GiB container, and the host has 3.5 GiB
+    # total. Without a cap the JVM sizes its heap from the whole host (MaxRAMPercentage in
+    # the Dockerfile) and a large import can starve the neighbour.
+    mem_limit: 1g
     ports:
       - "127.0.0.1:8090:8090"
     env_file:
