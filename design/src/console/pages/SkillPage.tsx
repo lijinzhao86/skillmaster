@@ -29,7 +29,7 @@ import UsagePane from '../components/skill/UsagePane'
 import VersionDetail from '../components/skill/VersionDetail'
 import type { AtLeast, Grant, Sub, Version, Visibility } from '../fixtures/skill'
 import SkillAvatar from '../components/SkillAvatar'
-import { CATEGORIES, DEMO_LICENSE, DEMO_ORIGIN, DEMO_USAGE, LIBRARY, MY_TAGS, PUBLIC_TAGS, membershipOf, tierForMembership } from '../fixtures/library'
+import { CATEGORIES, DEMO_LICENSE, DEMO_ORIGIN, DEMO_PROFILE, DEMO_USAGE, LIBRARY, MY_TAGS, PUBLIC_TAGS, membershipOf, tierForMembership } from '../fixtures/library'
 import type { Membership } from '../fixtures/library'
 import { DEFAULT_RANGE, rangeFromParams } from '../fixtures/usage'
 import type { UsageRange } from '../fixtures/usage'
@@ -119,11 +119,11 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
     if (membership === 'visible' || membership === 'blocked' || membership === 'dormant') return ''
     return LIBRARY.find((skill) => skill.name === 'pdf-tools')?.myWhenToUse ?? ''
   })
-  /* 默认是「文档与演示」；地址里的 `category=` 让演示能落在别的货架上——包括停用词
+  /* 默认是「办公效率」；地址里的 `category=` 让演示能落在别的货架上——包括停用词
      （停用的词不能新增，但已经贴在它上面的仍然保留）。 */
   const [category, setCategory] = useState<string | null>(() => {
     const asked = params.get('category')
-    return asked !== null && CATEGORIES.some((entry) => entry.id === asked) ? asked : 'doc'
+    return asked !== null && CATEGORIES.some((entry) => entry.id === asked) ? asked : 'office-efficiency'
   })
   /* **公开标签属于这个 skill，不属于某个人**：换谁来看都是同一组；只有作者能改。 */
   const [publicTagDefs, setPublicTagDefs] = useState(() => PUBLIC_TAGS.map((tag) => ({ ...tag })))
@@ -776,6 +776,11 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
           <symbol id="descMark" viewBox="0 0 24 24" fill="none">
             <path d="M5 6h14M5 10.5h14M5 15h9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </symbol>
+          <symbol id="outcomeMark" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="8.2" stroke="currentColor" strokeWidth="1.8" />
+            <circle cx="12" cy="12" r="3.6" stroke="currentColor" strokeWidth="1.8" />
+            <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+          </symbol>
           <symbol id="personMark" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="8.2" r="3.4" stroke="currentColor" strokeWidth="1.8" />
             <path d="M5.6 19.4c.7-3.4 3.4-5.4 6.4-5.4s5.7 2 6.4 5.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -850,6 +855,23 @@ export default function SkillPage({ active, state, params }: DemoPageProps) {
                   : null
           }
           membershipNote={membershipNote}
+          outcome={DEMO_PROFILE.outcome}
+          attributes={(DEMO_PROFILE.labels ?? [])
+            /* 默认状态不上信息页：纯提示词与免费不画；运行环境是多值，每个非默认值一颗。
+               `key` 带上值，避免同维度的多颗胶囊在 React 里撞键。前端只传短名与类别，
+               完整语义留在词表数据里。 */
+            .filter((label) => !(
+              (label.key === 'runtime' && label.value === 'prompt-only') ||
+              (label.key === 'pricing_type' && label.value === 'free')
+            ))
+            .map((label) => ({
+              key: label.key + ':' + label.value,
+              valueLabel: label.valueLabel,
+              group: label.group,
+              href: label.filterable === false
+                ? undefined
+                : '?page=discover&label=' + label.key + ':' + label.value,
+            }))}
           origin={demoOrigin}
           license={demoLicense}
           usage={demoUsage}

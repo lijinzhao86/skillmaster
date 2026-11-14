@@ -35,7 +35,7 @@ class V14SmokeIT extends AbstractOrganizeIT {
 
         HttpResponse<String> categories = get("/api/v1/categories", token);
         assertThat(categories.statusCode()).as(categories.body()).isEqualTo(200);
-        assertThat(json(categories).get("categories").size()).isEqualTo(10);
+        assertThat(json(categories).get("categories").size()).isEqualTo(13);
 
         HttpResponse<String> publicTags = get("/api/v1/public-tags?q=pdf", token);
         assertThat(publicTags.statusCode()).as(publicTags.body()).isEqualTo(200);
@@ -47,7 +47,7 @@ class V14SmokeIT extends AbstractOrganizeIT {
 
         HttpResponse<String> setCategory = send(request("/api/v1/skills/demo/pdf-tools/category", token)
                 .header("Content-Type", "application/json")
-                .PUT(java.net.http.HttpRequest.BodyPublishers.ofString("{\"key\":\"doc\"}"))
+                .PUT(java.net.http.HttpRequest.BodyPublishers.ofString("{\"key\":\"office-efficiency\"}"))
                 .build());
         assertThat(setCategory.statusCode()).as(setCategory.body()).isEqualTo(200);
         assertThat(json(setCategory).get("changed").asBoolean()).isTrue();

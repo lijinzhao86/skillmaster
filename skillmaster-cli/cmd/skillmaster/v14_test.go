@@ -250,8 +250,16 @@ func TestListDeletedRefusalsAndTheImpossibleSource(t *testing.T) {
 	})
 
 	stdout, stderr, status := runCaptured(t, "skills", "list", "--show", "deleted", "--category", "文档与演示")
-	if status == 0 || stdout != "" || !strings.Contains(stderr, "不看标签") {
+	if status == 0 || stdout != "" || !strings.Contains(stderr, "不看分类与标签") {
 		t.Errorf("status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+
+	// v66: the deleted view refuses the attribute filter by the same rule, and `skills list` never
+	// takes it at all — the attribute filter belongs to `skills search`.
+	fake.requests = nil
+	_, listStderr, listStatus := runCaptured(t, "skills", "list", "--label", "runtime:python")
+	if listStatus == 0 || !strings.Contains(listStderr, "skills search --scope library --label") {
+		t.Errorf("skills list took --label: status=%d stderr=%q", listStatus, listStderr)
 	}
 
 	fake.requests = nil
@@ -364,7 +372,9 @@ func TestCategoriesPrintsTheVocabularyInOrderAndMarksStopped(t *testing.T) {
 	})
 
 	out := mustRun(t, "skills", "categories", "--no-login")
-	want := "| 分类 | 公域 |\n|---|---|\n| 文档与演示 | 12 |\n| 运维与云（停用） | 0 |\n"
+	// v66: the public count is gone from this table (and from the console) — one column, one word
+	// per row. The wire still carries `public_total`; this command stops printing it.
+	want := "| 分类 |\n|---|\n| 文档与演示 |\n| 运维与云（停用） |\n"
 	if out != want {
 		t.Errorf("categories =\n%q\nwant\n%q", out, want)
 	}

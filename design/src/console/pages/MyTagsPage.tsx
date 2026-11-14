@@ -6,8 +6,9 @@
  * 休眠的那些不算——但定义还在，删掉它的时候会连它们一起清除。
  *
  * **一页两份清单**（2026-10-23 用户定）：`我的标签` 是下面这一份（私有、点得动）；`公开标签` 是
- * 作者在 skill 上贴的召回词，只做集中查看——名字、用在几个自己的 skill 上、通往它们的入口。
- * 贴与摘仍在信息页，改名或合并改的是所有人看到的内容，那是以后与审核一起做的事。
+ * 作者在 skill 上贴的召回词，只做集中查看——名字与通往它们的入口。**公域计数不显示**（2026-11-13
+ * 用户定）：列表按名字排，不拿一个看不见的次数当顺序。贴与摘仍在信息页，改名或合并改的是所有人
+ * 看到的内容，那是以后与审核一起做的事。
  *
  * **顺序是固定的：计数降序，同数按名字。** 没有排序控件——一个只按「用得多少」读的列表，
  * 排序不是这一页的问题。
@@ -563,8 +564,12 @@ export default function MyTagsPage({ active, state, params }: DemoPageProps) {
                 <div className="skill-line">
                   <span className="tag-name">{'#' + tag.name}</span>
                   <span className="spacer"></span>
-                  <a className="tag-count" href={'?page=skills&public-tag=' + tag.id}>
-                    {COUNT(tag.count)}
+                  <a
+                    className="tag-action"
+                    href={'?page=skills&public-tag=' + tag.id}
+                    aria-label={'查看 ' + tag.name + ' 下的 skill'}
+                  >
+                    查看 skill
                   </a>
                 </div>
               </li>

@@ -70,10 +70,17 @@ export function listLibrary(query: LibraryQuery = {}): Promise<ApiResult<Library
   return request<LibraryPage>({ method: 'GET', path: withQuery(`${WEB}/library`, params) })
 }
 
-/** The public results. The interface has one filter — categories, "or" — and pages at six. */
+/**
+ * The public results. `tag` carries **one category key** (the shelving a result row links to); the
+ * attribute labels are a second filter (`label`, "and"), because a skill either has an attribute or
+ * does not and two attributes both have to hold (v66, ADR 0193). Public tags are not a discover
+ * filter. Pages at six.
+ */
 export interface DiscoverQuery {
   q?: string
   tag?: string[]
+  /** v66: `dimension:value`, repeated; the server resolves the words against its vocabulary. */
+  label?: string[]
   p?: number
 }
 
@@ -81,6 +88,7 @@ export function listDiscover(query: DiscoverQuery = {}): Promise<ApiResult<Disco
   const params = new URLSearchParams()
   if (query.q !== undefined && query.q.trim() !== '') params.set('q', query.q.trim())
   for (const key of query.tag ?? []) params.append('tag', key)
+  for (const key of query.label ?? []) params.append('label', key)
   if (query.p !== undefined && query.p > 1) params.set('p', String(query.p))
   return request<DiscoverResults>({ method: 'GET', path: withQuery(`${WEB}/discover`, params) })
 }

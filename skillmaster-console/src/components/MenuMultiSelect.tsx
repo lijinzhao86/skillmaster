@@ -15,8 +15,6 @@ import type { KeyboardEvent } from 'react'
 export interface MultiOption {
   value: string
   label: string
-  /** How many skills use it; not drawn when absent. */
-  count?: number
   disabled?: boolean
 }
 
@@ -227,7 +225,6 @@ export default function MenuMultiSelect({
           >
             {CHECK}
             <span className="menu-label">{option.label}</span>
-            {option.count !== undefined ? <span className="menu-number">{option.count}</span> : null}
           </button>
         ))}
         {values.length > 0 ? (

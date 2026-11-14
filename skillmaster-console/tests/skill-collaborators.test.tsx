@@ -140,9 +140,9 @@ export const EMPTY_TAGS = {
 /** `GET /web/categories`: the information page's category menu reads it. */
 const CATEGORY_VOCABULARY = {
   categories: [
-    { key: 'doc', name: '文档与演示', state: 'enabled', public_total: 4 },
-    { key: 'data', name: '数据与分析', state: 'enabled', public_total: 7 },
-    { key: 'ops', name: '运维与云', state: 'stopped', public_total: 2 },
+    { key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 4 },
+    { key: 'data-analysis', name: '数据分析', state: 'enabled', public_total: 7 },
+    { key: 'it-ops-security', name: 'IT 运维与安全', state: 'stopped', public_total: 2 },
   ],
 }
 

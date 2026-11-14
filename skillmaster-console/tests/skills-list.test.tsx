@@ -172,14 +172,14 @@ describe('the library', () => {
   })
 
   it('reads the search term, the sort and the tag filters from the address', async () => {
-    at('/?q=pdf&sort=name&tag=doc&my-tag=11&public-tag=pdf')
+    at('/?q=pdf&sort=name&tag=office-efficiency&my-tag=11&public-tag=pdf')
     const { container, requests } = await showLibrary(
       () => json(200, pageOf([card()])),
       () => json(200, { tags: [{ id: '11', name: '客户项目', description: null, used_in: 2 }] }),
       () => json(200, { tags: [{ key: 'pdf', name: 'PDF', used_in: 3 }] }),
       () =>
         json(200, {
-          categories: [{ key: 'doc', name: '文档与演示', state: 'enabled', public_total: 4 }],
+          categories: [{ key: 'office-efficiency', name: '办公效率', state: 'enabled', public_total: 4 }],
         }),
     )
     await flush()
@@ -188,12 +188,12 @@ describe('the library', () => {
     expect(path).toContain('/web/library?')
     expect(path).toContain('q=pdf')
     expect(path).toContain('sort=name')
-    expect(path).toContain('tag=doc')
+    expect(path).toContain('tag=office-efficiency')
     expect(path).toContain('my-tag=11')
     expect(path).toContain('public-tag=pdf')
     // **The address carries ids and keys; the chips carry the names.**
     const chips = [...container.querySelectorAll('.filters .filter-chip')].map((chip) => text(chip))
-    expect(chips[0]).toContain('文档与演示')
+    expect(chips[0]).toContain('办公效率')
     expect(chips[1]).toContain('客户项目')
     expect(chips[2]).toContain('#PDF')
   })
@@ -270,7 +270,7 @@ describe('the library', () => {
 
   it('takes the filters off the address when 已删除 is the list', async () => {
     const replace = vi.spyOn(window.history, 'replaceState')
-    at('/?show=deleted&tag=doc&my-tag=11&public-tag=pdf')
+    at('/?show=deleted&tag=office-efficiency&my-tag=11&public-tag=pdf')
     const { requests } = await showLibrary(() =>
       json(200, pageOf([card({ state: 'deleted', deleted_at: '2026-10-07T09:00:00Z' })])),
     )
@@ -523,7 +523,7 @@ describe('the preview beside the list', () => {
             state: 'live',
             version: '1.2.3',
             source: 'created',
-            category: { key: 'doc', name: '文档与演示' },
+            category: { key: 'office-efficiency', name: '办公效率' },
             my_tags: [
               { id: 't1', name: '客户项目' },
               { id: 't2', name: '这周要用' },
@@ -538,7 +538,7 @@ describe('the preview beside the list', () => {
     expect(pane.querySelector('.chip.is-live, .chip.is-source')).toBeNull()
     // The category is the shelf (exactly one); my tags are words (a run). Two rows, so the two
     // never read as one pile of pills.
-    expect(text(pane.querySelector('#previewCategory .chip.is-plain'))).toBe('文档与演示')
+    expect(text(pane.querySelector('#previewCategory .chip.is-plain'))).toBe('办公效率')
     expect([...pane.querySelectorAll('.preview-row .chip.is-mine')].map(text)).toEqual([
       '客户项目',
       '这周要用',

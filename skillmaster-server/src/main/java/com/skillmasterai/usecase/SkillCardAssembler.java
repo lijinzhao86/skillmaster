@@ -2,6 +2,7 @@ package com.skillmasterai.usecase;
 
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.skill.GrantRole;
+import com.skillmasterai.modules.skill.LabelService;
 import com.skillmasterai.modules.skill.MyWhenToUseService;
 import com.skillmasterai.modules.skill.SkillCatalogService.CatalogRow;
 import com.skillmasterai.modules.skill.SkillTagService;
@@ -30,12 +31,14 @@ public class SkillCardAssembler {
     private final NamespaceService namespaces;
     private final SkillTagService tags;
     private final MyWhenToUseService notes;
+    private final LabelService labels;
 
     public SkillCardAssembler(NamespaceService namespaces, SkillTagService tags,
-            MyWhenToUseService notes) {
+            MyWhenToUseService notes, LabelService labels) {
         this.namespaces = namespaces;
         this.tags = tags;
         this.notes = notes;
+        this.labels = labels;
     }
 
     public List<SkillCardView> assemble(List<CatalogRow> rows, String userId) {
@@ -58,6 +61,10 @@ public class SkillCardAssembler {
         Map<String, List<SkillTagService.PublicTagView>> publicTags =
                 tags.publicTagsOfSkills(ids);
         Map<String, List<SkillTagService.MyTagView>> myTags = tags.myTagsOfSkills(userId, ids);
+        // v66: the same batch rule as tags — one query for the whole page, never one per card.
+        Map<String, List<com.skillmasterai.modules.skill.LabelValue>> publicLabels =
+                labels.labelsOfSkills(ids);
+        Map<String, String> outcomes = labels.outcomesOf(ids);
         // One query for the page, like the tags. Only effective entries carry a sentence: a note
         // that outlived the library entry sleeps with it (v59, ADR 0180).
         Map<String, String> myWhenToUse = includeMyWhenToUse
@@ -98,6 +105,8 @@ public class SkillCardAssembler {
                         ? myTags.getOrDefault(row.id(), List.of()).stream()
                                 .map(tag -> new SkillCardView.MyTag(tag.id(), tag.name()))
                                 .toList()
-                        : List.of())).toList();
+                        : List.of(),
+                outcomes.get(row.id()),
+                publicLabels.getOrDefault(row.id(), List.of()))).toList();
     }
 }

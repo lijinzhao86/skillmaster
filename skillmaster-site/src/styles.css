@@ -490,12 +490,6 @@ img{max-width:100%;display:block}
    layout has room for one line, so the manual break is hidden there. */
 .card-br{display:inline}
 @media (min-width:481px) and (max-width:720px){.card-br{display:none}}
-.card-num{
-  color:var(--accent);
-  font-weight:600;
-  font-variant-numeric:tabular-nums;
-}
-
 /* ---------------------------------------------------------------- footer
    The columns wait on the third screen; `is-visible` lets them rise. */
 

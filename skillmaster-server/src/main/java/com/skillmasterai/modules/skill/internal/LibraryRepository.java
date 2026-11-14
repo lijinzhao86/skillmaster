@@ -328,6 +328,7 @@ public final class LibraryRepository {
                 sql.append(SqlFilters.categories(query.categoryKeys(), params));
                 sql.append(SqlFilters.publicTags(query.publicTagKeys(), params));
                 sql.append(SqlFilters.myTags(query.myTagIds(), params));
+                sql.append(SqlFilters.labels(query.labelDefinitionIds(), params));
             }
             // A search term is still meaningful on the deleted list; the tags are not.
             sql.append(SqlFilters.text(query.q(), params));

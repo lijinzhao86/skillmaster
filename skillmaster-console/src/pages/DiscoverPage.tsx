@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { addressFor, go, query as pageQuery, replaceAddress } from '../address'
 import { loginPath } from '../login'
 import { failureMessage } from '../api/errors'
-import { listDiscover, listRecommended, joinSkill, leaveSkill } from '../api/library'
+import { listCategories, listDiscover, listRecommended, joinSkill, leaveSkill } from '../api/library'
 import type { SkillCard } from '../api/types'
 import Pager from '../components/Pager'
 import ResultCard from '../components/ResultCard'
@@ -45,6 +45,9 @@ export default function DiscoverPage() {
   const [query, setQuery] = useState(() => initial.get('q') ?? '')
   /* **The address's category, read-only**: the only way in is a result row's category chip. */
   const tags = useRef(initial.getAll('tag')).current
+  /* v66: attributes are the second filter — `dimension:value`, repeated, ANDed by the server. They
+     arrive the same way a category does: an address written by a result row's attribute chip. */
+  const labels = useRef(initial.getAll('label')).current
   const [page, setPage] = useState(() => Math.max(1, Number.parseInt(initial.get('p') ?? '1', 10) || 1))
   /**
    * **The results box searches on Enter, not on every keystroke** (v19, 2026-10-25). A search is now
@@ -57,7 +60,7 @@ export default function DiscoverPage() {
     setDraftQuery(query)
   }, [query])
 
-  const landing = query.trim() === '' && tags.length === 0
+  const landing = query.trim() === '' && tags.length === 0 && labels.length === 0
   const hasQuery = !landing
   /**
    * **A keyword is a search by meaning; a category alone is a browse** (v19). The two have different
@@ -74,8 +77,35 @@ export default function DiscoverPage() {
   /** Why this is not the answer that was asked for; null on an ordinary answer. */
   const [note, setNote] = useState<string | null>(null)
   const [resultState, setResultState] = useState<LoadState>('loading')
+  /** `/web/categories`, for the result head's shelf names; null until the read lands. */
+  const [categoryNames, setCategoryNames] = useState<Record<string, string> | null>(null)
 
   const tagsKey = keyOf(tags)
+  const labelsKey = keyOf(labels)
+  /* The result head names a shelf from the vocabulary, once, and only when a shelf filter is in
+     play. A failed read keeps the key visible rather than inventing a name. */
+  useEffect(() => {
+    if (landing || tags.length === 0 || categoryNames !== null) {
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const result = await listCategories()
+      if (cancelled || !result.ok) {
+        return
+      }
+      const names: Record<string, string> = {}
+      for (const row of result.data.categories ?? []) {
+        names[row.key] = row.name
+      }
+      setCategoryNames(names)
+    })()
+    return () => {
+      cancelled = true
+    }
+    // `tagsKey` stands in for the array; `categoryNames` stops the loop after one read.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [landing, tagsKey, categoryNames])
   useEffect(() => {
     if (landing) {
       return
@@ -86,7 +116,7 @@ export default function DiscoverPage() {
       /* `p` goes out whenever the address names a page, and the server ignores it on the semantic
          path: a keyword answer can be the second page of a degraded search, and a deep link has to
          keep meaning what it says before any response has come back. */
-      const result = await listDiscover({ q: query, tag: tags, p: page })
+      const result = await listDiscover({ q: query, tag: tags, label: labels, p: page })
       if (cancelled) {
         return
       }
@@ -116,9 +146,9 @@ export default function DiscoverPage() {
     return () => {
       cancelled = true
     }
-    // `tagsKey` stands in for the array: the same selections are the same question.
+    // `tagsKey` / `labelsKey` stand in for the arrays: the same selections are the same question.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landing, query, tagsKey, page, semantic])
+  }, [landing, query, tagsKey, labelsKey, page, semantic])
 
   /* -------------------------------------------------------- 为你推荐 (the stream) */
 
@@ -226,15 +256,22 @@ export default function DiscoverPage() {
 
   /* ------------------------------------------------------------------- address */
 
-  const writeAddress = (next: { query?: string; tags?: string[]; page?: number }) => {
+  const writeAddress = (next: {
+    query?: string
+    tags?: string[]
+    labels?: string[]
+    page?: number
+  }) => {
     const q = next.query ?? query
     const chosen = next.tags ?? tags
+    const chosenLabels = next.labels ?? labels
     const p = next.page ?? page
     const params = new URLSearchParams()
     if (q.trim() !== '') {
       params.set('q', q)
     }
     chosen.forEach((tag) => params.append('tag', tag))
+    chosenLabels.forEach((label) => params.append('label', label))
     if (p > 1) {
       params.set('p', String(p))
     }
@@ -254,6 +291,7 @@ export default function DiscoverPage() {
       params.set('q', query)
     }
     tags.forEach((tag) => params.append('tag', tag))
+    labels.forEach((label) => params.append('label', label))
     if (target > 1) {
       params.set('p', String(target))
     }
@@ -335,6 +373,33 @@ export default function DiscoverPage() {
     )
   }
 
+  /* **The results screen gets its own head** (v66): without it, a searched list reads like
+     为你推荐 and nobody knows why these rows are here. The title says which question this is, the
+     note says what was filtered, and neither reports a count — the public corpus size is internal
+     (PRD A15). A filter word with no result is still printed, so a broken address stays readable. */
+  const filterName = (key: string): string => {
+    /* **The vocabulary, not the current page** (v66): a filter that matched nothing would print the
+       internal key, and a shelf's name must not change with which rows happened to come back. Until
+       the read lands, the key is shown as itself rather than as a wrong name. */
+    if (categoryNames === null) return key
+    return categoryNames[key] ?? '已删除的分类'
+  }
+  const labelName = (entry: string): string => {
+    for (const skill of results) {
+      const label = (skill.labels ?? []).find((item) => item.key + ':' + item.value === entry)
+      if (label !== undefined) return label.label
+    }
+    return entry
+  }
+  const filterTerms = [...tags.map(filterName), ...labels.map(labelName)]
+  const resultTitle = query.trim() !== '' ? '搜索结果' : '筛选结果'
+  const resultNote =
+    query.trim() !== ''
+      ? filterTerms.length > 0
+        ? filterTerms.join(' · ')
+        : '按相关度排序'
+      : filterTerms.join(' · ')
+
   return (
     <section className="page" id="page-discover">
       <header className={'page-head discover-head' + (landing ? ' is-landing' : '')}>
@@ -342,13 +407,26 @@ export default function DiscoverPage() {
         <h1 className="visually-hidden">发现</h1>
         {/* **Search is the header's only control** (2026-11-05): the category row is gone — the
             category on a result row is the way to browse it. Enter submits; there is no button.
-            The count sits at the right end of the same line.
+            **No result count** (v66, 2026-11-14 用户定): the line holds the result state on the
+            left and 清除 on the right; how many the public corpus has is an internal signal.
 
             **One form, both states (2026-11-07).** Landing and results used to be two forms with two
             drafts: submitting swapped the subtree, so the box was a new node and the caret stayed
             behind; while an answer was in flight the box was hidden outright. One node, one draft;
             the header's `is-landing` class stays what it was. */}
         <div className="discover-search">
+          {hasQuery ? (
+            <div className="discover-result-meta" id="discoverResultsHead">
+              <h2 className="picks-title" id="discoverResultsTitle">
+                {resultTitle}
+              </h2>
+              {resultNote !== '' ? (
+                <span className="picks-note" id="discoverResultsNote">
+                  {resultNote}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <form
             onSubmit={(event) => {
               event.preventDefault()
@@ -372,11 +450,21 @@ export default function DiscoverPage() {
               onChange={setDraftQuery}
             />
           </form>
-          <span className="count" hidden={!hasQuery || resultState !== 'ready'}>
-            {/* 按意思找报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
-                有 total 的（按字面找、或降级回落）报的才是总数。 */}
-            {(total ?? results.length) + ' 个结果'}
-          </span>
+          {hasQuery ? (
+            <a
+              className="discover-clear"
+              href="/discover"
+              onClick={(event) => {
+                event.preventDefault()
+                /* Clearing drops the filters held by the address, and this page reads them once
+                   at mount (`tags` / `labels` are refs). A whole load is the one way to land on a
+                   truly unfiltered 发现 — the same load `href` gives without JavaScript. */
+                go('/discover')
+              }}
+            >
+              清除
+            </a>
+          ) : null}
         </div>
       </header>
 
@@ -460,6 +548,7 @@ export default function DiscoverPage() {
               total={total}
               page={Math.min(page, Math.max(1, Math.ceil(total / PAGE_SIZE)))}
               pageSize={PAGE_SIZE}
+              showTotal={false}
               hrefFor={(target) => addressFor('/discover', hrefParams(target))}
               onGo={goToPage}
             />

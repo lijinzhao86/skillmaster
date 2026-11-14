@@ -70,7 +70,7 @@ export default function SkillsPage({ active, state, params }: DemoPageProps) {
   const sort = askedSort && SORTS.includes(askedSort) ? askedSort : 'recent'
   const tags = showDeleted ? [] : params.getAll('tag')
   const myTags = showDeleted ? [] : params.getAll('my-tag')
-  /* **公开标签只有一条入口：管理页的那条计数链接。** 它是召回词，不是库的筛选条上的第三把尺子。 */
+  /* **公开标签只有一条入口：管理页那一行的「查看 skill」链接。** 它是召回词，不是库的筛选条上的第三把尺子。 */
   const publicTags = showDeleted ? [] : params.getAll('public-tag')
   const askedPage = parseInt(params.get('p') ?? '', 10)
 

@@ -319,6 +319,30 @@ export interface AuthoredSkill {
    * A snapshot of the source address and version at copy time (ADR 0173).
    */
   copied_from?: { address: string; version: string } | null
+  /** v66: the platform's one-line expected result; absent when there is none. */
+  outcome?: string | null
+  /** v66: the displayed attributes, short names only; absent when there are none. */
+  labels?: SkillLabel[]
+}
+
+/**
+ * One displayed attribute (v66): **the dimension (`key`) and the value** — `key + ':' + value` is
+ * the filter key `?label=` takes (`runtime:python`) — the short name the console draws, and the
+ * full sentence the extractor recorded.
+ *
+ * **Only `label` reaches the interface** — chips, tooltips and screen readers all use it. `full`
+ * stays in the data for `skills labels` and the sampling report (2026-11-13 用户定).
+ * `filterable: false` means the word is displayed but cannot be filtered on; the chip must not be
+ * a link then, or pressing it would ask the server for an unknown label. The field is optional so
+ * an older server (one that sends `labels` without it) reads as filterable rather than the reverse.
+ */
+export interface SkillLabel {
+  key: string
+  value: string
+  label: string
+  full: string
+  group: string
+  filterable?: boolean
 }
 
 
@@ -660,6 +684,13 @@ export interface SkillCard {
   category: CategoryRef | null
   public_tags: PublicTagRef[]
   my_tags: MyTagRef[]
+  /**
+   * v66: the platform's one-line expected result and the displayed attributes. **The outcome does
+   * not go on a result row** — the row answers "what is this", and the information page answers
+   * "what do I get". The attributes are drawn on the row's third line, left of the public tags.
+   */
+  outcome?: string | null
+  labels?: SkillLabel[]
   /** v49: the compact selection signals; absent on an older server. */
   origin_label?: string | null
   origin_kind?: string | null

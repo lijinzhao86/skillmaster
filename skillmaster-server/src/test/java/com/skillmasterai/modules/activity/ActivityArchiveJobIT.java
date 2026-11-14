@@ -15,9 +15,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -246,13 +248,18 @@ class ActivityArchiveJobIT extends AbstractIT {
     }
 
 
+    /** The old week this class archives, on the table's documented Monday boundary. */
+    private static LocalDate oldPartitionStart() {
+        return LocalDate.now(ZoneOffset.UTC).minusDays(120)
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    }
+
     private String oldPartitionName() {
-        LocalDate start = LocalDate.now(ZoneOffset.UTC).minusDays(120);
-        return "activity_event_" + DateTimeFormatter.BASIC_ISO_DATE.format(start);
+        return "activity_event_" + DateTimeFormatter.BASIC_ISO_DATE.format(oldPartitionStart());
     }
 
     private String oldPartition() {
-        LocalDate start = LocalDate.now(ZoneOffset.UTC).minusDays(120);
+        LocalDate start = oldPartitionStart();
         String name = oldPartitionName();
         String end = start.plusWeeks(1) + "T00:00:00Z";
         jdbc.sql("DROP TABLE IF EXISTS " + name).update();

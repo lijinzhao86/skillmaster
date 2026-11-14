@@ -260,7 +260,7 @@ function Home({ accountName }: { accountName: string | null }) {
                     </span>
                     <h3>遇到问题，总有办法</h3>
                   </div>
-                  <p className="card-body"><strong className="card-num">1000+</strong> 个精选 skill，总有一个能解决问题。</p>
+                  <p className="card-body">公开的 skill，总有一个能解决问题。</p>
                 </article>
               </div>
             </div>

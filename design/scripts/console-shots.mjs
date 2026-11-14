@@ -29,9 +29,9 @@ export const SHOTS = [
      这一态是那条规则的凭据。 */
   { name: 'discover-long', query: '?page=discover&long=1', page: 'discover', nav: '发现', scrolls: true, fullPage: false },
   { name: 'discover-results', query: '?page=discover&q=PDF', page: 'discover', nav: '发现', scrolls: false },
-  { name: 'discover-category', query: '?page=discover&tag=doc', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-category', query: '?page=discover&tag=office-efficiency', page: 'discover', nav: '发现', scrolls: false },
   /* **分页条只在按字面找的那一档出现**（v19）：九个结果、一页六条，这是唯一能看见它的地址。 */
-  { name: 'discover-category-paged', query: '?page=discover&tag=doc&tag=data', page: 'discover', nav: '发现', scrolls: false },
+  { name: 'discover-category-paged', query: '?page=discover&tag=office-efficiency&tag=data-analysis', page: 'discover', nav: '发现', scrolls: false },
   { name: 'discover-no-results', query: '?page=discover&q=zzz', page: 'discover', nav: '发现', scrolls: false },
   /* **语义不可用（v19）**：搜索那一路断了，落回按字面找并把原因写在结果上面。 */
   { name: 'discover-degraded', query: '?page=discover&q=PDF&state=degraded', page: 'discover', nav: '发现', scrolls: false },
@@ -178,7 +178,7 @@ export const SHOTS = [
   { name: 'skills-empty', query: '?page=skills&state=empty', page: 'skills', nav: '我的 skill', scrolls: false },
   /* 库里有条目、但一条都显示不出来：页签还在，这一份列表空着。 */
   { name: 'skills-dormant', query: '?page=skills&state=dormant', page: 'skills', nav: '我的 skill', scrolls: false },
-  { name: 'skills-tags', query: '?page=skills&tag=dev&my-tag=client', page: 'skills', nav: '我的 skill', scrolls: false },
+  { name: 'skills-tags', query: '?page=skills&tag=dev-programming&my-tag=client', page: 'skills', nav: '我的 skill', scrolls: false },
   { name: 'skills-loading', query: '?page=skills&state=loading', page: 'skills', nav: '我的 skill', scrolls: false },
   { name: 'skills-failed', query: '?page=skills&state=failed', page: 'skills', nav: '我的 skill', scrolls: false },
   /* `?page=skill` 落在「信息」——那一屏一屏装得下（内容块在没点文件时不出现），所以它不滚动。 */

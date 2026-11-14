@@ -43,7 +43,7 @@ class TagSchemaMigrationIT {
     }
 
     @Test
-    void theVocabularyIsFlatOrderedAndHasOneStoppedWord() throws Exception {
+    void theVocabularyIsFlatOrderedAndKeepsTheRetiredWords() throws Exception {
         flyway().migrate();
 
         try (Connection connection = connect(); Statement sql = connection.createStatement()) {
@@ -54,8 +54,11 @@ class TagSchemaMigrationIT {
                     rows.add(rs.getString(1));
                 }
             }
-            assertThat(rows).hasSize(10).startsWith("doc:enabled").contains("ops:stopped")
-                    .endsWith("security:enabled");
+            // v66 (ADR 0192): 13 enabled shelves first, then the 10 old words retired behind them.
+            // `ops` keeps its old stopped fact only in `skill_category_mapping`; the row itself is
+            // retired now.
+            assertThat(rows).hasSize(23).startsWith("office-efficiency:enabled")
+                    .contains("ops:retired", "doc:retired").endsWith("security:retired");
 
             try (ResultSet rs = sql.executeQuery("""
                     SELECT is_nullable FROM information_schema.columns

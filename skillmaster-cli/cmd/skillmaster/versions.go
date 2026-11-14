@@ -161,9 +161,10 @@ func showLicense(ctx context.Context, args []string) error {
 	return nil
 }
 
-// printSkillShow writes the card, in the order the PRD fixes: address, description, when to use,
-// compatibility, version, category, public tags, my tags. **An empty field is not printed** — a blank
-// label says nothing and makes the ones that do carry a value harder to find.
+// printSkillShow writes the card, in the order the information page fixes: address, description,
+// when to use, my when to use, outcome, compatibility, attributes, then version, state, category,
+// public tags, my tags. **An empty field is not printed** — a blank label says nothing and makes the
+// ones that do carry a value harder to find.
 func printSkillShow(address string, meta api.Metadata, tags api.SkillTags,
 	myWhenToUse string) {
 	fmt.Println(address)
@@ -176,8 +177,22 @@ func printSkillShow(address string, meta api.Metadata, tags api.SkillTags,
 	if myWhenToUse != "" {
 		fmt.Printf("  我的适用场景：%s\n", myWhenToUse)
 	}
+	// v66: the platform's reading sits after the author's and the caller's, before the facts below.
+	// The two are different claims — 「预期结果」 is what using it produces, 「兼容性」 is the author's
+	// runtime note — so neither replaces the other, and the author's wording keeps its own line.
+	if meta.Outcome != "" {
+		fmt.Printf("  预期结果：%s\n", meta.Outcome)
+	}
 	if meta.Compatibility != "" {
-		fmt.Printf("  运行环境：%s\n", meta.Compatibility)
+		// Renamed from 「运行环境」 in v66: the platform's attributes are what say which runtime a
+		// skill needs, and this line is the author's own free-form note. 兼容性 says that without
+		// claiming to be the vocabulary.
+		fmt.Printf("  兼容性：%s\n", meta.Compatibility)
+	}
+	if names := shortLabelNames(meta.Labels); len(names) > 0 {
+		// **Every short name, no +N**: the information page is where a reader decides, and this
+		// command is its terminal half. The long form (`需要 Python`) stays in `skills labels`.
+		fmt.Printf("  属性：%s\n", strings.Join(names, "、"))
 	}
 	if version := api.VersionSuffix(meta.Version.Name, meta.Version.Digest); version != "" {
 		fmt.Printf("  版本：%s\n", version)

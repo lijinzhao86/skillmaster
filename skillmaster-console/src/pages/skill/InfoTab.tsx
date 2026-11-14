@@ -13,9 +13,10 @@ import type { EditGroup } from '../../components/skill/SkillTagGroups'
 
 /**
  * 信息 = the `/metadata` layer. 描述 first as prose, then 适用场景 lifted out (it is the one
- * sentence that says when to remember this skill), then 运行环境 — the three things a reader
- * weighs together. The version is a value, so it sits in the rail. 申请 is the page's only action,
- * drawn while the ladder still has a rung above this one.
+ * sentence that says when to remember this skill), then 我的适用场景, 预期结果, 兼容性 and the
+ * attribute chips — the things a reader weighs together, in that order (v66). The version is a
+ * value, so it sits in the rail. 申请 is the page's only action, drawn while the ladder still has a
+ * rung above this one.
  */
 export interface InfoTabProps {
   skill: AuthoredSkill
@@ -308,16 +309,62 @@ export default function InfoTab({
               onClear={onMyWhenToUseClear}
             />
           ) : null}
+          {skill.outcome !== undefined && skill.outcome !== null && skill.outcome !== '' ? (
+            /* **预期结果 after the two 适用场景 blocks** (v66, 2026-11-13 用户定): read when to use
+               it and when *I* use it first, then what using it gets me. It is the platform's claim,
+               not the author's description, and it does not go on the result row. */
+            <section className="info-block" id="infoOutcome">
+              <span className="info-label">
+                <svg className="info-icon" aria-hidden="true">
+                  <use href="#outcomeMark" />
+                </svg>
+                预期结果
+              </span>
+              <p className="info-text">{skill.outcome}</p>
+            </section>
+          ) : null}
           {compatibility !== '' ? (
             <section className="info-block">
               <span className="info-label">
                 <svg className="info-icon" aria-hidden="true">
                   <use href="#envMark" />
                 </svg>
-                运行环境
+                {/* **Renamed from 「运行环境」** (v66): the platform's attributes now say which
+                    runtime a skill needs; this line is the author's own free-form note, so it
+                    reads as one. */}
+                兼容性
               </span>
               <p className="info-text">{compatibility}</p>
             </section>
+          ) : null}
+          {(skill.labels ?? []).length > 0 ? (
+            /* **Attributes last** (v66, 2026-11-13 用户定): the filterable summary after the prose
+               and the author's own words. Short names only — the full sentence stays in the
+               vocabulary. Each chip filters the public results by that one attribute. */
+            <div className="info-attributes-row" aria-label="属性">
+              {(skill.labels ?? []).map((label) =>
+                label.filterable === false ? (
+                  /* Display-only: the word exists in the vocabulary but cannot be filtered on, so
+                     it is drawn as a chip rather than a link (v66 TD §扩展). */
+                  <span
+                    className="chip is-attr"
+                    key={label.key + ':' + label.value}
+                    data-group={label.group}
+                  >
+                    {label.label}
+                  </span>
+                ) : (
+                  <a
+                    className="chip is-attr"
+                    key={label.key + ':' + label.value}
+                    href={'/discover?label=' + encodeURIComponent(label.key + ':' + label.value)}
+                    data-group={label.group}
+                  >
+                    {label.label}
+                  </a>
+                ),
+              )}
+            </div>
           ) : null}
         </div>
 

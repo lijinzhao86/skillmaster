@@ -82,11 +82,12 @@ class WebDiscoverController {
     ResponseEntity<OrganizationResponses.DiscoverResults> discover(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) List<String> tag,
+            @RequestParam(required = false) List<String> label,
             @RequestParam(required = false) Integer p, Authentication caller) {
         AuthenticatedSubject subject = AuthenticatedSubject.ofSession(caller.getName());
         if (q != null && !q.isBlank() && semantic.enabled()) {
             SemanticSearchUseCase.Outcome outcome = semantic.search(q, SearchScope.PUBLIC, tag,
-                    null, null, SEMANTIC_LIMIT, java.util.List.of(), subject);
+                    null, null, label, SEMANTIC_LIMIT, java.util.List.of(), subject);
             if (!outcome.degraded()) {
                 // **"Nothing was similar enough" is the page's sentence, not this route's.** The
                 // console owns that empty state (the design writes it), so sending our own copy too
@@ -100,7 +101,7 @@ class WebDiscoverController {
                         OrganizationResponses.DiscoverResults.semantic(outcome.hits(),
                                 outcome.emptyNote())));
             }
-            SearchPublicSkillsUseCase.WebResult fallback = search.web(q, tag, p, subject);
+            SearchPublicSkillsUseCase.WebResult fallback = search.web(q, tag, label, p, subject);
             recordSearch(subject, q, tag, p, hitsOf(fallback.cards()), fallback.total());
             // Three sentences, because the literal search is what ran and it can find nothing: then
             // "下面是按字面找到的结果" would describe rows that are not there.
@@ -114,7 +115,7 @@ class WebDiscoverController {
             return ResponseEntity.ok(withSignals(OrganizationResponses.DiscoverResults.of(fallback,
                     "语义检索暂不可用。" + ending)));
         }
-        SearchPublicSkillsUseCase.WebResult literal = search.web(q, tag, p, subject);
+        SearchPublicSkillsUseCase.WebResult literal = search.web(q, tag, label, p, subject);
         if (q == null || q.isBlank()) {
             recordBrowse(subject, tag, literal.cards().size());
         } else {

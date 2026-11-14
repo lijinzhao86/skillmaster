@@ -44,6 +44,12 @@ class UsageHistoryIT extends AbstractIT {
     void seed() {
         now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 
+        // `ago()` counts minutes, so these rows land in the current week — or in the week before
+        // it, within four hours of a Monday 00:00 UTC. Another IT class may have cleaned the
+        // schema since the startup job built those; the day-based tests build their own weeks.
+        ensurePartitionAt(now);
+        ensurePartitionAt(now.minus(1, ChronoUnit.DAYS));
+
         repository.recordSearch(new SearchActivity(ACTOR, "pdf", Map.of("scope", "public"), 2L,
                 List.of(new SearchHit("skill-a", "demo/a"),
                         new SearchHit("skill-b", "demo/b")), false, ago(120)));
@@ -134,6 +140,10 @@ class UsageHistoryIT extends AbstractIT {
     @Test
     void theWindowKeepsTheNinetyDayBoundaryInclusive() {
         String actor = "01M3HTG7GCCVBGRPAFFSVSF12Y";
+        // Each inserted day, not a day above and below: 89 and 91 straddle a Monday whenever the
+        // run falls near the end of a week, and the week between them has no partition then.
+        ensurePartitionAt(now.minus(89, ChronoUnit.DAYS));
+        ensurePartitionAt(now.minus(90, ChronoUnit.DAYS));
         ensurePartitionAt(now.minus(91, ChronoUnit.DAYS));
         ensurePartitionAt(now);
         repository.recordSearch(new SearchActivity(actor, "eighty-nine", Map.of(), 1L,

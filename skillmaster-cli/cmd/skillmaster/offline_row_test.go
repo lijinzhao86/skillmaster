@@ -28,7 +28,7 @@ func TestVerboseRowNamesTheRamp(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := captureStdout(t, func() { printCards(c.cards, true, true) }); got != c.want {
+			if got := captureStdout(t, func() { printCards(c.cards, true, false, true) }); got != c.want {
 				t.Errorf("printed\n%q\nwant\n%q", got, c.want)
 			}
 		})

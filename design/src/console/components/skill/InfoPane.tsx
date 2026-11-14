@@ -31,7 +31,6 @@ import type { AtLeast, Version } from '../../fixtures/skill'
 import { FRONTMATTER, RUNG_NOTES, rungLabel, rungsAbove } from '../../fixtures/skill'
 import {
   CATEGORIES,
-  DISCOVER,
   MAX_PUBLIC_TAGS_PER_SKILL,
   categoryName,
 } from '../../fixtures/library'
@@ -86,6 +85,16 @@ export interface InfoPaneProps {
   initialEdit?: EditGroup | null
   /** 可见但当前不可加入 / 暂时不可见时，右栏那一句原因。 */
   membershipNote: string
+  /** v66：平台的「预期结果」主张；没有就不画这一块。 */
+  outcome?: string
+  /** v66：属性标签（短名 + 类别 + 可点的筛选地址）；空数组不画这一组。
+      前端只画短名（`Python` / `macOS` / `API key`），完整语义留在词表数据里，不进胶囊与读屏。 */
+  attributes?: Array<{
+    key: string
+    valueLabel: string
+    group: string
+    href?: string
+  }>
   /** v49：来源、许可与使用分桶。三者都缺时不画事实区。 */
   origin?: {
     label: string
@@ -142,6 +151,8 @@ export default function InfoPane({
   onTagRemove,
   initialEdit = null,
   membershipNote,
+  outcome,
+  attributes = [],
   origin,
   license,
   usage,
@@ -261,13 +272,52 @@ export default function InfoPane({
               )}
             </section>
           )}
+          {/* **v66：预期结果排在两个适用场景之后**（2026-11-13 用户定）：先把「什么时候用」
+              和「我自己的场景」放在一起读完，再说「用了得到什么」；它是平台的主张，不是作者的描述。
+              没有就不画这一块。 */}
+          <section className="info-block" id="infoOutcome" hidden={outcome === undefined || outcome === ''}>
+            <span className="info-label">
+              <svg className="info-icon" aria-hidden="true"><use href="#outcomeMark" /></svg>
+              预期结果
+            </span>
+            <p className="info-text" id="infoOutcomeText">{outcome}</p>
+          </section>
+          {/* **兼容性在属性之前**（2026-11-13 用户定）：先读作者原文里 `ghostscript 10 以上`
+              这类词表外长尾，再用页底那行彩色短名做可筛选的摘要。标题只写「兼容性」，不再加
+              「作者原文」——散文与胶囊的形态已经分得开。 */}
           <section className="info-block" id="infoEnv" hidden={!FRONTMATTER.compatibility}>
             <span className="info-label">
               <svg className="info-icon" aria-hidden="true"><use href="#envMark" /></svg>
-              运行环境
+              兼容性
             </span>
             <p className="info-text" id="infoEnvText">{FRONTMATTER.compatibility || ''}</p>
           </section>
+          {/* **属性胶囊放在最下**（2026-11-13 用户定）：它是平台从正文整理出的可筛选摘要，
+              读完正文与作者原文之后，最后一眼看「跑起来缺什么」。 */}
+          {attributes.length > 0 && (
+            <div className="info-attributes-row" aria-label="属性">
+              {attributes.map((attribute) => (
+                attribute.href === undefined ? (
+                  <span
+                    className="chip is-attr"
+                    key={attribute.key}
+                    data-group={attribute.group}
+                  >
+                    {attribute.valueLabel}
+                  </span>
+                ) : (
+                  <a
+                    className="chip is-attr"
+                    key={attribute.key}
+                    href={attribute.href}
+                    data-group={attribute.group}
+                  >
+                    {attribute.valueLabel}
+                  </a>
+                )
+              ))}
+            </div>
+          )}
         </div>
 
         <aside className="info-rail">
@@ -289,8 +339,6 @@ export default function InfoPane({
                   groups={[{ options: CATEGORIES.map((entry) => ({
                     value: entry.id,
                     label: entry.name,
-                    /* 计数是公域里在这个货架上的 skill 数。 */
-                    number: String(DISCOVER.filter((skill) => skill.category === entry.id).length),
                     /* 停用的词不可新增；已经贴在它上面的仍是它。 */
                     disabled: entry.stopped === true && category !== entry.id,
                   })) }]}

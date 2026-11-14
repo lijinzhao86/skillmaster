@@ -46,14 +46,14 @@ class WebOrganizeIT extends AbstractOrganizeIT {
     @Test
     void theWebVocabulariesMatchTheApi() {
         String skill = publicSkill("pdf-tools");
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE id = :id")
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE id = :id")
                 .param("id", skill).update();
         publicTag(skill, "pdf", "PDF");
         token();
 
         JsonNode categories = json(webGet("/web/categories")).get("categories");
-        assertThat(categories).hasSize(10);
-        assertThat(categories.get(0).get("key").asText()).isEqualTo("doc");
+        assertThat(categories).hasSize(13);
+        assertThat(categories.get(0).get("key").asText()).isEqualTo("office-efficiency");
         assertThat(categories.get(0).get("public_total").asLong()).isEqualTo(1);
 
         JsonNode tags = json(webGet("/web/public-tags?q=pdf")).get("tags");

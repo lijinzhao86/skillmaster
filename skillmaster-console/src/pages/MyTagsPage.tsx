@@ -35,10 +35,11 @@ import {
  * One page, two lists. 我的标签 is the private, editable one; 公开标签 is a read-only view of the
  * words written on the caller's own live skills. The page and the navigation stay 「标签」.
  *
- * The order is fixed: attachment count descending, then name. There is no sort control — this list is
- * read by "how much is it used".
+ * The private list is ordered by attachment count descending, then name — it is read by "how much is
+ * it used", and each row still says 「用在 N 个 skill 上」. **The public list is ordered by name**
+ * (v66): its rows no longer carry a count, so a usage order would look arbitrary; each row's action
+ * is the way to the skills wearing the word.
  */
-const COUNT = (n: number): string => '用在 ' + n + ' 个 skill 上'
 
 type PrivateState = 'loading' | 'ready' | 'failed' | 'empty' | 'dormant' | 'full'
 type PublicState = 'loading' | 'ready' | 'failed'
@@ -465,12 +466,9 @@ export default function MyTagsPage() {
       tagKey(tag.description ?? '').includes(lower),
   )
 
-  const publicOrdered = [...publicTags].sort((a, b) => {
-    if (b.used_in !== a.used_in) {
-      return b.used_in - a.used_in
-    }
-    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0
-  })
+  /* **By name, since the count is gone** (v66): ordering by a number the row no longer shows
+     would look arbitrary. The private list keeps usage order — it still prints 「用在 N 个上」. */
+  const publicOrdered = [...publicTags].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
   const publicShown = publicOrdered.filter((tag) => lower === '' || tagKey(tag.name).includes(lower))
 
   const deleteBody = (tag: MyTagUsage): string => {
@@ -645,8 +643,14 @@ export default function MyTagsPage() {
                     <div className="skill-line">
                       <span className="tag-name">{'#' + tag.name}</span>
                       <span className="spacer" />
-                      <a className="tag-count" href={`/?public-tag=${encodeURIComponent(tag.key)}`}>
-                        {COUNT(tag.used_in)}
+                      {/* **An entry, not a number** (v66): how many skills carry the word is the
+                          public corpus again, and the row's useful fact is where to see them. */}
+                      <a
+                        className="tag-action"
+                        href={`/?public-tag=${encodeURIComponent(tag.key)}`}
+                        aria-label={'查看 ' + tag.name + ' 下的 skill'}
+                      >
+                        查看 skill
                       </a>
                     </div>
                   </li>
