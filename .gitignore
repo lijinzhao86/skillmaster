@@ -46,3 +46,6 @@ skillmaster-site/public/skill/*.tmp
 # Generate them when you need to look:
 #   node design/scripts/console-states.mjs "design/skillmaster-控制台演示.html" artifacts/design/console --only <组>
 artifacts/
+
+# Build output of the operations service.
+**/target/

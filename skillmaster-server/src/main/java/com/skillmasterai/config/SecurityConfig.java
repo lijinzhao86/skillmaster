@@ -281,13 +281,19 @@ class SecurityConfig {
                         .requestMatchers(HttpMethod.HEAD, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers(HttpMethod.OPTIONS, "/api/v1/**").hasAuthority(readAuthority())
                         .requestMatchers("/api/v1/**").hasAuthority(writeAuthority())
-                        // v50's sync trigger (ADR 0159). It authenticates itself with a dedicated
-                        // header token compared in constant time; requiring a Bearer token here would
-                        // answer 401 before the controller could say what is actually wrong. nginx
-                        // returns 404 for `/internal/` from outside, so reaching this rule already
-                        // means loopback.
+                        // The service-to-service plane (ADR 0198). It authenticates itself with a
+                        // dedicated header token compared in constant time, and it only answers on
+                        // the private connector — see InnerPlaneConfig. A Bearer rule here would
+                        // answer 401 before the token filter could say what is actually wrong.
+                        .requestMatchers("/inner/v1/**").permitAll()
+                        // The old trigger is gone; permitting it lets the dispatcher answer 404,
+                        // which is what "retired" looks like. Left to `denyAll()` it would answer
+                        // 401 and advertise a route that no longer exists.
                         .requestMatchers("/internal/**").permitAll()
-                        .anyRequest().authenticated())
+                        // Default deny: a route that is not named above is not reachable. The old
+                        // `authenticated()` fallback turned every forgotten path into "any valid
+                        // token may call it"; this makes the omission fail closed and loud.
+                        .anyRequest().denyAll())
                 // The context comes from the token, via the repository — see that class for why
                 // this is not a custom filter that authenticates on its own.
                 .securityContext(context -> context

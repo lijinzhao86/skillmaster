@@ -212,7 +212,11 @@ type Metadata struct {
 	WhenToUse string `json:"when_to_use"`
 	// Compatibility is the runtime requirements from the frontmatter's top level, or empty.
 	Compatibility string `json:"compatibility"`
-	Version       struct {
+	// v66: the platform's one-line expected result and its displayed attributes. Both are the
+	// platform's reading, not the author's — `description` and `when_to_use` above stay untouched.
+	Outcome string  `json:"outcome"`
+	Labels  []Label `json:"labels"`
+	Version struct {
 		// Null when the author declared no `version:` — such a version is addressed by its digest.
 		Name   string `json:"name"`
 		Digest string `json:"digest"`
@@ -425,6 +429,11 @@ type Card struct {
 	Category            *Category `json:"category"`
 	PublicTags          []Tag     `json:"public_tags"`
 	MyTags              []Tag     `json:"my_tags"`
+	// v66: what using the skill is expected to produce, and the attributes a reader compares rows
+	// by. The outcome is read only by `skill show` — the list keeps its `description - when_to_use`
+	// reading — while the attributes get one line under a search result.
+	Outcome string  `json:"outcome"`
+	Labels  []Label `json:"labels"`
 	// Score is the cosine similarity a semantic search ranked this row by (v19), or nil on the
 	// keyword path. A pointer because zero is a real similarity and "no score" is a different fact.
 	Score *float64 `json:"score"`

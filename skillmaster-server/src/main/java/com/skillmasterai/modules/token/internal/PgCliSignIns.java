@@ -40,7 +40,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * The CLI's login over a link and a poll (v68, ADR 0190), written against the tables M2 owns.
+ * The CLI's login over a link and a poll (v68, ADR 0200), written against the tables M2 owns.
  *
  * <p><strong>Why the loopback delivery is gone.</strong> The listener could only work where a
  * browser could reach the machine that asked, which is exactly where a cloud device is not. The

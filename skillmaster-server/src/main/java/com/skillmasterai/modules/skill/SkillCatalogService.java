@@ -73,10 +73,11 @@ public final class SkillCatalogService {
      */
     public List<CatalogRow> page(List<String> namespaceFilterIds, String queryText,
             RankingWeights weights, boolean byRelevance, boolean publicOnly,
-            List<String> categoryKeys, List<String> publicTagKeys, List<String> afterKey,
+            List<String> categoryKeys, List<String> publicTagKeys,
+            List<String> labelDefinitionIds, List<String> afterKey,
             int limit, Integer offset, Caller caller) {
         return repository.page(namespaceFilterIds, queryText, weights, byRelevance, publicOnly,
-                categoryKeys, publicTagKeys, afterKey, limit, offset, caller);
+                categoryKeys, publicTagKeys, labelDefinitionIds, afterKey, limit, offset, caller);
     }
 
     /**
@@ -135,9 +136,10 @@ public final class SkillCatalogService {
 
     /** The same filters {@link #page} uses, counted before the page is cut. */
     public long count(List<String> namespaceFilterIds, String queryText, boolean publicOnly,
-            List<String> categoryKeys, List<String> publicTagKeys, Caller caller) {
+            List<String> categoryKeys, List<String> publicTagKeys,
+            List<String> labelDefinitionIds, Caller caller) {
         return repository.count(namespaceFilterIds, queryText, publicOnly, categoryKeys,
-                publicTagKeys, caller);
+                publicTagKeys, labelDefinitionIds, caller);
     }
 
     /**

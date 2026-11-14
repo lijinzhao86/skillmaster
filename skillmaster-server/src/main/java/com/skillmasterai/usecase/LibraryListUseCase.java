@@ -6,6 +6,7 @@ import com.skillmasterai.modules.namespace.Namespace;
 import com.skillmasterai.modules.namespace.NamespaceService;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.skill.Caller;
+import com.skillmasterai.modules.skill.LabelService;
 import com.skillmasterai.modules.skill.SkillCatalogService;
 import com.skillmasterai.modules.skill.SkillCategoryService;
 import com.skillmasterai.modules.skill.SkillLibraryService;
@@ -52,14 +53,17 @@ public class LibraryListUseCase {
     private final SkillLibraryService library;
     private final SkillTagService tags;
     private final SkillCategoryService categories;
+    private final LabelService labels;
     private final SkillCardAssembler cards;
 
     public LibraryListUseCase(NamespaceService namespaces, SkillLibraryService library,
-            SkillTagService tags, SkillCategoryService categories, SkillCardAssembler cards) {
+            SkillTagService tags, SkillCategoryService categories, LabelService labels,
+            SkillCardAssembler cards) {
         this.namespaces = namespaces;
         this.library = library;
         this.tags = tags;
         this.categories = categories;
+        this.labels = labels;
         this.cards = cards;
     }
 
@@ -71,9 +75,9 @@ public class LibraryListUseCase {
      */
     @Transactional(readOnly = true)
     public Result api(String q, List<String> namespaceSlugs, List<String> categoryNames,
-            List<String> myTags, List<String> publicTags, List<String> sources, String sort,
-            String show, Integer limit, String cursor, List<String> excludedIds,
-            AuthenticatedSubject subject) {
+            List<String> myTags, List<String> publicTags, List<String> labelKeys,
+            List<String> sources, String sort, String show, Integer limit, String cursor,
+            List<String> excludedIds, AuthenticatedSubject subject) {
         Caller caller = Callers.of(namespaces, subject);
         List<String> excluded = excludedIds == null ? List.of() : excludedIds;
         List<String> requestedNamespaces =
@@ -92,9 +96,10 @@ public class LibraryListUseCase {
         if ("deleted".equals(normalShow)
                 && ((categoryNames != null && !categoryNames.isEmpty())
                     || (myTags != null && !myTags.isEmpty())
-                    || (publicTags != null && !publicTags.isEmpty()))) {
+                    || (publicTags != null && !publicTags.isEmpty())
+                    || (labelKeys != null && !labelKeys.isEmpty()))) {
             throw new InvalidSearchRequestException(
-                    "show=deleted accepts no category, my_tag or public_tag filter");
+                    "show=deleted accepts no category, my_tag, public_tag or label filter");
         }
         boolean byName = "name".equals(requireSort(sort));
         List<String> normalSources = sources == null ? List.of() : sources.stream()
@@ -137,6 +142,16 @@ public class LibraryListUseCase {
             }
         }
 
+        // **An unknown attribute word is a 400, not an empty page** (v66): a person picks these from
+        // the vocabulary, so a word that is not in it is a typo to report by name — the same answer
+        // the public plane gives, from the same vocabulary.
+        List<String> labelIds = new ArrayList<>();
+        for (String key : labelKeys == null ? List.<String>of() : labelKeys) {
+            labelIds.add(labels.definitionIdOf(key)
+                    .orElseThrow(() -> new InvalidSearchRequestException(
+                            "unknown label '" + key + "'")));
+        }
+
         // The deleted list keeps only the caller's own skills, so a source filter that names any
         // other source selects nothing rather than being silently dropped (PRD #45).
         if ("deleted".equals(normalShow)
@@ -161,7 +176,7 @@ public class LibraryListUseCase {
         // **The exclusion widens that window by its own size** (v30): at most that many rows can be
         // dropped, so a page's worth plus one always survives to answer the cursor honestly.
         SkillLibraryService.Query query = new SkillLibraryService.Query(q, namespaceIds, categoryKeys,
-                myTagIds, publicTagKeys, normalSources, normalShow, byName, afterKey, null,
+                myTagIds, publicTagKeys, labelIds, normalSources, normalShow, byName, afterKey, null,
                 pageSize + excluded.size() + 1);
         List<SkillCatalogService.CatalogRow> rows = library.page(query, caller);
         if (!excluded.isEmpty()) {
@@ -206,6 +221,7 @@ public class LibraryListUseCase {
                 categoryKeys == null ? List.of() : categoryKeys,
                 myTagIds == null ? List.of() : myTagIds,
                 publicTagKeys == null ? List.of() : publicTagKeys,
+                List.of(),
                 List.of(), normalShow, byName, null, offset, pageSize);
         List<SkillCatalogService.CatalogRow> rows = library.page(query, caller);
         long filtered = library.filteredTotal(query, caller);

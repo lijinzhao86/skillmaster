@@ -4,10 +4,13 @@
  * **「发现」的两处用它**：第一次进入的「为你推荐」，和搜索 / 分类之后的结果清单。两处是同一行、
  * 同一套加入状态——如果各写一份，某一处的「已在库」迟早会漏掉。
  *
- * **只保留三行，其余在详情页。** 第一行名字与分类；第二行它做什么；第三行是公开标签。
- * 行尾三格——累计调用量（只读）、收藏（占位）、入库——
+ * **只保留三行，其余在详情页。** 第一行名字与分类；第二行作者描述；
+ * 第三行左边属性（可点，与分类同一套筛选地址）、右边公开标签。行尾三格——累计调用量（只读）、收藏（占位）、入库——
  * 数量都在图标正下方。许可、更新时间、适用场景、版本号与能力字段都移到 skill 信息页。
  * 这样 1440 宽一屏能扫 7 行左右，而不是两三张卡（v49 第 2 关，2026-11-05 用户定）。
+ *
+ * **v66：预期结果不上列表。** 列表先回答「这个 skill 是什么」——作者描述比一句主张更能讲明白；
+ * 预期结果回答「用了得到什么」，放在信息页的适用场景之后（2026-11-13 用户定）。
  *
  * **动作只有一颗图标，钉在行尾。** 加入是一枚**书签**：未加入是描边，加入后是实心、转成主色，
  * 再点一下就退出。库里已有的条目画同一颗实心书签，但是静的——移除自己的库条目在 skill 页上，
@@ -19,8 +22,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import SkillAvatar from './SkillAvatar'
-import { SOURCE_LABEL, categoryName, publicTagName } from '../fixtures/library'
-import type { DiscoverSkill, Source, SourceKind } from '../fixtures/library'
+import { SOURCE_LABEL, categoryName, profileOf, publicTagName } from '../fixtures/library'
+import type { DiscoverSkill, LabelGroup, Source, SourceKind } from '../fixtures/library'
 
 export type JoinState = 'idle' | 'busy' | 'failed'
 
@@ -40,6 +43,55 @@ function SourceMark({ kind }: { kind: SourceKind }) {
       <path d="M8.3 12.2 10.8 14.7 15.8 9.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
+}
+
+/** v66：属性类别的图标——终端（语言）、屏幕（系统）、工具（工具与资源）、钥匙（凭据）、价签（定价）。 */
+function BlockerIcon({ kind }: { kind: 'key' | 'runtime' | 'os' | 'tool' | 'price' }) {
+  if (kind === 'key') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="8.2" cy="8.2" r="3.6" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10.8 10.8 19 19M15.2 15.2l2-2M17.2 17.2l2-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  if (kind === 'runtime') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4.8 7.2l4.6 4.8-4.6 4.8M12.4 16.8h6.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (kind === 'os') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="3.5" y="4.5" width="17" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8.5 20h7M12 16.5V20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  if (kind === 'tool') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M14.5 6.2a4 4 0 0 0-5 5L4.8 15.9a1.8 1.8 0 0 0 2.5 2.5l4.7-4.7a4 4 0 0 0 5-5l-2.6 2.6-2.4-2.4 2.5-2.7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3.8 20 8v8l-8 4.2L4 16V8l8-4.2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9.5 9.5h5M12 9.5v6M9.8 12.2h4.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+/** 属性的类别决定图标；颜色由 CSS 的 `data-group` 决定。 */
+function iconKind(group: LabelGroup): 'key' | 'runtime' | 'os' | 'tool' | 'price' {
+  if (group === 'credential') return 'key'
+  if (group === 'os') return 'os'
+  if (group === 'tool') return 'tool'
+  if (group === 'pricing') return 'price'
+  return 'runtime'
 }
 
 /** 复制一行地址。`file://` 打开演示件时没有 Clipboard API，退回一段隐藏的 textarea。 */
@@ -128,41 +180,71 @@ export default function ResultCard({
       </button>
     )
 
-  /* **第三行只剩公开标签**：来源与账号数移到信息页，累计调用量在行尾。这一行回答的是
-     「它为什么被搜到」，所以留给召回词。 */
+  /* **第三行：左边属性、右边公开标签**（2026-11-13 用户定）。属性回答「跑起来缺什么」，
+     公开标签回答「它为什么被搜到」；两类词不再混在同一串 `#` 里。 */
   /* **详情页跟着归属走**：公域里还没入库的（`inLibrary === null`）进「可加入」那一态，
      在库的带着自己的来源进去——导航据此点亮「发现」还是「我的 skill」。 */
   const skillHref = skill.inLibrary === null ? '?page=skill&in=visible' : '?page=skill&in=' + skill.inLibrary
 
+  /* **v66：列表只显示作者描述。** 预期结果是平台的主张（ADR 0193），回答「用了得到什么」，
+     回答不了「这个 skill 是什么、怎么用」；它只放信息页，不占列表的第二行。 */
+  const profile = profileOf(skill.name)
+  /* **v66：运行环境是多选，每个非默认值各一枚 chip**（2026-11-13 用户定）：用了 Node 和
+     Python 就两枚都画；纯提示词不画。API key / 账号用钥匙图标，其余用终端图标；付费单独一枚
+     价签。没有阻拦就不画，不把「免费 · 纯提示词」这种默认状态写出来。
+     **第三行放前三枚，第四枚起收成 `+N`**（2026-11-13 用户定）：三枚时 Java / Linux / Docker
+     都能看见，不用点；四枚以上才收，点 `+N` 展开全部。
+     **前端只写短名**（2026-11-13 用户定）：`Python` / `macOS` / `API key`，不把「需要 Python」
+     「仅 macOS」这类完整语义放进胶囊、tooltip 或读屏；完整语义留在词表数据里（抽取证据 / CLI / 运营）。 */
+  /* 行上的属性由同一份 profile 生成：运行环境除纯提示词外全画，定价只画付费（免费是默认值，
+     与生产读模型的排除口径一致）。可展示、不可筛的词（`filterable === false`）没有链接——
+     服务端会把它当未知标签拒绝。 */
+  const attributeChips = (profile.labels ?? [])
+    .filter((item) => !(
+      (item.key === 'runtime' && item.value === 'prompt-only') ||
+      (item.key === 'pricing_type' && item.value !== 'paid')
+    ))
+    .map((item) => ({
+      id: item.key + ':' + item.value,
+      href: item.filterable === false
+        ? undefined
+        : '?page=discover&label=' + item.key + ':' + item.value,
+      label: item.valueLabel,
+      group: item.group,
+      kind: iconKind(item.group),
+    }))
+  const shownAttrs = attributeChips.slice(0, 3)
+  const hiddenAttrs = attributeChips.slice(3)
+
   const shownTags = skill.publicTags.slice(0, 3)
   const moreTags = skill.publicTags.length - shownTags.length
-  /* **`+N` 点开是全部标签的浮层**（2026-11-05 用户定）：行只有三行，展开不能把行撑高，
-     所以浮层挂在 body 上、按按钮的位置定位；点外面或 Esc 关上。 */
-  const [tagsOpen, setTagsOpen] = useState(false)
-  const moreRef = useRef<HTMLButtonElement>(null)
-  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null)
-  const toggleTags = () => {
-    if (tagsOpen) {
-      setTagsOpen(false)
+  /* **`+N` 点开是全部标签或全部属性的浮层**（2026-11-05 用户定；2026-11-13 加上属性）：
+     行只有三行，展开不能把行撑高，所以浮层挂在 body 上、按按钮的位置定位；点外面或 Esc 关上。 */
+  const [openMore, setOpenMore] = useState<{ kind: 'tags' | 'attrs'; left: number; top: number } | null>(null)
+  const tagsRef = useRef<HTMLButtonElement>(null)
+  const attrsRef = useRef<HTMLButtonElement>(null)
+  const toggleMore = (kind: 'tags' | 'attrs', ref: { current: HTMLButtonElement | null }) => {
+    if (openMore?.kind === kind) {
+      setOpenMore(null)
       return
     }
-    const rect = moreRef.current?.getBoundingClientRect()
+    const rect = ref.current?.getBoundingClientRect()
     if (rect === undefined) return
-    setPopoverPos({
+    setOpenMore({
+      kind,
       left: Math.max(12, Math.min(rect.left, window.innerWidth - 356)),
       top: rect.bottom + 6,
     })
-    setTagsOpen(true)
   }
   useEffect(() => {
-    if (!tagsOpen) return
+    if (openMore === null) return
     const onDown = (event: MouseEvent) => {
       const node = event.target
       if (node instanceof Element && (node.closest('.tags-pop') !== null || node.closest('.result-more') !== null)) return
-      setTagsOpen(false)
+      setOpenMore(null)
     }
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setTagsOpen(false)
+      if (event.key === 'Escape') setOpenMore(null)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
@@ -170,7 +252,7 @@ export default function ResultCard({
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [tagsOpen])
+  }, [openMore])
   /* 入库数：库里的加入条数；刚在这一屏加入的那一条先加一，不用等下一次读取。 */
   const libraryCount = (skill.joins ?? 0) + (onRemove === undefined ? 0 : 1)
 
@@ -235,11 +317,45 @@ export default function ResultCard({
             </span>
           )}
         </div>
-        {/* 描述封顶一行，完整的那一段在 `title` 里；主路是点名字进 skill 页。 */}
-        <p className="result-title" title={skill.description}>{skill.description}</p>
-        {/* **第三行只有公开标签**（2026-11-05 用户定）：来源与账号数不上行，标签从右端挪到
-            左端，与名字同一条竖线开始。 */}
+        {/* **v66：列表只显示作者描述。** 封顶一行，完整的那一段在 `title` 里；主路是点名字进
+            skill 页。预期结果不上列表——它回答「用了得到什么」，在信息页的适用场景之后。 */}
+        <p className="result-title" title={skill.description}>
+          {skill.description}
+        </p>
+        {/* **第三行：左属性、右公开标签**（2026-11-13 用户定）。属性最多三枚，再多收成 `+N`；
+            公开标签仍在右端，最多三个。两组都可展开，行高不变。 */}
         <div className="result-bottom">
+          <div className="result-attrs" aria-label="属性">
+            {shownAttrs.map((chip) => {
+              const body = (
+                <>
+                  <BlockerIcon kind={chip.kind} />
+                  {chip.label}
+                </>
+              )
+              return chip.href === undefined ? (
+                <span className="chip is-blocker" key={chip.id} data-group={chip.group}>
+                  {body}
+                </span>
+              ) : (
+                <a className="chip is-blocker" key={chip.id} href={chip.href} data-group={chip.group}>
+                  {body}
+                </a>
+              )
+            })}
+            {hiddenAttrs.length > 0 && (
+              <button
+                type="button"
+                ref={attrsRef}
+                className="result-more"
+                aria-expanded={openMore?.kind === 'attrs'}
+                title={'显示全部 ' + attributeChips.length + ' 个属性'}
+                onClick={() => toggleMore('attrs', attrsRef)}
+              >
+                {'+' + hiddenAttrs.length}
+              </button>
+            )}
+          </div>
           <div className="result-tags">
             {shownTags.map((id) => (
               <span className="result-tag" key={id}>{'#' + publicTagName(id)}</span>
@@ -247,11 +363,11 @@ export default function ResultCard({
             {moreTags > 0 && (
               <button
                 type="button"
-                ref={moreRef}
+                ref={tagsRef}
                 className="result-more"
-                aria-expanded={tagsOpen}
+                aria-expanded={openMore?.kind === 'tags'}
                 title={'显示全部 ' + skill.publicTags.length + ' 个公开标签'}
-                onClick={toggleTags}
+                onClick={() => toggleMore('tags', tagsRef)}
               >
                 {'+' + moreTags}
               </button>
@@ -265,20 +381,47 @@ export default function ResultCard({
           </p>
         )}
       </div>
-      {tagsOpen && popoverPos !== null &&
+      {openMore !== null &&
         createPortal(
           <div
             className="tags-pop"
             role="dialog"
-            aria-label="全部公开标签"
-            style={{ left: popoverPos.left, top: popoverPos.top }}
+            aria-label={openMore.kind === 'tags' ? '全部公开标签' : '全部属性'}
+            style={{ left: openMore.left, top: openMore.top }}
           >
-            <p className="tags-pop-head">{'公开标签 · ' + skill.publicTags.length}</p>
-            <div className="tags-pop-list">
-              {skill.publicTags.map((id) => (
-                <span className="tags-pop-tag" key={id}>{'#' + publicTagName(id)}</span>
-              ))}
-            </div>
+            {openMore.kind === 'tags' ? (
+              <>
+                <p className="tags-pop-head">{'公开标签 · ' + skill.publicTags.length}</p>
+                <div className="tags-pop-list">
+                  {skill.publicTags.map((id) => (
+                    <span className="tags-pop-tag" key={id}>{'#' + publicTagName(id)}</span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="tags-pop-head">{'属性 · ' + attributeChips.length}</p>
+                <div className="tags-pop-list">
+                  {attributeChips.map((chip) => {
+                    const body = (
+                      <>
+                        <BlockerIcon kind={chip.kind} />
+                        {chip.label}
+                      </>
+                    )
+                    return chip.href === undefined ? (
+                      <span className="tags-pop-attr" key={chip.id} data-group={chip.group}>
+                        {body}
+                      </span>
+                    ) : (
+                      <a className="tags-pop-attr" key={chip.id} href={chip.href} data-group={chip.group}>
+                        {body}
+                      </a>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </div>,
           document.body,
         )}

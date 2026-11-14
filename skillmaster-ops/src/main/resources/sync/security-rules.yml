@@ -1,0 +1,74 @@
+# v50 sync's static rules (ADR 0155). The scanner is source-neutral: these run on every platform.
+#
+# `kind` is how the rule reads its input:
+#   text   — UTF-8 files only; binary files are skipped
+#   path   — the file's relative path
+#   binary — any file whose bytes are not valid UTF-8
+blocked:
+  - id: private_key
+    label: 私钥
+    kind: text
+    regex: "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"
+
+  - id: aws_access_key
+    label: 云访问密钥
+    kind: text
+    regex: "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b"
+
+  - id: github_token
+    label: GitHub 凭据
+    kind: text
+    regex: "\\bgh[pousr]_[A-Za-z0-9]{36,}\\b"
+
+  - id: bearer_key
+    label: API 密钥
+    kind: text
+    regex: "\\bsk-[A-Za-z0-9_-]{20,}\\b"
+
+  - id: slack_token
+    label: Slack 凭据
+    kind: text
+    regex: "\\bxox[baprs]-[A-Za-z0-9-]{10,}\\b"
+
+  # `.env.example` / `.env.sample` / `.env.template` are documentation, not credentials. Public
+  # certificates are not credentials either; an actual private key is caught by its PEM header.
+  - id: secret_file
+    label: 凭据文件
+    kind: path
+    regex: "(^|/)(?:\\.env(?!\\.(?:example|sample|template)(?:$|/))(?:\\.(?!example$|sample$|template$).*)?|id_rsa|id_ed25519|id_ecdsa)(?:$|/)|(?:\\.p12|\\.pfx)$"
+
+  # ADR 0155 blocks an executable *binary*; an executable text script is a warning below. "Executable"
+  # is where the file will land, not what the archive said: scripts/ is delivered 0755 and everything
+  # else 0644 (ADR 0166), so this rule reads the skill-relative path and ignores the tar mode.
+  - id: executable_binary
+    label: 可执行二进制
+    kind: executable_binary
+
+  - id: destructive_command
+    label: 破坏性命令
+    kind: text
+    regex: "(?i)(\\brm\\s+-[a-z]*r[a-z]*f\\b[^\\n]*\\s/(?:\\s|$)|\\bmkfs(?:\\.\\w+)?\\s|\\bdd\\b[^\\n]*\\bof=/dev/|:\\s*\\(\\s*\\)\\s*\\{[^\\n]*:\\|:)"
+
+  - id: pipe_to_shell
+    label: 下载内容直接执行
+    kind: text
+    regex: "(?i)\\b(?:curl|wget)\\b[^\\n|]*\\|\\s*(?:sudo\\s+)?(?:sh|bash|zsh)\\b|\\b(?:iwr|irm)\\b[^\\n|]*\\|\\s*iex\\b"
+
+warnings:
+  - id: external_url
+    label: 外部链接
+    kind: text
+    regex: "https?://"
+
+  - id: broad_permissions
+    label: 宽泛权限
+    kind: text
+    regex: "(?i)(allowed-tools|permissions|allowed_tools)\\s*:[^\\n]*\\*"
+
+  - id: binary_file
+    label: 二进制文件
+    kind: binary
+
+  - id: executable_file
+    label: 可执行脚本
+    kind: executable

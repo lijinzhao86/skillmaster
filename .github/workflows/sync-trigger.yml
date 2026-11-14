@@ -1,15 +1,16 @@
-# Run v50's open-source sync now, without deploying anything.
+# Run the open-source import now, without deploying anything.
 #
-# The operation is one loopback POST on the host that already runs the server (ADR 0159). The
-# workflow exists because the deployment host is where the SSH key and the trigger token already
-# live; it builds nothing, publishes nothing and restarts nothing.
+# Since v69 the import lives in skillmaster-ops on the second ECS (ADR 0199). The operation is one
+# loopback POST there, then a poll of the run: the trigger answers 202 with a run id, because a
+# first import can take longer than any sane HTTP request. The workflow builds nothing, publishes
+# nothing and restarts nothing.
 name: Sync trigger
 
 on:
   workflow_dispatch:
 
-# A second click waits rather than starting a parallel run. The server's own guard is the final
-# word — this only keeps the ordinary case from producing two queued jobs.
+# A second click waits rather than starting a parallel run. ops answers 409 to a concurrent run;
+# this only keeps the ordinary case from producing two queued jobs.
 concurrency:
   group: sync-trigger
   cancel-in-progress: false
@@ -27,98 +28,89 @@ jobs:
     # parse error instead of the step's message.
     timeout-minutes: 360
     steps:
-      - name: Run the sync and follow its progress
+      - name: Run the import and follow its run
         env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          OPS_HOST: ${{ vars.OPS_HOST }}
+          OPS_USER: ${{ vars.OPS_USER }}
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-          SYNC_TRIGGER_TOKEN: ${{ secrets.SKILLMASTER_SYNC_TRIGGER_TOKEN }}
+          INNER_TOKEN: ${{ secrets.SKILLMASTER_INNER_TOKEN }}
           SYNC_TIMEOUT_MINUTES: ${{ vars.SYNC_TRIGGER_TIMEOUT_MINUTES || '60' }}
         run: |
           set -euo pipefail
-          if [ -z "${SYNC_TRIGGER_TOKEN:-}" ]; then
-            echo "SKILLMASTER_SYNC_TRIGGER_TOKEN is not set; the endpoint is not registered" >&2
+          if [ -z "${OPS_HOST:-}" ] || [ -z "${OPS_USER:-}" ]; then
+            echo "::error::OPS_HOST and OPS_USER must be set to the operations machine" >&2
+            exit 1
+          fi
+          if [ -z "${INNER_TOKEN:-}" ]; then
+            echo "::error::SKILLMASTER_INNER_TOKEN is not set; ops would answer 404" >&2
             exit 1
           fi
 
-          # How long the request may stay open. Two minutes is the floor: below that the SSH
-          # handshakes alone could outlast the wait.
           minutes="$SYNC_TIMEOUT_MINUTES"
-          case "$minutes" in
-            ''|*[!0-9]*)
-              echo "::error::SYNC_TRIGGER_TIMEOUT_MINUTES must be a whole number, got '$minutes'" >&2
-              exit 1
-              ;;
-          esac
-          # Leading zeros would make the arithmetic below read the value as octal (`090` is an
-          # error, `020` is 16), and a very long number slips past `test` with an error status and
-          # then overflows. Normalise first, then bound the length.
           minutes="${minutes#"${minutes%%[!0]*}"}"
-          if [ -z "$minutes" ] || [ "${#minutes}" -gt 3 ]; then
-            echo "::error::SYNC_TRIGGER_TIMEOUT_MINUTES must be between 2 and 350, got $SYNC_TIMEOUT_MINUTES" >&2
+          if [ -z "$minutes" ] || [ "${#minutes}" -gt 3 ] || [ "$minutes" -lt 2 ] || [ "$minutes" -gt 350 ]; then
+            echo "::error::SYNC_TRIGGER_TIMEOUT_MINUTES must be between 2 and 350, got '$SYNC_TIMEOUT_MINUTES'" >&2
             exit 1
           fi
-          if [ "$minutes" -lt 2 ] || [ "$minutes" -gt 350 ]; then
-            echo "::error::SYNC_TRIGGER_TIMEOUT_MINUTES must be between 2 and 350, got $minutes" >&2
-            exit 1
-          fi
-          # Thirty seconds short of the variable, so curl gives its answer instead of the floor
-          # ending the step under it.
-          deadline=$(( minutes * 60 - 30 ))
+          deadline=$(( minutes * 60 ))
 
           key="$RUNNER_TEMP/trigger_key"
           printf '%s\n' "$DEPLOY_KEY" > "$key"
           chmod 600 "$key"
-          target="$DEPLOY_USER@$DEPLOY_HOST"
+          target="$OPS_USER@$OPS_HOST"
           opts=(-i "$key" -o StrictHostKeyChecking=accept-new
                 -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-
-          # One connection first: two that open at the same moment both write known_hosts.
           ssh "${opts[@]}" "$target" true
 
-          # The server writes four lines: expansion starts, the run starts, one every ten entries,
-          # one when it ends. Those lines are the only progress there is — the endpoint answers
-          # once, at the end — so they are followed from here while the request is open. Entry
-          # lines are left out on purpose: hundreds of them would bury the answer, and the summary
-          # below names the failures. The pattern is the literal prefix of each line:
-          # `sync run expanding`, `sync run started`, `sync progress done=`, `sync run finished` —
-          # not `run=` (2026-11-07, first draft).
-          # Its stderr goes to /dev/null rather than to the step's: the trap kills grep, and the
-          # ssh on the other side of that pipe would otherwise keep the step's error stream open
-          # until the remote timeout fired — a finished run that still looks like it is running.
-          # `--since '2 min ago'` covers a slow handshake: the lines we care about are written
-          # after the POST below, and a couple of stale ones are harmless.
-          ssh "${opts[@]}" "$target" \
-            "timeout ${deadline}s journalctl -u skillmaster -f -o cat --since '2 min ago'" \
-            2>/dev/null | grep --line-buffered -E 'sync (run|progress) ' &
-          tailer=$!
-          trap 'sleep 2; kill "$tailer" 2>/dev/null || true' EXIT
-          sleep 1
-          if ! kill -0 "$tailer" 2>/dev/null; then
-            echo "::warning::the progress tail did not start; the run itself is unaffected" >&2
-          fi
-
           # The token travels over stdin rather than being interpolated into a remote shell
-          # command: it is a credential, and a shell that re-parses it is one quoting bug away from
-          # writing it into a log.
-          body="$(ssh "${opts[@]}" "$target" \
+          # command: it is a credential, and a shell that re-parses it is one quoting bug away
+          # from writing it into a log.
+          answer="$(ssh "${opts[@]}" "$target" \
             "read -r token
-             curl -fsS --max-time ${deadline} -X POST http://127.0.0.1:8080/internal/sync/run \
-               -H \"X-Sync-Trigger: \$token\"" <<< "$SYNC_TRIGGER_TOKEN")"
-
-          # The report is one line per expanded entry — hundreds on a first import. Counts and the
-          # named failures are what an operator reads. Anything that is not the report is printed
-          # as it came, and fails the step: a 200 that is not a report is not a result.
-          if ! printf '%s\n' "$body" | jq -e '.entries | type == "array"' >/dev/null 2>&1; then
-            printf '%s\n' "$body"
-            echo "::error::the endpoint answered something that is not a sync report" >&2
+             rm -f /tmp/ops-start; curl -sS --max-time 30 -o /tmp/ops-start -w '%{http_code}\\n' -X POST http://127.0.0.1:8090/inner/v1/jobs/import/runs \
+               -H \"X-Inner-Token: \$token\" -H 'Content-Type: application/json' \
+               -d '{\"trigger\":\"schedule\"}'; cat /tmp/ops-start" <<< "$INNER_TOKEN")"
+          status="${answer%%$'\n'*}"
+          payload="${answer#*$'\n'}"
+          if [ "$status" = "409" ]; then
+            echo "::notice::an import is already running; nothing started"
+            exit 0
+          fi
+          if [ "$status" != "202" ]; then
+            printf '%s\n' "$payload" >&2
+            echo "::error::ops answered $status to the trigger" >&2
             exit 1
           fi
+          run_id="$(printf '%s' "$payload" | jq -r '.run_id')"
+          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+            echo "::error::ops did not answer with a run id" >&2
+            exit 1
+          fi
+          echo "run $run_id"
+
+          # Poll until the run stops being `running`. The journal is not the source of truth any
+          # more: the run row is, and it is the same row an operator reads.
+          started=$(date +%s)
+          while :; do
+            body="$(ssh "${opts[@]}" "$target" \
+              "read -r token
+               curl -fsS --max-time 30 http://127.0.0.1:8090/inner/v1/jobs/runs/$run_id \
+                 -H \"X-Inner-Token: \$token\"" <<< "$INNER_TOKEN")"
+            status="$(printf '%s' "$body" | jq -r '.status')"
+            if [ "$status" != "running" ]; then
+              break
+            fi
+            if [ $(( $(date +%s) - started )) -gt "$deadline" ]; then
+              echo "::error::the run did not finish in ${minutes} minutes; it keeps running on the host" >&2
+              exit 1
+            fi
+            sleep 15
+          done
+
           printf '%s\n' "$body" | jq -c '{
-            startedAt: .started_at,
-            finishedAt: .finished_at,
-            entries: (.entries | length),
-            results: (.entries | group_by(.result)
-                      | map({key: .[0].result, value: length}) | from_entries),
-            failed: [.entries[] | select(.result == "failed")
-                     | {locator, path, reason}]}'
+            run: .id, status, startedAt: .started_at, finishedAt: .finished_at,
+            summary, error}'
+          if [ "$status" = "failed" ]; then
+            echo "::error::the import run failed" >&2
+            exit 1
+          fi

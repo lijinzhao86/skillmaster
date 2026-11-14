@@ -172,7 +172,7 @@ sources:
 |---|---|---|
 | 11 | **人工发布**：运营者登录官方账号，在现有控制台按已有流程审核、发布；发布并可公开之后，内容才进入公域 | 复用现有控制台与 CLI 发布路径，不新增界面 |
 | 12 | **手动触发**：GitHub Actions 的 `workflow_dispatch` 按一下，经现有部署 SSH 到服务器，调本机回环端点触发一次同步；不发布、不重启服务。同一时刻只允许一次，正在跑时返回冲突 | 新增触发工作流 + 服务端回环端点；不加 CLI、不加控制台；nginx 明确拒绝 `/internal/` |
-| 13 | **并发度可配置**：同时拉取、解析、扫描的条目数，范围 1–16（默认值见 [`docs/current/config.md`](../../current/config.md)）；写入仍串行（提交路径有表锁），并发只省网络与扫描的时间 | 配置键 `skillmaster.sync.concurrency`；非法值启动拒绝 |
+| 13 | **并发度可配置**：同时拉取、解析、扫描的条目数，范围 1–16（默认值见 [`docs/current/config.md`](../../current/config.md)）；写入仍串行（提交路径有表锁），并发只省网络与扫描的时间 | 配置键 同步并发配置；非法值启动拒绝 |
 | 14 | **旧草稿清理**：新 commit 建出新草稿后，丢弃同一 skill、同一来源、仍未发布的旧同步草稿；运营手工改过的那份也会被丢弃（2026-11-06 用户定） | 同步写入器；日志记录被丢弃的草稿 |
 
 ### 不做
@@ -207,7 +207,7 @@ sources:
 | `skillmaster-server/src/main/java/com/skillmasterai/usecase/sync/GitHubContentSource.java`、`modules/skill/GitHubContentReader.java`、`GitHubSourceAdapter.java` | **是**（v49 来源读取与刷新共用） | v49 信息页与刷新、同步 |
 | `skillmaster-server/src/main/java/com/skillmasterai/usecase/PublishSkillVersionUseCase.java` | **是**（所有发布/回滚都走它） | 控制台发布、CLI 发布、同步草稿发布、回滚 |
 | `skillmaster-server/src/main/java/com/skillmasterai/modules/skill/SourceRefreshJob.java` | **是**（v49 每日任务） | 来源信号兜底 |
-| 同步测试（`SyncSourcesLoaderTest`、`SyncPipelineIT`、`SyncNamingIT`、`SkillNameTransformTest`） | 否 | — |
+| 同步测试（`SyncSourcesLoaderTest`、`导入端到端用例`、`同步命名用例`、`SkillNameTransformTest`） | 否 | — |
 | 发布与来源刷新的既有测试（`PublishSkillVersionUseCase`、`SourceRefreshJob`、`SourceService` 相关） | **是**（这些用例的行为改了） | 发布、回滚、来源兜底 |
 | `deploy/sync-sources.yml`、`deploy/README.md` | **是**（部署清单，运营与部署共用） | 运营、部署工作流 |
 | v50 `README.md` / `prd.md` / `technical-design.md` / `test-plan.md`、新增 ADR | 文档 | — |

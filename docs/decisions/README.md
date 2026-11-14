@@ -4,7 +4,7 @@
 
 决策跨版本存活。要推翻某条，新增一条「取代 000N」，不改旧文正文。**这份索引是生成物**：状态取自每个文件头，不在这里另写一份。
 
-共 190 条。
+共 200 条。
 
 | 编号 | 决策 | 状态 | 日期 |
 |---|---|---|---|
@@ -35,7 +35,7 @@
 | [0025](0025-cli-credential-storage.md) | CLI 的凭据存哪：keychain 优先，明文文件兜底并告知 | 已采纳 | 2026-10-02 |
 | [0026](0026-overriding-the-framework-for-public-clients.md) | 为公共客户端覆盖框架的两处：发 refresh token，并允许它刷新与撤销 | 已采纳 | 2026-10-02 |
 | [0027](0027-attributes-keep-the-frameworks-principal-type.md) | 框架的 attributes 里，principal 存框架自己的类型 | 已采纳 | 2026-10-03 |
-| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口 | 已取代（由 [0190](0190-cloud-device-login-approves-on-a-web-page.md) 取代：登录改为设备链接 + 轮询，CLI 不再监听回环端口） | 2026-10-03 |
+| [0028](0028-cli-uses-a-fixed-loopback-port.md) | CLI 的回调用固定 loopback 端口 | 已取代（由 [0200](0200-cloud-device-login-approves-on-a-web-page.md) 取代：登录改为设备链接 + 轮询，CLI 不再监听回环端口） | 2026-10-03 |
 | [0029](0029-an-authorization-revocation-is-a-state.md) | 授权的撤销是一个状态，记在它自己的行上 | 已采纳 | 2026-10-05 |
 | [0030](0030-the-fallback-credential-is-per-server.md) | 兜底凭据文件按 server 分 | 已采纳 | 2026-10-05 |
 | [0031](0031-submitting-and-publishing-are-two-actions.md) | 提交与上线是两个动作 | 已采纳 | 2026-10-06 |
@@ -51,7 +51,7 @@
 | [0041](0041-third-parties-reach-us-through-the-cli.md) | 第三方走我们的 CLI 进来，本版不做 MCP 适配器 | 已采纳 | 2026-10-15 |
 | [0042](0042-the-expiry-setting-is-a-cap.md) | 部署的有效期配置是上限，不只是默认值 | 已采纳，**被 [ADR 0171](0171-api-key-expiry-is-a-choice.md) 取代**（`lifetime` 配置被删除；上限是产品常量 365 天，默认值是产品常量 90 天；「按天、按上海日、由服务端下发」的部分保留） | 2026-10-15 |
 | [0043](0043-the-browser-session-is-bounded-and-revocable.md) | 浏览器会话有两条尺子，而且设备可撤销 | 已采纳 | 2026-10-15 |
-| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端的范围：CLI 管桌面与服务器，移动端将来由 App | 已采纳；§决定 1（服务器上走 API key）被 [0190](0190-cloud-device-login-approves-on-a-web-page.md) 取代 | 2026-10-16 |
+| [0044](0044-the-cli-serves-desktops-and-servers.md) | 终端的范围：CLI 管桌面与服务器，移动端将来由 App | 已采纳；§决定 1（服务器上走 API key）被 [0200](0200-cloud-device-login-approves-on-a-web-page.md) 取代 | 2026-10-16 |
 | [0045](0045-the-absolute-ceiling-follows-the-session.md) | 绝对上限从「会话那一行创建的时刻」算起，重新登录不重启它 | 已采纳 | 2026-10-16 |
 | [0046](0046-deleting-a-skill-happens-in-the-browser.md) | 把一个 skill 删掉这件事，只在浏览器面存在 | 已采纳 | 2026-10-16 |
 | [0047](0047-permissions-are-a-ladder.md) | 对一个 skill 的权限是一条梯子，不是一个开关 | 已采纳 | 2026-10-17 |
@@ -85,7 +85,7 @@
 | [0075](0075-the-browser-client-is-react.md) | 浏览器端改用 React，其余纪律照 0015 不变 | 已采纳 | 2026-10-21 |
 | [0076](0076-the-design-file-is-react-source.md) | 设计稿用 React 写，前端整段搬过去 | 已采纳（决定 #6 被 [ADR 0121](0121-the-design-rules-live-in-the-web-design-skill.md) 取代） | 2026-10-22 |
 | [0077](0077-the-cli-grammar-is-singular-and-plural.md) | CLI 的命令按单复数分组 | 部分被取代（`tags` 的归属由 [0083](0083-two-tag-layers.md) 更正：读单个 skill 的标签归 `skill` 组；决定 3「`files` 是正名」由 [0120](0120-file-enumeration-is-ls.md) 取代） | 2026-10-22 |
-| [0078](0078-a-category-is-one-shelf.md) | 分类是一个货架：平级、单选；召回交给标签 | 已采纳（写于公开标签进入本版之前；公开标签的落版与两套标签的边界见 [0083](0083-two-tag-layers.md)——分类单选的决定不变） | 2026-10-23 |
+| [0078](0078-a-category-is-one-shelf.md) | 分类是一个货架：平级、单选；召回交给标签 | 已采纳，**部分被 [0192](0192-public-categories-are-thirteen-shelves.md) 取代**（「10 个词」、「公域由作者选」两半，以及「`skills categories` 打印公域计数」这一句；平级、单选、无父子、召回交给标签的决定不变。公开标签的落版与两套标签的边界见 [0083](0083-two-tag-layers.md)） | 2026-10-23 |
 | [0079](0079-cli-manages-tags-and-library-references.md) | CLI 管贴法、新建、定义编辑与库引用，不管删除 | 已采纳 | 2026-10-23 |
 | [0080](0080-cli-covers-non-high-risk-operations.md) | CLI 覆盖所有非高风险操作 | 已采纳 | 2026-10-23 |
 | [0081](0081-every-console-operation-has-a-cli-command.md) | 每处控制台操作都要有 CLI 对应 | 已采纳 | 2026-10-23 |
@@ -93,7 +93,7 @@
 | [0083](0083-two-tag-layers.md) | 两套标签：公开分类、公开标签与我的标签 | 已采纳 | 2026-10-23 |
 | [0084](0084-l1-search-extension.md) | 检索的 L1 扩展：`when_to_use`、多词与公开标签 | **部分被取代**——§理由里否决「向量检索」的那一条由 [ADR 0095](0095-semantic-retrieval-is-accepted.md) 取代（2026-10-25）；**其余决定（匹配面、多词取「且」、标签过滤在访问谓词内、排序可解释）仍然有效** | 2026-10-23 |
 | [0085](0085-rename-web-to-console.md) | `skillmaster-web` 改名为 `skillmaster-console` | 已采纳 | 2026-10-23 |
-| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；其余不变） | 2026-10-24 |
+| [0086](0086-the-homepage-reads-the-session.md) | 营销首页读取会话，登录后显示已登录态 | 已采纳（§决定 2 的「结束当前会话 → 回到首页」由 [ADR 0141](0141-a-logout-stops-on-a-guide-screen.md) 收窄；§决定 3 的「一个来源」由 [ADR 0190](0190-the-site-origin-is-an-explicit-list.md) 放宽为显式列表，2026-11-13；其余不变） | 2026-10-24 |
 | [0087](0087-cli-exit-codes-are-a-public-contract.md) | CLI 的退出码是公开契约 | 已采纳 | 2026-10-24 |
 | [0088](0088-cli-major-version-is-the-api-generation.md) | CLI 的主版本号就是它说的 API 代次 | 部分被取代（决定 2 的「删除一律留到下一主版本」由 [0112](0112-retiring-a-command-within-one-generation.md) 收窄；上线前的命令按 [0077](0077-the-cli-grammar-is-singular-and-plural.md) 决定 4 的「上线前直接把命令收干净」处理——`files` → `ls` 的退役**形态**取自 0112、**依据**是 0077 决定 4（不满足 0112 的三条条件），见 [0120](0120-file-enumeration-is-ls.md)；v32 的 A10 / A12 / A13 / A14 是既有命令的**语义改变**，按同一原则直接改，**不套退役形态**；「弃用提示」不出现，[0113](0113-the-cli-is-called-skmr.md) 决定 3 只在代码里给旧**二进制名**留一处入口） | 2026-10-25 |
 | [0089](0089-no-local-skills.md) | 本机不装任何 skill，三条规则写进系统提示词 | 已采纳（取代 [ADR 0002](0002-gateway-skill-and-cli.md) 的决定 1；**§决定 2 的规则文本已由 [ADR 0094](0094-load-the-library-at-session-start.md) 取代**） | 2026-10-25 |
@@ -194,7 +194,17 @@
 | [0184](0184-taking-a-public-skill-down-is-a-service-lifecycle.md) | 公开 skill 的退场按服务生命周期 | 已采纳 | 2026-11-11 |
 | [0185](0185-credentials-default-to-a-file.md) | CLI 凭据默认存文件，钥匙串改为可选 | 已采纳 | 2026-11-11 |
 | [0186](0186-the-cli-writes-a-narrow-sandbox-allowlist.md) | CLI 在安装时改写客户端的沙箱配置，范围限定为 SkillMaster 自己的目录与域名 | 已采纳 | 2026-11-11 |
-| [0187](0187-the-marketing-home-can-run-on-a-subdomain.md) | 营销首页可以临时挂在同一注册域的子域上，切回用 301 | 已采纳 | 2026-11-13 |
+| [0187](0187-the-marketing-home-can-run-on-a-subdomain.md) | 营销首页可以临时挂在同一注册域的子域上，切回用 301 | 已采纳（§决定 2 的「切回时 301 到 `www`」与 §决定 3 的「CORS 只放行一个来源」均由 [ADR 0190](0190-the-site-origin-is-an-explicit-list.md) 取代，2026-11-13；其余不变） | 2026-11-13 |
 | [0188](0188-feedback-consent-lives-on-the-agent-channel.md) | 反馈的同意在 agent 通道里记录，不放到浏览器 | 已采纳 | 2026-11-13 |
 | [0189](0189-feedback-is-kept-indefinitely-with-an-object-copy.md) | 反馈长期保留，另存一份对象存储 | 已采纳 | 2026-11-13 |
-| [0190](0190-cloud-device-login-approves-on-a-web-page.md) | 云端设备的登录：批准在网页上，执行在设备上 | 已采纳 | 2026-11-14 |
+| [0190](0190-the-site-origin-is-an-explicit-list.md) | 首页入口保留 home，CORS 来源是一个显式列表 | 已采纳 | 2026-11-13 |
+| [0191](0191-feedback-attachments-are-private-unmoderated-objects.md) | 反馈附件是私有、不自动审核的命名对象 | 已采纳 | 2026-11-13 |
+| [0192](0192-public-categories-are-thirteen-shelves.md) | 公域分类是十三个一级货架，单选、无二级 | 已采纳 | 2026-11-13 |
+| [0193](0193-public-labels-are-extensible-claims.md) | 公域标签是可扩展的「定义 + 挂载」，标签是主张不是评价 | 已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 与 [0197](0197-production-tables-hold-only-final-claims.md) 取代**（0197 的存储形状自打标版生效）（§决定 3 的 `api_key` 写法与 §决定 7 的冲突留痕时点） | 2026-11-13 |
+| [0194](0194-public-labels-are-agent-produced-and-sampling-audited.md) | 公域标签由 Agent 自动打，按抽样验收 | 已采纳，**部分被 [0195](0195-labels-p0-narrows-two-adrs.md) 与 [0197](0197-production-tables-hold-only-final-claims.md) 取代**（0197 的存储形状自打标版生效）（§决定 3「中置信生效」的展示口径、§后果 的触发口径、`taxonomy_version` 字段名与 `actor` 时点） | 2026-11-13 |
+| [0195](0195-labels-p0-narrows-two-adrs.md) | v66 标签 P0 对 0193 / 0194 的四点收窄 | 已采纳 | 2026-11-14 |
+| [0196](0196-label-extraction-reads-public-text-only.md) | 自动打标只读公域已发布文本，默认不外发 | 已采纳 | 2026-11-14 |
+| [0197](0197-production-tables-hold-only-final-claims.md) | 生产表只存最终标签与预期结果，抽取中间态进候选表 | 已采纳 | 2026-11-14 |
+| [0198](0198-api-planes-are-named-by-audience.md) | API 面按使用方命名：oauth / web / api / inner / admin | 已采纳 | 2026-11-14 |
+| [0199](0199-ops-runs-as-its-own-service-and-database.md) | 内容运营作为独立服务与独立库部署 | 已采纳 | 2026-11-14 |
+| [0200](0200-cloud-device-login-approves-on-a-web-page.md) | 云端设备的登录：批准在网页上，执行在设备上 | 已采纳 | 2026-11-14 |

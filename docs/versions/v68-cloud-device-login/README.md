@@ -34,7 +34,7 @@
 | [`technical-design.md`](technical-design.md) | 架构、数据模型、接口、分期、开放问题 |
 | [`test-plan.md`](test-plan.md) | 验收映射、用例、环境与数据、结果、已知问题 |
 
-决策记录：[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md)。
+决策记录：[ADR 0200](../../decisions/0200-cloud-device-login-approves-on-a-web-page.md)。
 
 ## 影响最大的未决问题
 

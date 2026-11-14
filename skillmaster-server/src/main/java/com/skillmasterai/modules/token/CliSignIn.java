@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * One CLI login, from the question the CLI asks to the row that answers it (v68, ADR 0190).
+ * One CLI login, from the question the CLI asks to the row that answers it (v68, ADR 0200).
  *
  * <p><strong>What this is not: a way to mint a credential from a credential.</strong> The only thing
  * that can start a login is a person in a browser, which is why {@link #approve} takes a user id the

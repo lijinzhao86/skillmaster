@@ -3,6 +3,7 @@ package com.skillmasterai.usecase;
 import com.skillmasterai.modules.auth.AuthenticatedSubject;
 import com.skillmasterai.modules.search.InvalidSearchRequestException;
 import com.skillmasterai.modules.search.SearchRequest;
+import com.skillmasterai.modules.skill.LabelService;
 import com.skillmasterai.modules.skill.SkillCategoryService;
 import com.skillmasterai.modules.skill.SkillTagService;
 import com.skillmasterai.modules.skill.TagNames;
@@ -30,23 +31,27 @@ public class SearchPublicSkillsUseCase {
 
     private final SkillCategoryService categories;
     private final SkillTagService tags;
+    private final LabelService labels;
     private final SearchSkillsUseCase search;
 
     public SearchPublicSkillsUseCase(SkillCategoryService categories, SkillTagService tags,
-            SearchSkillsUseCase search) {
+            LabelService labels, SearchSkillsUseCase search) {
         this.categories = categories;
         this.tags = tags;
+        this.labels = labels;
         this.search = search;
     }
 
     /** The API plane and the CLI: filters are the names a person typed. */
     @Transactional(readOnly = true)
     public SkillListing api(String q, List<String> categoryNames, List<String> publicTagNames,
-            Integer limit, String cursor, List<String> excludedIds,
+            List<String> labelKeys, Integer limit, String cursor, List<String> excludedIds,
             AuthenticatedSubject subject) {
         List<String> names = categoryNames == null ? List.of() : categoryNames;
         List<String> words = publicTagNames == null ? List.of() : publicTagNames;
-        requireSomething(q, names, words);
+        List<String> askedLabels = labelKeys == null ? List.of() : labelKeys;
+        requireSomething(q, names, words, askedLabels);
+        List<String> labelIds = resolveLabels(askedLabels);
 
         List<String> categoryKeys = new ArrayList<>();
         for (String name : names) {
@@ -69,16 +74,19 @@ public class SearchPublicSkillsUseCase {
 
         SearchRequest request = new SearchRequest(q, List.of(), categoryKeys, publicTagKeys,
                 SearchRequest.SortOrder.RELEVANCE,
-                limit == null ? SearchRequest.DEFAULT_LIMIT : limit, cursor, excludedIds);
+                limit == null ? SearchRequest.DEFAULT_LIMIT : limit, cursor, null, excludedIds,
+                labelIds);
         return search.searchPublic(request, subject);
     }
 
     /** The console: one category filter, addressed by key, a page number and the total it needs. */
     @Transactional(readOnly = true)
-    public WebResult web(String q, List<String> categoryKeys, Integer page,
-            AuthenticatedSubject subject) {
+    public WebResult web(String q, List<String> categoryKeys, List<String> labelKeys,
+            Integer page, AuthenticatedSubject subject) {
         List<String> keys = categoryKeys == null ? List.of() : categoryKeys;
-        requireSomething(q, keys, List.of());
+        List<String> askedLabels = labelKeys == null ? List.of() : labelKeys;
+        requireSomething(q, keys, List.of(), askedLabels);
+        List<String> labelIds = resolveLabels(askedLabels);
         int wanted = page == null || page < 1 ? 1 : page;
         // Wide arithmetic: an int overflow would reach PostgreSQL as a negative OFFSET.
         long wide = ((long) wanted - 1) * WEB_PAGE_SIZE;
@@ -86,7 +94,8 @@ public class SearchPublicSkillsUseCase {
             throw new InvalidSearchRequestException("page is too large");
         }
         SearchRequest request = new SearchRequest(q, List.of(), keys, List.of(),
-                SearchRequest.SortOrder.RELEVANCE, WEB_PAGE_SIZE, null, (int) wide, List.of());
+                SearchRequest.SortOrder.RELEVANCE, WEB_PAGE_SIZE, null, (int) wide, List.of(),
+                labelIds);
         return new WebResult(search.searchPublic(request, subject).cards(), wanted,
                 WEB_PAGE_SIZE, search.countPublic(request, subject));
     }
@@ -121,11 +130,28 @@ public class SearchPublicSkillsUseCase {
         return null;
     }
 
-    private static void requireSomething(String q, List<String> categories, List<String> tags) {
-        if ((q == null || q.isBlank()) && categories.isEmpty() && tags.isEmpty()) {
+    private static void requireSomething(String q, List<String> categories, List<String> tags,
+            List<String> labels) {
+        if ((q == null || q.isBlank()) && categories.isEmpty() && tags.isEmpty()
+                && labels.isEmpty()) {
             throw new InvalidSearchRequestException(
-                    "a public search needs a query, a category or a public tag");
+                    "a public search needs a query, a category, a public tag or a label");
         }
+    }
+
+    /**
+     * Resolve the wire keys to definition ids. An unknown key is a 400 naming it: the caller
+     * chose a capsule from the vocabulary, so a misspelling is theirs to fix, not an empty result
+     * that looks like "nothing matched".
+     */
+    private List<String> resolveLabels(List<String> keys) {
+        List<String> ids = new ArrayList<>();
+        for (String key : keys) {
+            ids.add(labels.definitionIdOf(key)
+                    .orElseThrow(() -> new InvalidSearchRequestException(
+                            "unknown label '" + key + "'")));
+        }
+        return ids;
     }
 
     private static SkillListing empty() {

@@ -65,6 +65,10 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             Category category,
             List<PublicTag> publicTags,
             List<MyTag> myTags,
+            /** v66: the platform's one-line expected result; omitted when absent. */
+            @JsonInclude(JsonInclude.Include.NON_NULL) String outcome,
+            /** v66: displayed attributes, short names only; omitted when the skill has none. */
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Label> labels,
             // Omitted when there is no score, rather than sent as null: the card is the layer every
             // skill is loaded for, and a keyword hit has no similarity to report. A client cannot
             // mistake "absent" for "zero" here, because zero is a value the ranking really produces.
@@ -85,6 +89,7 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
         public Card {
             publicTags = List.copyOf(publicTags);
             myTags = List.copyOf(myTags);
+            labels = labels == null ? List.of() : List.copyOf(labels);
         }
 
         public static Card of(SkillCardView card) {
@@ -111,6 +116,11 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
                             .map(tag -> new PublicTag(tag.key(), tag.name())).toList(),
                     card.myTags().stream()
                             .map(tag -> new MyTag(tag.id(), tag.name())).toList(),
+                    card.outcome(),
+                    card.labels().stream()
+                            .map(label -> new Label(label.key(), label.value(), label.label(),
+                                    label.full(), label.group(), label.filterable()))
+                            .toList(),
                     score, null, null, null, null, null, null, null, null, null, null);
         }
 
@@ -120,7 +130,7 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
             return new Card(id, namespace, name, description, whenToUse, myWhenToUse,
                     myWhenToUseMatched, source, standing, state,
                     version, updatedAt, deletedAt, offlinePendingUntil, category, publicTags,
-                    myTags, score,
+                    myTags, outcome, labels, score,
                     originLabel, originKind, originLocator, originUrl, licenseSpdx, licenseStatus,
                     usageBucket, callsBucket, lastUsed, joins);
         }
@@ -133,6 +143,14 @@ public record SearchResponse(List<Card> skills, String nextCursor, String note) 
     }
 
     public record MyTag(String id, String name) {
+    }
+
+    /**
+     * v66: one displayed platform attribute. {@code full} is for the CLI, not the console capsule;
+     * {@code filterable} tells the interface whether the word may be drawn as a filter link.
+     */
+    public record Label(String key, String value, String label, String full, String group,
+            boolean filterable) {
     }
 
     public static SearchResponse of(SkillListing listing) {

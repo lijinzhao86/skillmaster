@@ -1,0 +1,73 @@
+# Build, test and publish the operations service.
+#
+# The host is a mainland instance and cannot reach Docker Hub, so the image never travels by
+# pulling from a public registry: it goes to Aliyun ACR when that is configured, and otherwise
+# leaves as a tar artifact that an operator loads by hand (ADR 0199). Building is not deploying;
+# this workflow stops at a published image.
+name: Ops
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skillmaster-ops/**"
+      - ".github/workflows/ops.yml"
+  pull_request:
+    paths:
+      - "skillmaster-ops/**"
+      - ".github/workflows/ops.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ops-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Test
+        working-directory: skillmaster-ops
+        run: mvn -B verify
+
+      - name: Package the image
+        run: docker build -t "skillmaster-ops:${GITHUB_SHA}" skillmaster-ops
+
+      - name: Publish to ACR
+        if: ${{ github.ref == 'refs/heads/main' && vars.ACR_REGISTRY != '' }}
+        env:
+          ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
+          ACR_USER: ${{ secrets.ACR_USER }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USER" --password-stdin
+          image="$ACR_REGISTRY/skillmaster/ops:${GITHUB_SHA}"
+          docker tag "skillmaster-ops:${GITHUB_SHA}" "$image"
+          docker push "$image"
+
+      - name: Leave an image for offline loading
+        if: ${{ github.ref == 'refs/heads/main' && vars.ACR_REGISTRY == '' }}
+        run: |
+          docker save -o ops-image.tar "skillmaster-ops:${GITHUB_SHA}"
+          gzip -f ops-image.tar
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.ref == 'refs/heads/main' && vars.ACR_REGISTRY == '' }}
+        with:
+          name: ops-image-${{ github.sha }}
+          path: ops-image.tar.gz
+          retention-days: 14

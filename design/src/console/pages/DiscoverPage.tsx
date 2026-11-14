@@ -30,6 +30,8 @@ import ResultCard from '../components/ResultCard'
 import SearchBox from '../components/SearchBox'
 import {
   DISCOVER,
+  PROFILES,
+  categoryName,
   searchPublic,
   withLongDescriptions,
 } from '../fixtures/library'
@@ -45,12 +47,20 @@ const SEMANTIC_LIMIT = 10
 /** 推荐段一批几张。滚到底取下一批；一批六张是「一屏多半」的量，不会一次把一屏塞满。 */
 const PICK_BATCH = 6
 
+/* 结果标题下只说「筛了什么」，不说「有几条」：query 在搜索框里，标签断链时仍能把 key 显示出来。 */
+const LABEL_SHORT = new Map(
+  Object.values(PROFILES).flatMap((profile) => profile.labels ?? [])
+    .map((label) => [label.key + ':' + label.value, label.valueLabel]),
+)
+const labelShortName = (entry: string) => LABEL_SHORT.get(entry) ?? entry
+
 export default function DiscoverPage({ active, state, params }: DemoPageProps) {
   const query = params.get('q') ?? ''
   const tags = params.getAll('tag')
+  const labels = params.getAll('label')
   const askedPage = parseInt(params.get('p') ?? '', 10)
-  /* 公域只搜不列：没有关键词也没有分类时，检索本身返回空——不是页面把它藏起来。 */
-  const results = searchPublic(query, tags)
+  /* 公域只搜不列：没有关键词、分类或属性标签时，检索本身返回空——不是页面把它藏起来。 */
+  const results = searchPublic(query, tags, labels)
 
   /* **两种找法，两种形状。** 有关键词就是按意思找：十条、不分页。只选了分类才是按字面找：
      六条一页、有页码。降级那一态（语义不可用）落回按字面找，所以它也有页码。 */
@@ -80,14 +90,16 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
   const [joined, setJoined] = useState<string[]>([])
 
   /** 地址只留这一页的参数：用户一动手，`state` 与 `join` 就该让位给真实查询。 */
-  const writeAddress = (next: { query?: string; tags?: string[]; page?: number }) => {
+  const writeAddress = (next: { query?: string; tags?: string[]; labels?: string[]; page?: number }) => {
     const copy = new URLSearchParams()
     copy.set('page', 'discover')
     const q = next.query ?? query
     const chosen = next.tags ?? tags
+    const chosenLabels = next.labels ?? labels
     const p = next.page ?? page
     if (q !== '') copy.set('q', q)
     chosen.forEach((tag) => copy.append('tag', tag))
+    chosenLabels.forEach((label) => copy.append('label', label))
     if (p > 1) copy.set('p', String(p))
     replace('?' + copy.toString())
   }
@@ -147,10 +159,17 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
     }, 600)
   }
 
-  const hasQuery = query.trim() !== '' || tags.length > 0
-  /* **前台与结果页是两个状态。** 没有关键词也没有分类时，这一页是搜索页加推荐段；一旦开始找，
+  const hasQuery = query.trim() !== '' || tags.length > 0 || labels.length > 0
+  /* **前台与结果页是两个状态。** 没有关键词、分类或属性标签时，这一页是搜索页加推荐段；一旦开始找，
      它就变成一份结果清单。两种状态不共享工具条——前台的框更大，结果的工具条更密。 */
   const landing = !hasQuery && state !== 'loading' && state !== 'failed'
+  /* **结果页要有自己的头**：没有它，搜索后的列表与「为你推荐」看起来是同一种东西；读者不知道
+     下面这份清单为什么在这里。标题说的是「这是搜索结果」，小字说「筛了什么」，不报条数。 */
+  const filterTerms = [...tags.map(categoryName), ...labels.map(labelShortName)]
+  const resultTitle = query.trim() !== '' ? '搜索结果' : '筛选结果'
+  const resultNote = query.trim() !== ''
+    ? (filterTerms.length > 0 ? filterTerms.join(' · ') : '按相关度排序')
+    : filterTerms.join(' · ')
   /* **一个框，两个状态共用**（2026-11-07）：早先前台与结果各是一个 form、各存一份草稿，提交
      那一刻整棵子树换掉——框是新节点，焦点就丢了；搜索还没回来时框还会整个隐藏。合并之后，同一个
      节点一直活着，页头那层 `is-landing` 照旧。 */
@@ -187,8 +206,15 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
             只是把它重复一遍，而且压出一句公文。留下的 h1 只给文档结构与读屏。 */}
         <h1 className="visually-hidden">发现</h1>
         {/* **搜索是页头唯一的东西**（2026-11-05 用户定）：分类不再铺成一排筛选项——AI 时代没人
-            先选词表再搜；想看同类，点结果行上的分类胶囊。计数落在同一行的右端。 */}
+            先选词表再搜；想看同类，点结果行上的分类胶囊。**不报结果条数**（2026-11-14 用户定）：
+            公域规模是内部信号，搜索框右端不再挂「N 个结果」。 */}
         <div className="discover-search">
+          {hasQuery && (
+            <div className="discover-result-meta" id="discoverResultsHead">
+              <h2 className="picks-title" id="discoverResultsTitle">{resultTitle}</h2>
+              {resultNote !== '' && <span className="picks-note" id="discoverResultsNote">{resultNote}</span>}
+            </div>
+          )}
           <form
             onSubmit={(event) => {
               event.preventDefault()
@@ -208,11 +234,18 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
               onChange={setDraftQuery}
             />
           </form>
-          <span className="count" hidden={!hasQuery || state === 'loading' || state === 'failed'}>
-            {/* 按意思找时报的是**找到几条**（最多十条），不是公域一共有几条——那个数它给不出；
-                有页码的那两种（按字面找、降级回落）报的才是总数。 */}
-            {(paginated ? results.length : shown.length) + ' 个结果'}
-          </span>
+          {hasQuery && (
+            <a
+              className="discover-clear"
+              href="?page=discover"
+              onClick={(event) => {
+                event.preventDefault()
+                writeAddress({ query: '', tags: [], labels: [], page: 1 })
+              }}
+            >
+              清除
+            </a>
+          )}
         </div>
       </header>
 
@@ -309,11 +342,13 @@ export default function DiscoverPage({ active, state, params }: DemoPageProps) {
             total={results.length}
             page={page}
             pageSize={PAGE_SIZE}
+            showTotal={false}
             hrefFor={(target) => {
               const copy = new URLSearchParams()
               copy.set('page', 'discover')
               if (query !== '') copy.set('q', query)
               tags.forEach((tag) => copy.append('tag', tag))
+              labels.forEach((label) => copy.append('label', label))
               if (target > 1) copy.set('p', String(target))
               return '?' + copy.toString()
             }}

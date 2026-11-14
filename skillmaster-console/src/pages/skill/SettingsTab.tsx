@@ -284,7 +284,7 @@ export default function SettingsTab({
             <section className="settings-pane" data-sub="details">
               <h2>详细信息</h2>
               <p className="hint">
-                这些是 SKILL.md 中声明的字段。调用者在「信息」页只能看到描述、适用场景、运行环境与版本。
+                这些是 SKILL.md 中声明的字段。调用者在「信息」页会看到描述、适用场景、预期结果、兼容性、属性与版本；其中预期结果与属性由平台生成。
               </p>
               <dl className="info-rows">
                 {detailRows.map((row) => (

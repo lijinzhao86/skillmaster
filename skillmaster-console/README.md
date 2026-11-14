@@ -122,7 +122,7 @@ endpoint (ADR 0011). The INSERT, and what each column has to be, is
 [`deploy/README.md`](../../deploy/README.md) §The CLI's client row — the same row a laptop needs.
 
 **Since v68 that row is the whole requirement, and the page appears every time.** The loopback
-callback is gone, so there is no redirect URI to match ([ADR 0190](../../docs/decisions/0190-cloud-device-login-approves-on-a-web-page.md));
+callback is gone, so there is no redirect URI to match ([ADR 0200](../../docs/decisions/0200-cloud-device-login-approves-on-a-web-page.md));
 a login asks once and the answer arrives on the machine that asked, which is why nothing is
 remembered per (client, account) any more.
 

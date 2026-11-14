@@ -80,6 +80,7 @@ public final class SkillSearchService {
                 publicOnly,
                 request.categoryKeys(),
                 request.publicTagKeys(),
+                request.labelDefinitionIds(),
                 cursor.map(CursorCodec.Cursor::key).orElse(null),
                 request.limit() + request.excludedIds().size() + 1,
                 request.offset(),
@@ -108,7 +109,8 @@ public final class SkillSearchService {
     public long count(SearchRequest request, Caller caller, List<String> namespaceFilterIds,
             boolean publicOnly) {
         return catalog.count(namespaceFilterIds, request.query(), publicOnly,
-                request.categoryKeys(), request.publicTagKeys(), caller);
+                request.categoryKeys(), request.publicTagKeys(), request.labelDefinitionIds(),
+                caller);
     }
 
     /** @param nextCursor null when this is the last page — the only signal a client needs */

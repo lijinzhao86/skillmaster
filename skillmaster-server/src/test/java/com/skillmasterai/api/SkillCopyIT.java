@@ -274,7 +274,7 @@ class SkillCopyIT extends AbstractAccountIT {
     @Test
     void privateFactsDoNotTravel() {
         published("source", "1.0.0", Map.of());
-        jdbc.sql("UPDATE skill SET category_key = 'doc' WHERE name = 'source'").update();
+        jdbc.sql("UPDATE skill SET category_key = 'office-efficiency' WHERE name = 'source'").update();
         // Usage is a fact about the source, not about its content.
         jdbc.sql("INSERT INTO skill_usage_total (skill_id, scope, calls)"
                 + " SELECT id, 'public', 7 FROM skill WHERE name = 'source'").update();

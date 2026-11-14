@@ -27,4 +27,4 @@ https://console.skillmasterai.com/account/keys
 ## 管理设备与密钥时要注意的
 
 - **两处的失效方式不同**：登录设备是「结束」某次登录；API key 是「撤销」某把 key。查漏的时候两边都要看。
-- **`skmr logout` 不会删这里的任何记录**，它只清本机。
+- **`skmr logout` 对 CLI 登录会结束这里对应的那次登录**；对 API key 只清本机，撤销要去 `/account/keys`。

@@ -1,0 +1,384 @@
+package com.skillmasterai.ops.imports;
+
+/**
+ * The stable, machine-readable half of an error. Clients switch on these strings, so the wire
+ * names are the contract and the enum constant names are not — renaming a constant must not
+ * rename the wire value.
+ *
+ * <p>Note that {@link #SKILL_NOT_FOUND} covers both "no such skill" and "not yours". That is
+ * deliberate and load-bearing: §4.2 requires a 404 rather than a 403 for a private skill the
+ * caller may not see, because a 403 would confirm the skill exists. The message may differ; the
+ * code and status may not.
+ */
+public enum ErrorCode {
+
+    UNAUTHENTICATED("unauthenticated"),
+    /**
+     * The credential was recognised and has been revoked — a deliberate act somebody took, and the
+     * reason the answer differs from {@link #TOKEN_EXPIRED}: a revoked key cannot be renewed, only
+     * replaced with a new one (ADR 0039 §决定 3).
+     *
+     * <p>Only ever sent to a caller that presented a credential this service has a row for. Guessing
+     * one of those is not possible — the lookup is a sha256 of 256 bits — so this says nothing to
+     * somebody who does not already hold a key. See {@code TokenValidator} for the boundary.
+     */
+    TOKEN_REVOKED("token_revoked"),
+    /** The credential was recognised and its date has passed. Renewal is the way out (ADR 0039). */
+    TOKEN_EXPIRED("token_expired"),
+    /**
+     * The credential was recognised and has gone unused past its idle ruler.
+     *
+     * <p>Distinct from {@link #TOKEN_EXPIRED} because the next step differs: both mean logging in
+     * again, but only the expired one is worth also answering with "or issue a key" — a credential
+     * that ran out of calendar time is the shape of a job that needs a longer-lived one, while a
+     * credential that ran out of use is a machine that was simply away for a while.
+     *
+     * <p>New in v4, and the first reason code a CLI login can produce and an API key cannot: a key's
+     * lifetime is one date with no idleness rule behind it (ADR 0039 §决定 1).
+     */
+    TOKEN_IDLE("token_idle"),
+    /**
+     * The credential was recognised but the account behind it is not active. Not about the credential
+     * at all: renewing it, or issuing another, changes nothing until the account is restored.
+     */
+    ACCOUNT_SUSPENDED("account_suspended"),
+    /**
+     * A login attempt that did not authenticate. One code for all three ways it can fail — no such
+     * phone, wrong password, suspended account — because answering them differently turns the
+     * endpoint into an account-existence oracle. Same rule as {@link #SKILL_NOT_FOUND}.
+     */
+    INVALID_CREDENTIALS("invalid_credentials"),
+    /**
+     * The password was right and the account is deleted (v56, ADR 0175).
+     *
+     * <p><strong>Not an existence oracle, which is why it is allowed to exist.</strong> Only a
+     * caller who produced the correct password can see this; every other login failure on a deleted
+     * account — and every failure on a suspended one — is still
+     * {@link #INVALID_CREDENTIALS}. The client's next step differs, which is the whole reason for a
+     * separate code: sign-in is not the fix.
+     */
+    ACCOUNT_DELETED("account_deleted"),
+    INSUFFICIENT_SCOPE("insufficient_scope"),
+    /**
+     * The request was understood and refused on grounds that are not about who the caller is —
+     * on the browser plane, a missing or stale CSRF token. Distinct from {@link #INSUFFICIENT_SCOPE},
+     * which is about a token that was accepted but carries too little.
+     */
+    FORBIDDEN("forbidden"),
+    /**
+     * A namespace whose {@code official} column is false tried to make a skill public (ADR 0146). Distinct from
+     * {@link #FORBIDDEN}: the caller may administer the skill, and the refusal is about which
+     * namespaces the platform lets into the public catalogue.
+     */
+    PUBLIC_IS_OFFICIAL_ONLY("public_is_official_only"),
+    /** The caller has spent their budget for this window. Ships a {@code Retry-After} header. */
+    TOO_MANY_REQUESTS("too_many_requests"),
+    INVALID_REQUEST("invalid_request"),
+    INVALID_UPLOAD("invalid_upload"),
+    /**
+     * The version name this submission declares already exists in this skill, with different
+     * content. A version name is what makes {@code @1.2.3} mean one thing for ever, so it cannot be
+     * reused — the author increments it. Distinct from {@link #INVALID_REQUEST}, which is how a
+     * malformed version name is answered, and from the idempotent 200 a replay of identical content
+     * gets.
+     */
+    VERSION_ALREADY_EXISTS("version_already_exists"),
+    /**
+     * The SMS code was wrong, expired, already used, or guessed too many times. Also the answer for
+     * a phone with no account, since only a phone a code was sent to can reach this check at all.
+     */
+    VERIFICATION_CODE_INVALID("verification_code_invalid"),
+    SKILL_NOT_FOUND("skill_not_found"),
+    /**
+     * No such private-tag definition, or not the caller's (v14). One answer for both, for the
+     * reason {@link #KEY_NOT_FOUND} has one; distinct from {@link #SKILL_NOT_FOUND} because the
+     * address names a definition, and telling a client to look for a skill it never asked about is
+     * the kind of answer that turns into a support question.
+     */
+    TAG_DEFINITION_NOT_FOUND("tag_definition_not_found"),
+    /**
+     * No such key, or not the caller's. The same one answer for both, for the same reason
+     * {@link #SKILL_NOT_FOUND} collapses four failures: a distinction here would confirm that a key
+     * with that id exists (ADR 0038 §决定 2).
+     */
+    KEY_NOT_FOUND("key_not_found"),
+    /**
+     * No such login device, or not the caller's — one answer for both, for the reason
+     * {@link #KEY_NOT_FOUND} has one and {@link #SKILL_NOT_FOUND} collapses four (ADR 0043 §接口):
+     * a distinct answer for "that device exists but is not yours" would confirm that a device with
+     * that id exists. Reached by anybody editing the address, and by the console after a row it was
+     * showing has already been ended somewhere else.
+     */
+    SESSION_NOT_FOUND("session_not_found"),
+    /**
+     * No such sign-in code — or one that expired, was already spent, or whose PKCE verifier did not
+     * match. Four failures, one answer, for the reason {@link #KEY_NOT_FOUND} has one and
+     * {@link #SKILL_NOT_FOUND} collapses four: "you already spent that code" sounds more useful, and
+     * it also tells whoever is holding a random string that the string was once real.
+     *
+     * <p>Reached by anybody editing the exchange request, and by nobody holding a code this service
+     * issued — a caller who has one is the CLI that asked for it, and it redeems it once.
+     */
+    CODE_NOT_FOUND("code_not_found"),
+    /** A scope outside the vocabulary, or none at all: a key that may do nothing reads as broken. */
+    INVALID_SCOPE("invalid_scope"),
+    /**
+     * A date this deployment will not accept — either one that is not in the future (a key that would
+     * never work, rather than a short-lived one) or one beyond the lifetime this deployment issues
+     * (ADR 0042). The two are told apart by {@code details[].issue}
+     * ({@code not_in_the_future} / {@code beyond_maximum}).
+     */
+    INVALID_EXPIRY("invalid_expiry"),
+    FILE_NOT_FOUND("file_not_found"),
+
+    /** A submission without the version's name, or one that is only whitespace (ADR 0055). */
+    DRAFT_NAME_REQUIRED("draft_name_required"),
+    /** The version's name is longer than 40 code points (ADR 0055). */
+    DRAFT_NAME_TOO_LONG("draft_name_too_long"),
+    /** A draft name was changed after the version was published; the name freezes at publish. */
+    DRAFT_NAME_IS_FROZEN("draft_name_is_frozen"),
+    /** The note is longer than 200 code points. */
+    NOTE_TOO_LONG("note_too_long"),
+    /** A note was changed after the version was published; the note freezes at publish. */
+    NOTE_IS_FROZEN("note_is_frozen"),
+    /** The version is not in a state where this lifecycle action means anything. */
+    INVALID_VERSION_STATE("invalid_version_state"),
+    /**
+     * The address pinned a version that was published and then taken down. 410 rather than 404:
+     * the caller holds the pin, so "there was one and it is gone" is the honest answer, and it is
+     * different from "no such version" (ADR 0058).
+     */
+    VERSION_REVOKED("version_revoked"),
+    /** The release name is not a SemVer 2.0.0 string. */
+    INVALID_RELEASE_NAME("invalid_release_name"),
+    /** The draft declared a release type but has already been published; the type froze with it. */
+    RELEASE_TYPE_IS_FROZEN("release_type_is_frozen"),
+    /** A draft with no version number was published without choosing one. */
+    RELEASE_NAME_REQUIRED("release_name_required"),
+    /** A version that already has a number was asked to take a different one. Numbers are assigned once. */
+    VERSION_NAME_IS_ASSIGNED("version_name_is_assigned"),
+    /**
+     * The draft declared a release type, but the version that is live cannot be bumped: it has no
+     * number, or it carries a prerelease part. One code for both, because the answer is the same —
+     * give an explicit version number (ADR 0091 §决定 5). Distinct from {@link #RELEASE_NAME_REQUIRED},
+     * which is "you gave no basis at all".
+     */
+    RELEASE_TYPE_NEEDS_EXPLICIT_NAME("release_type_needs_explicit_name"),
+    /**
+     * The same skill appears twice in one batch. Refused for the whole request rather than per
+     * row: two publishes of one skill in one batch have no defined order, so the second would
+     * silently overwrite what the first just put live (ADR 0090).
+     */
+    DUPLICATE_TARGET("duplicate_target"),
+    /** The whole skill is offline; every consumer read answers this until it is restored. */
+    SKILL_OFFLINE("skill_offline"),
+
+    /**
+     * A public skill that had a live version was deleted by its owner (v61, ADR 0184). 410, not
+     * 404: the address was public and callable, so the answer says it is gone rather than never
+     * having existed. Private deletions stay 404.
+     */
+    SKILL_GONE("skill_gone"),
+
+    /**
+     * A public skill with people using it cannot be deleted before its 30-day ramp completes
+     * (v61, ADR 0184). 409: the request is well-formed and the action exists, just not yet.
+     */
+    OFFLINE_REQUIRED("offline_required"),
+
+    /** A skill inside its 下线中 ramp cannot be joined (v61, ADR 0184). 409. */
+    SKILL_OFFLINE_PENDING("skill_offline_pending"),
+
+    /* ---- v7: draft file I/O ---- */
+
+    /** A write without {@code If-Match}. 428: the baseline is what makes the write safe to retry. */
+    IF_MATCH_REQUIRED("if_match_required"),
+    /** The baseline moved since the caller read it. 409 with the digest that is there now. */
+    DIGEST_MISMATCH("digest_mismatch"),
+    /**
+     * The content a write would produce already exists as another version of this skill. 409: the
+     * unique constraint is the identity ADR 0005 makes content carry, and two rows with one digest
+     * would make "which version is this" unanswerable. The detail always names the state, and names
+     * the pin only when that state is visible to the caller — a `write` holder cannot open a
+     * discarded or delisted row, so naming its id would be an address the next request refuses.
+     */
+    CONTENT_ALREADY_EXISTS("content_already_exists"),
+    /** {@code mv} / {@code cp} to a path this version already has. */
+    FILE_ALREADY_EXISTS("file_already_exists"),
+    /** {@code rm} / {@code mv} of the root {@code SKILL.md}; a skill cannot be without one. */
+    SKILL_MD_CANNOT_BE_DELETED("skill_md_cannot_be_deleted"),
+    /** A delete that would leave the version with no files at all. */
+    LAST_FILE_CANNOT_BE_DELETED("last_file_cannot_be_deleted"),
+    /** A write aimed at a row that is not a draft. Published rows are frozen (v7 TD §行的可变性). */
+    VERSION_IS_NOT_DRAFT("version_is_not_draft"),
+    /** Retained for the wire: grep no longer produces it (ADR 0098), and a code is never reused. */
+    GREP_REQUIRES_DRAFT("grep_requires_draft"),
+    /** A relpath that is absolute, escapes the root, or uses a backslash. */
+    INVALID_PATH("invalid_path"),
+    /** Creating a skill whose name already belongs to a live one. */
+    SKILL_ALREADY_EXISTS("skill_already_exists"),
+    /**
+     * A target name a copy cannot use: wrong shape, too long, or reserved (v54).
+     *
+     * <p>Named rather than folded into {@code invalid_request} because the client can act on it
+     * without changing anything else: the request is fine apart from the one field it must rename.
+     * The detail carries {@code invalid_name} / {@code name_too_long} / {@code name_reserved}.
+     */
+    INVALID_NAME("invalid_name"),
+    /**
+     * A copy whose source {@code SKILL.md} cannot be rewritten to the target name (v54).
+     *
+     * <p>The content is valid; only the one-field rewrite cannot be applied safely (a block scalar,
+     * an anchor, a flow mapping). The way out is to copy under the source's own name, which is why
+     * this is a named 409 rather than a 500.
+     */
+    NAME_NOT_REWRITABLE("name_not_rewritable"),
+    /**
+     * A credential tried to delete a skill that has a version which went live (v37, ADR 0127).
+     *
+     * <p>Named rather than folded into {@code invalid_request}: the skill is still there, and the
+     * way out — deleting it on the web — is a different action, not a restore.
+     */
+    SKILL_PUBLISHED("skill_published"),
+    /** A write, move or copy aimed at a path the platform reserves for itself (ADR 0069). */
+    RESERVED_PATH("reserved_path"),
+    /**
+     * A {@code metadata.source} the platform cannot resolve (v49): an unknown kind, or a locator
+     * the adapter refuses. Named rather than folded into {@code invalid_request} because the fix is
+     * in the SKILL.md the author just submitted, and nothing was stored.
+     */
+    INVALID_SOURCE("invalid_source"),
+
+    /* ---- v14: library and tags ---- */
+
+    /**
+     * The skill is visible and cannot be joined: the caller created it or already holds a grant
+     * (it is in their library for a better reason), or it is public but cannot be joined right now
+     * (offline, or nothing published).
+     */
+    SKILL_NOT_JOINABLE("skill_not_joinable"),
+    /**
+     * A leave named a skill with no join row. The displayed source is deliberately not consulted:
+     * a caller may have joined a skill and later been granted it, and leaving still removes the
+     * reference they made.
+     */
+    LIBRARY_REFERENCE_MISSING("library_reference_missing"),
+    /** The library entry is dormant, so a private tag on it cannot be read or written (ADR 0083). */
+    LIBRARY_ENTRY_DORMANT("library_entry_dormant"),
+    /** The tag being removed is not on this skill. Distinct from a skill that is not there. */
+    TAG_NOT_ATTACHED("tag_not_attached"),
+    /**
+     * Restore was asked for a skill that is not deleted. 409 rather than 404: the skill is there
+     * and the caller is its owner, so "no such skill" would misdescribe the address.
+     */
+    SKILL_NOT_DELETED("skill_not_deleted"),
+    /**
+     * The embedding provider refused or did not answer, so a publish could not be completed (v19).
+     * 503 rather than 500: nothing is wrong with the request or the server's own state, and the
+     * same request is expected to work later. Reported rather than swallowed because publishing
+     * commits the vector in its own transaction — a publish that cannot be indexed does not happen.
+     */
+    SEMANTIC_UNAVAILABLE("semantic_unavailable"),
+
+    /* ---- v45: notifications and invitations ---- */
+
+    /**
+     * No such notification, or not the caller's. One answer for both, for the reason
+     * {@link #SKILL_NOT_FOUND} collapses its four: a distinction would confirm that a notification
+     * with that id exists.
+     */
+    NOTIFICATION_NOT_FOUND("notification_not_found"),
+    /**
+     * The notification exists and cannot be answered now: it expired, was already resolved, or the
+     * action does not belong to its kind. 409, with the reason in {@code details[].issue}.
+     */
+    INVALID_NOTIFICATION_STATE("invalid_notification_state"),
+
+    /* ---- v52: service credentials ---- */
+
+    /** No such credential, or not the caller's. One answer for both, like every other 404. */
+    CREDENTIAL_NOT_FOUND("credential_not_found"),
+    /** This owner already has a binding on the same (skill, env). Never silently overwritten. */
+    CREDENTIAL_BINDING_CONFLICT("credential_binding_conflict"),
+    /** A live share already exists for this credential, skill and person. */
+    CREDENTIAL_SHARE_CONFLICT("credential_share_conflict"),
+    /** Another credential of this account already carries that name. 409: a different name works. */
+    CREDENTIAL_NAME_CONFLICT("credential_name_conflict"),
+    /** The credential exists but has no binding on that skill and variable. */
+    CREDENTIAL_BINDING_NOT_FOUND("credential_binding_not_found"),
+
+    /** v52 P2: there is no live share to withdraw — a different fact from "no binding". */
+    CREDENTIAL_SHARE_NOT_FOUND("credential_share_not_found"),
+    /**
+     * The share names somebody who is not an accepted collaborator of that skill (or is the
+     * credential's owner). 400: the request can be fixed by choosing the right person.
+     */
+    CREDENTIAL_NOT_SHAREABLE("credential_not_shareable"),
+    /**
+     * A credential has spent its day's lease budget. The message names the limit and the command a
+     * person runs to raise it; the agent is told not to raise it itself.
+     */
+    CREDENTIAL_QUOTA_EXCEEDED("credential_quota_exceeded"),
+    /** The value is above the 32 KiB an environment variable can carry. Ships both counts. */
+    CREDENTIAL_VALUE_TOO_LARGE("credential_value_too_large"),
+    /**
+     * The cloud KMS refused or could not be reached, so the vault could not seal or open a value.
+     * Distinct from {@code internal_error} because the caller's action is to retry later — the
+     * stored ciphertext is intact and nothing was lost.
+     */
+    CREDENTIAL_VAULT_UNAVAILABLE("credential_vault_unavailable"),
+
+    /* ---- v59: the caller's own when-to-use sentence ---- */
+    /**
+     * A write left nothing after trimming and folding whitespace. Distinct from clearing: a clear is
+     * the DELETE route, and "I sent an empty body" is a malformed request.
+     */
+    MY_WHEN_TO_USE_EMPTY("my_when_to_use_empty"),
+    /** The sentence is above 200 Unicode code points. Ships the actual count and the limit. */
+    MY_WHEN_TO_USE_TOO_LONG("my_when_to_use_too_long"),
+
+    /* ---- v64: the feedback a person sends the platform ---- */
+    /** The document is empty after trimming. */
+    FEEDBACK_EMPTY("feedback_empty"),
+    /** The document is above {@code FeedbackSafety.MAX_CODE_POINTS}. Ships the actual count and the limit. */
+    FEEDBACK_TOO_LONG("feedback_too_long"),
+    /** The consent version the client showed is not the one this deployment serves. */
+    FEEDBACK_CONSENT_STALE("feedback_consent_stale"),
+    /** The document looks like it carries personal or secret data; the client must confirm. */
+    FEEDBACK_SENSITIVE("feedback_sensitive"),
+    /** More than {@code SubmitFeedbackUseCase.MAX_PER_HOUR} submissions in one hour. Ships the time after which the next one is allowed. */
+    FEEDBACK_THROTTLED("feedback_throttled"),
+    /** No such receipt, or it belongs to somebody else. */
+    FEEDBACK_NOT_FOUND("feedback_not_found"),
+
+    /* ---- v65: the images and short videos attached to a feedback ---- */
+    /** More than {@code FeedbackAttachmentSafety.MAX_ATTACHMENTS} files on one document. */
+    FEEDBACK_ATTACHMENT_TOO_MANY("feedback_attachment_too_many"),
+    /** One file is above the image or video ceiling; ships the name, actual and limit in bytes. */
+    FEEDBACK_ATTACHMENT_TOO_LARGE("feedback_attachment_too_large"),
+    /** The sum of all attachments is above {@code FeedbackAttachmentSafety.MAX_TOTAL_BYTES}. */
+    FEEDBACK_ATTACHMENT_TOTAL_TOO_LARGE("feedback_attachment_total_too_large"),
+    /** The file header is not one of the seven accepted types; the extension is not consulted. */
+    FEEDBACK_ATTACHMENT_TYPE("feedback_attachment_type"),
+    /** A zero-byte file. */
+    FEEDBACK_ATTACHMENT_EMPTY("feedback_attachment_empty"),
+    /** The uploaded part could not be read or written to the spool file. */
+    FEEDBACK_ATTACHMENT_UNREADABLE("feedback_attachment_unreadable"),
+    /**
+     * This deployment has no object storage, or OSS refused the write. 503: the caller's action is
+     * to retry later, and a text-only submission still works.
+     */
+    FEEDBACK_ATTACHMENT_UNAVAILABLE("feedback_attachment_unavailable"),
+
+    INTERNAL_ERROR("internal_error");
+
+    private final String wireName;
+
+    ErrorCode(String wireName) {
+        this.wireName = wireName;
+    }
+
+    public String wireName() {
+        return wireName;
+    }
+}

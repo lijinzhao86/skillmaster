@@ -1,6 +1,6 @@
 # 凭据：怎么换账号、怎么退出
 
-> 网页登录和命令行登录是**两套**。换账号出问题，几乎都是只换了其中一边。
+> 换账号先在浏览器里换成目标账号，再跑 `skmr login`；退出用 `skmr logout`。网页登录和命令行登录是**两套**，换账号出问题几乎都是只换了其中一边。
 
 ## 先看现在的状态
 
@@ -8,7 +8,7 @@
 skmr auth status
 ```
 
-`skmr auth status` 会告诉你：凭据来自哪里（系统钥匙串；钥匙串不可用时存文件；也可能是环境变量）、是哪个账号、什么时候过期、是 API key 还是一次 CLI 登录。
+`skmr auth status` 会告诉你：凭据来自哪里（默认是状态目录里的 0600 明文文件；`skmr login --keyring` 写系统钥匙串，写不进才回退明文；设了 `SKILLMASTER_API_KEY` 时以环境变量为准）、是哪个账号、什么时候过期、是 API key 还是一次 CLI 登录。
 
 ## 换账号
 
@@ -28,10 +28,10 @@ skmr auth status
 skmr logout
 ```
 
-`skmr logout` **只清这台机器**，不让别的设备下线，也不撤销服务端记录。要彻底失效：
+`skmr logout` 清掉本机副本。**CLI 登录还会结束服务端那一次登录**（别的设备与浏览器会话不受影响）；**API key 只清本机**，服务端那把要去撤销。服务端调用失败时，按输出去「登录设备」结束：
 
-- CLI 登录记录在控制台「登录设备」里结束：https://console.skillmasterai.com/account/sessions
-- API key 在 https://console.skillmasterai.com/account/keys 撤销
+- CLI 登录记录：https://console.skillmasterai.com/account/sessions
+- API key：https://console.skillmasterai.com/account/keys
 
 ## 网页上退出
 

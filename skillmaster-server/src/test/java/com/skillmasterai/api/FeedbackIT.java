@@ -1,13 +1,45 @@
 package com.skillmasterai.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
+import com.skillmasterai.common.ErrorCode;
+import com.skillmasterai.common.RequestException;
 import com.skillmasterai.common.Sha256Hex;
 import com.skillmasterai.common.Timestamps;
+import com.skillmasterai.modules.auth.AuthenticatedSubject;
+import com.skillmasterai.modules.blob.BlobStore;
+import com.skillmasterai.modules.feedback.FeedbackAttachmentSafety;
+import com.skillmasterai.support.Multipart;
+import com.skillmasterai.usecase.SubmitFeedbackUseCase;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.jdbc.Sql;
 import tools.jackson.databind.JsonNode;
 
@@ -16,9 +48,28 @@ import tools.jackson.databind.JsonNode;
  * withdrawal's ownership rule.
  */
 @Sql("/sql/truncate-business-tables.sql")
+@Import(FeedbackIT.RecordingBlobs.class)
 class FeedbackIT extends AbstractOrganizeIT {
 
     private static final String PATH = "/api/v1/feedback";
+
+    private static final byte[] PNG = Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=");
+
+    @Autowired
+    private BlobStore blobs;
+
+    @Autowired
+    private SubmitFeedbackUseCase submit;
+
+    @BeforeEach
+    void resetBlobStore() {
+        // The recorder is @Primary and shared by the class; a test that makes it fail must not
+        // leak that stubbing into the next one.
+        Mockito.reset(blobs);
+        Mockito.doNothing().when(blobs).putObject(anyString(), any(Path.class), anyLong());
+        Mockito.doNothing().when(blobs).deleteObject(anyString());
+    }
 
     @Test
     void servesTheConsentNoticeAndItsVersion() {
@@ -29,7 +80,9 @@ class FeedbackIT extends AbstractOrganizeIT {
         assertThat(body.get("notice").asText())
                 .contains("隐私政策")
                 .contains("skmr feedback delete")
-                .contains("--yes");
+                .contains("--yes")
+                .contains("附件")
+                .contains("不会被自动扫描");
     }
 
     @Test
@@ -255,4 +308,378 @@ class FeedbackIT extends AbstractOrganizeIT {
         assertThat(json(response).get("error").get("code").asText()).isEqualTo(code);
     }
 
+    @Test
+    void submittingAttachmentsStoresRowsAndObjects() throws IOException {
+        String bearer = token();
+        String version = consentVersion(bearer);
+        Map<String, byte[]> written = new LinkedHashMap<>();
+        Mockito.doAnswer(invocation -> {
+            written.put(invocation.getArgument(0),
+                    Files.readAllBytes(invocation.getArgument(1)));
+            return null;
+        }).when(blobs).putObject(anyString(), any(Path.class), anyLong());
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "截图见附件")
+                .field("consent_version", version)
+                .file("attachment", "shot.png", PNG)
+                .file("attachment", "clip.mp4", mp4());
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        JsonNode body = json(response);
+        assertThat(body.get("attachments")).hasSize(2);
+        assertThat(body.get("attachments").get(0).get("media_type").asText())
+                .isEqualTo("image/png");
+        assertThat(body.get("attachments").get(1).get("media_type").asText())
+                .isEqualTo("video/mp4");
+        String receipt = body.get("receipt").asText();
+
+        String feedbackId = jdbc.sql("SELECT id FROM user_feedback WHERE receipt = :r")
+                .param("r", receipt)
+                .query(String.class)
+                .single();
+        var rows = jdbc.sql("""
+                        SELECT position, filename, media_type, size_bytes, sha256, object_key
+                        FROM feedback_attachment WHERE feedback_id = :id ORDER BY position
+                        """)
+                .param("id", feedbackId)
+                .query((rs, rowNum) -> Map.<String, Object>of(
+                        "position", rs.getInt("position"),
+                        "filename", rs.getString("filename"),
+                        "media_type", rs.getString("media_type"),
+                        "size_bytes", rs.getLong("size_bytes"),
+                        "sha256", rs.getString("sha256"),
+                        "object_key", rs.getString("object_key")))
+                .list();
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0))
+                .containsEntry("position", 0)
+                .containsEntry("filename", "shot.png")
+                .containsEntry("media_type", "image/png")
+                .containsEntry("size_bytes", (long) PNG.length)
+                .containsEntry("sha256", Sha256Hex.of(PNG));
+        assertThat(rows.get(1).get("media_type")).isEqualTo("video/mp4");
+        assertThat(rows.get(0).get("object_key").toString())
+                .startsWith("feedback/attachments/");
+
+        // **The key, the bytes and the digest are one contract.** The row says which bytes its key
+        // names; a wiring mistake that writes one file under every key would otherwise pass.
+        assertThat(written).hasSize(2);
+        for (Map<String, Object> row : rows) {
+            byte[] stored = written.get(row.get("object_key").toString());
+            assertThat(stored).as("bytes for " + row.get("object_key")).isNotNull();
+            assertThat(stored.length).isEqualTo(((Number) row.get("size_bytes")).longValue());
+            assertThat(Sha256Hex.of(stored)).isEqualTo(row.get("sha256"));
+        }
+
+        ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
+        verify(blobs, times(2)).putObject(keys.capture(), any(Path.class), anyLong());
+        assertThat(keys.getAllValues()).allMatch(key -> key.startsWith("feedback/attachments/"));
+
+        assertThat(count("""
+                        SELECT count(*) FROM notification_recipient r
+                        JOIN notification n ON n.id = r.notification_id
+                        WHERE n.kind = 'announcement' AND n.body LIKE '%2 个附件%'
+                          AND r.user_id = :user
+                        """, Map.of("user", DEMO_USER_ID)))
+                .as("the receipt names how many attachments arrived")
+                .isEqualTo(1);
+        assertThat(count("""
+                        SELECT count(*) FROM audit_event
+                        WHERE action = 'feedback_submit' AND actor_user_id = :user
+                          AND detail::jsonb->>'attachments' = '2'
+                        """, Map.of("user", DEMO_USER_ID)))
+                .as("one audit row naming the attachment count")
+                .isEqualTo(1);
+    }
+
+    @Test
+    void aChunkedMultipartSubmissionIsAccepted() {
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "chunked upload")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "shot.png", PNG);
+        HttpRequest request = request(PATH, bearer)
+                .header(HttpHeaders.CONTENT_TYPE, form.contentType())
+                .POST(form.streamingPublisher())
+                .build();
+
+        HttpResponse<String> response = send(request);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        assertThat(json(response).get("attachments")).hasSize(1);
+        assertThat(count("SELECT count(*) FROM feedback_attachment")).isEqualTo(1);
+    }
+
+    @Test
+    void anSvgNamedPngIsRefusedBeforeStoringAnything() {
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "fake")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "not-a-png.png",
+                        "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".getBytes(StandardCharsets.UTF_8));
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
+        assertThat(json(response).get("error").get("code").asText())
+                .isEqualTo("feedback_attachment_type");
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+    }
+
+    @Test
+    void sixAttachmentsAreRefused() {
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "too many")
+                .field("consent_version", consentVersion(bearer));
+        for (int i = 0; i < 6; i++) {
+            form.file("attachment", "shot" + i + ".png", PNG);
+        }
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
+        assertThat(json(response).get("error").get("code").asText())
+                .isEqualTo("feedback_attachment_too_many");
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+    }
+
+    @Test
+    void anOversizedImageIsRefused() {
+        String bearer = token();
+        byte[] oversized = new byte[(int) FeedbackAttachmentSafety.MAX_IMAGE_BYTES + 1];
+        System.arraycopy(PNG, 0, oversized, 0, PNG.length);
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "too large")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "big.png", oversized);
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
+        assertThat(json(response).get("error").get("code").asText())
+                .isEqualTo("feedback_attachment_too_large");
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+    }
+
+    @Test
+    void withdrawingDeletesEveryAttachmentObjectAndTheRows() {
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "withdraw attachments")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "one.png", PNG)
+                .file("attachment", "two.mp4", mp4());
+        HttpResponse<String> submitted = postMultipart(bearer, form);
+        assertThat(submitted.statusCode()).as(submitted.body()).isEqualTo(201);
+        String receipt = json(submitted).get("receipt").asText();
+        String archiveKey = "feedback/archive/2026/11/13/01JKMNPQRSTVWXYZ0123456789.ndjson.zst";
+        jdbc.sql("UPDATE user_feedback SET archive_key = :key WHERE receipt = :receipt")
+                .param("key", archiveKey)
+                .param("receipt", receipt)
+                .update();
+        Mockito.clearInvocations(blobs);
+
+        assertThat(delete(PATH + "/" + receipt, bearer).statusCode()).isEqualTo(204);
+        ArgumentCaptor<String> deleted = ArgumentCaptor.forClass(String.class);
+        verify(blobs, times(3)).deleteObject(deleted.capture());
+        assertThat(deleted.getAllValues())
+                .as("two attachment objects and the archive copy")
+                .contains(archiveKey)
+                .allMatch(key -> key.startsWith("feedback/"));
+        assertThat(deleted.getAllValues().get(2))
+                .as("every attachment object goes before the archive copy")
+                .isEqualTo(archiveKey);
+        assertThat(count("SELECT count(*) FROM feedback_attachment")).isZero();
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        assertThat(delete(PATH + "/" + receipt, bearer).statusCode())
+                .as("the second withdrawal finds no row")
+                .isEqualTo(404);
+    }
+
+    @Test
+    void anUnavailableBlobStoreIsA503AndLeavesNoRow() {
+        Mockito.doThrow(new IllegalStateException("bucket down"))
+                .when(blobs).putObject(anyString(), any(Path.class), anyLong());
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "storage down")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "shot.png", PNG);
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(503);
+        assertThat(json(response).get("error").get("code").asText())
+                .isEqualTo("feedback_attachment_unavailable");
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        // The key is recorded before the PUT, so the failed write is cleaned up too.
+        verify(blobs, times(1)).deleteObject(anyString());
+    }
+
+    @Test
+    void aFailedSecondUploadRemovesTheFirstObjectToo() {
+        Mockito.doNothing()
+                .doThrow(new IllegalStateException("second fails"))
+                .when(blobs).putObject(anyString(), any(Path.class), anyLong());
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "second upload fails")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "one.png", PNG)
+                .file("attachment", "two.png", PNG);
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(503);
+        assertThat(json(response).get("error").get("code").asText())
+                .isEqualTo("feedback_attachment_unavailable");
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        // The successful first key and the failed second key are both cleaned up.
+        verify(blobs, times(2)).deleteObject(anyString());
+    }
+
+    @Test
+    void anEmptyAttachmentIsRefused() {
+        String bearer = token();
+        Multipart form = Multipart.create().withoutName()
+                .field("content", "empty file")
+                .field("consent_version", consentVersion(bearer))
+                .file("attachment", "empty.png", new byte[0]);
+
+        HttpResponse<String> response = postMultipart(bearer, form);
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
+        assertThat(json(response).get("error").get("code").asText())
+                .isEqualTo("feedback_attachment_empty");
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+    }
+
+    @Test
+    void attachmentsOverTheTotalAreRefused() throws IOException {
+        String bearer = token();
+        Path dir = Files.createTempDirectory("feedback-total-");
+        List<Path> files = new ArrayList<>();
+        try {
+            List<SubmitFeedbackUseCase.Upload> uploads = new ArrayList<>();
+            for (int i = 0; i < 3; i++) {
+                // Each file passes the per-file ceiling; together they cross the total.
+                Path file = hugeMp4(dir, "clip" + i + ".mp4");
+                files.add(file);
+                uploads.add(new SubmitFeedbackUseCase.Upload(file, "clip" + i + ".mp4"));
+            }
+
+            assertThatThrownBy(() -> submit.submit("total", null, Map.of(), consentVersion(bearer),
+                    false, uploads, AuthenticatedSubject.ofSession(DEMO_USER_ID)))
+                    .isInstanceOfSatisfying(RequestException.class,
+                            refused -> assertThat(refused.code())
+                                    .isEqualTo(ErrorCode.FEEDBACK_ATTACHMENT_TOTAL_TOO_LARGE));
+            assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+            verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+        } finally {
+            for (Path file : files) {
+                Files.deleteIfExists(file);
+            }
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    @Test
+    void anOversizedVideoIsRefused() throws IOException {
+        String bearer = token();
+        Path dir = Files.createTempDirectory("feedback-video-");
+        Path file = mp4OfSize(dir, "big.mp4", FeedbackAttachmentSafety.MAX_VIDEO_BYTES + 1);
+        try {
+            assertThatThrownBy(() -> submit.submit("big video", null, Map.of(),
+                    consentVersion(bearer), false,
+                    List.of(new SubmitFeedbackUseCase.Upload(file, "big.mp4")),
+                    AuthenticatedSubject.ofSession(DEMO_USER_ID)))
+                    .isInstanceOfSatisfying(RequestException.class,
+                            refused -> assertThat(refused.code())
+                                    .isEqualTo(ErrorCode.FEEDBACK_ATTACHMENT_TOO_LARGE));
+            assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+            verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    @Test
+    void anUnreadableAttachmentIsRefused() {
+        String bearer = token();
+        SubmitFeedbackUseCase.Upload missing = new SubmitFeedbackUseCase.Upload(
+                Path.of("/nonexistent/skmr-v65/unreadable.png"), "unreadable.png");
+
+        assertThatThrownBy(() -> submit.submit("unreadable", null, Map.of(), consentVersion(bearer),
+                false, List.of(missing), AuthenticatedSubject.ofSession(DEMO_USER_ID)))
+                .isInstanceOfSatisfying(RequestException.class, refused -> assertThat(refused.code())
+                        .isEqualTo(ErrorCode.FEEDBACK_ATTACHMENT_UNREADABLE));
+        assertThat(count("SELECT count(*) FROM user_feedback")).isZero();
+        verify(blobs, never()).putObject(anyString(), any(Path.class), anyLong());
+    }
+
+    private static Path hugeMp4(Path dir, String name) throws IOException {
+        return mp4OfSize(dir, name, 34L * 1024 * 1024);
+    }
+
+    private static Path mp4OfSize(Path dir, String name, long size) throws IOException {
+        Path file = dir.resolve(name);
+        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "rw")) {
+            raf.write(mp4());
+            raf.setLength(size);
+        }
+        return file;
+    }
+
+    @Test
+    void aTextOnlySubmissionHasAnEmptyAttachmentList() {
+        String bearer = token();
+        HttpResponse<String> response = postJson(PATH, bearer, JSON.writeValueAsString(
+                Map.of("content", "text only", "consent_version", consentVersion(bearer))));
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(201);
+        assertThat(json(response).get("attachments").size()).isZero();
+        assertThat(count("""
+                        SELECT count(*) FROM audit_event
+                        WHERE action = 'feedback_submit' AND actor_user_id = :user
+                          AND detail::jsonb->>'attachments' = '0'
+                        """, Map.of("user", DEMO_USER_ID)))
+                .as("the text-only path still records its audit row")
+                .isEqualTo(1);
+    }
+
+    private HttpResponse<String> postMultipart(String bearer, Multipart multipart) {
+        HttpRequest request = request(PATH, bearer)
+                .header(HttpHeaders.CONTENT_TYPE, multipart.contentType())
+                .POST(multipart.publisher())
+                .build();
+        return send(request);
+    }
+
+    private static byte[] mp4() {
+        byte[] bytes = new byte[24];
+        bytes[3] = 24;
+        bytes[4] = 'f';
+        bytes[5] = 't';
+        bytes[6] = 'y';
+        bytes[7] = 'p';
+        bytes[8] = 'i';
+        bytes[9] = 's';
+        bytes[10] = 'o';
+        bytes[11] = 'm';
+        return bytes;
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class RecordingBlobs {
+
+        @Bean
+        @Primary
+        BlobStore recordingBlobStore() {
+            BlobStore mock = Mockito.mock(BlobStore.class);
+            Mockito.doNothing().when(mock).putObject(anyString(), any(Path.class), anyLong());
+            Mockito.doNothing().when(mock).deleteObject(anyString());
+            return mock;
+        }
+    }
 }

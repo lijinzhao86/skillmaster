@@ -50,10 +50,19 @@ ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
 SERVER_MAIN = ROOT / "skillmaster-server/src/main/java"
 SERVER_TEST = ROOT / "skillmaster-server/src/test/java"
+# v69 split the import into its own service; its tests are tests of this repository
+# too, and a document naming one must resolve the same way.
+SERVER_TEST_DIRS = [SERVER_TEST, ROOT / "skillmaster-ops/src/test/java"]
 CLI = ROOT / "skillmaster-cli"
 
 ADR_RE = re.compile(r"\bADR\s+(\d{4})\b")
 VERSION_RE = re.compile(r"\bv(\d+)\b(?!\.\d)")
+# A branch is named after its version (`feat/v68-cloud-device-login`), and that
+# branch's version folder may live in another worktree — so the number would look
+# like a reference to a version this tree does not have. The token is a git ref,
+# not a version reference; strip it before the version scan, the same way
+# `/api/v1` is stripped below.
+BRANCH_REF_RE = re.compile(r"\b(?:feat|fix|chore|docs|ops|release)/v\d+[-\w.]*")
 # `Class.member`. A file name (`SkillPaths.java`) also matches; the `member in
 # FILE_SUFFIXES` skip below is what excludes those — a lookahead after the
 # closing backtick checked the wrong thing and never fired.
@@ -137,7 +146,10 @@ def java_definitions() -> tuple[dict[str, Path], dict[str, set[str]]]:
     # reference to those would be reported as stale. Missing a rename is the
     # cheaper failure than crying wolf on every ADR.
     member = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-    for path in [*SERVER_MAIN.rglob("*.java"), *SERVER_TEST.rglob("*.java")]:
+    for path in [
+        *SERVER_MAIN.rglob("*.java"),
+        *(path for test in SERVER_TEST_DIRS for path in test.rglob("*.java")),
+    ]:
         text = path.read_text(encoding="utf-8")
         found = decl.findall(text)
         if not found:
@@ -156,7 +168,7 @@ def java_definitions() -> tuple[dict[str, Path], dict[str, set[str]]]:
 
 
 def test_classes() -> set[str]:
-    return {p.stem for p in SERVER_TEST.rglob("*.java")}
+    return {path.stem for test in SERVER_TEST_DIRS for path in test.rglob("*.java")}
 
 
 def config_keys() -> set[str]:
@@ -199,7 +211,10 @@ def version_dirs() -> set[str]:
 def sources() -> list[tuple[Path, bool]]:
     """(file, is_comment_only) — docs are read whole, code only in comments."""
     out: list[tuple[Path, bool]] = []
-    out.extend((p, False) for p in DOCS.rglob("*.md"))
+    # `iterations/` is history by the same rule as ADR bodies: a record of what was
+    # tested then, written once and never edited. Judging it would turn "this test
+    # existed in v50" into an error the moment the code moved.
+    out.extend((p, False) for p in DOCS.rglob("*.md") if "iterations" not in p.parts)
     # Skills and CLAUDE.md are live documents too: they tell agents what to do,
     # and a stale ADR or symbol there is followed, not merely read.
     out.extend((p, False) for p in (ROOT / ".claude/skills").rglob("*.md"))
@@ -242,6 +257,7 @@ class Index:
                     line_without_api = line.replace("/api/v1", "")
                 else:
                     line_without_api = line
+                line_without_api = BRANCH_REF_RE.sub("", line_without_api)
 
                 for adr in ADR_RE.findall(line):
                     self._add(f"ADR {adr}", path, number, line)

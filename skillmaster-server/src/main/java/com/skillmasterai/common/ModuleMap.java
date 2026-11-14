@@ -73,7 +73,7 @@ public final class ModuleMap {
             // find. Same module, because one seam above them validates both.
             //
             // V14 added `cli_sign_in_code` (ADR 0028), which V53 removed: a one-time code carried a
-            // credential back to a loopback listener, and the listener is gone (ADR 0190). V53 adds
+            // credential back to a loopback listener, and the listener is gone (ADR 0200). V53 adds
             // `cli_device_sign_in` in its place — the question a link asks, waiting to be answered.
             // Here rather than in M1, because what it becomes is a token and the row it names is this
             // module's `oauth_authorization`.
@@ -118,7 +118,16 @@ public final class ModuleMap {
                             "skill_source", "skill_source_snapshot", "skill_version_license",
                             // v54: an internal copy is provenance about the skill row, not an
                             // external source; M12 writes and reads it, and no other module does.
-                            "skill_copy")),
+                            "skill_copy",
+                            // v65: the attribute vocabulary, the claims on each skill, the
+                            // outcome's audit trail and the category migration map — ADR 0191 and
+                            // 0192. They sit in M12 for the same reason the tags and categories
+                            // do: a listing, its filters and the visibility predicate are one
+                            // statement. The extraction job writes the run and sample rows
+                            // through M12's own seam.
+                            "skill_category_mapping", "skill_category_assignment_snapshot",
+                            "label_definition", "skill_label", "label_extraction_run",
+                            "label_audit_sample")),
             // M14 is v45's notification floor (ADR 0139). It owns the event and the per-recipient
             // read state, and nothing else: the business object a notification points at stays in
             // its own module, which is what lets every other module use M14 without an edge back.
@@ -144,9 +153,10 @@ public final class ModuleMap {
             new Module("M17", "activity", MODULES_PACKAGE + ".activity",
                     Set.of("activity_event", "skill_collaborator_day")),
             // M18 is v64's feedback inbox: one document a person sends the platform. It owns the
-            // row and its archive pointer; the notification is M14's, the object is M12's.
+            // row, its archive pointer, and (v65) the attachment metadata. The notification is
+            // M14's; the attachment bytes are named objects in M6's private bucket.
             new Module("M18", "feedback", MODULES_PACKAGE + ".feedback",
-                    Set.of("user_feedback")));
+                    Set.of("user_feedback", "feedback_attachment")));
 
     /**
      * The types each module publishes to other modules (v36, ADR 0123).
@@ -192,7 +202,8 @@ public final class ModuleMap {
             Map.entry("M17", Set.of("ActivityEvent", "ActivityKinds", "ActivityRecorder",
                     "ArchiveSettings", "InvokeActivity", "SearchActivity", "SearchHit",
                     "UsageHistory")),
-            Map.entry("M18", Set.of("Feedback", "FeedbackConsent", "FeedbackSafety",
+            Map.entry("M18", Set.of("Feedback", "FeedbackAttachment", "FeedbackAttachmentDraft",
+                    "FeedbackAttachmentSafety", "FeedbackConsent", "FeedbackSafety",
                     "FeedbackService")));
 
     /**

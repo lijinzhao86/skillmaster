@@ -45,7 +45,7 @@
 
 这一版把「沙箱里能不能登录」的答案从「不能，去签 key」改成「只要出站 HTTPS 通，就能用链接登录」。三件事分开看：
 
-- **浏览器不再是前提。** 检测到沙箱（`sandbox.Detect().Sandboxed`）就不调用 `OpenBrowser`，也不等它；链接照常打印。**这条只管 `skmr login` 自己**：命令**自动发起**登录时另有一套门禁（沙箱、`CI`、打不开浏览器都不发起，见 [PRD](prd.md) 验收 #10）——那是 v4 的自动登录行为，不是凭据分流，[ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md) §决定 3 说的「不再按浏览器分流」指的是登录流程本身。v4 的回环监听与 v62 记录的「回环被挡、等满五分钟」一起消失。
+- **浏览器不再是前提。** 检测到沙箱（`sandbox.Detect().Sandboxed`）就不调用 `OpenBrowser`，也不等它；链接照常打印。**这条只管 `skmr login` 自己**：命令**自动发起**登录时另有一套门禁（沙箱、`CI`、打不开浏览器都不发起，见 [PRD](prd.md) 验收 #10）——那是 v4 的自动登录行为，不是凭据分流，[ADR 0200](../../decisions/0200-cloud-device-login-approves-on-a-web-page.md) §决定 3 说的「不再按浏览器分流」指的是登录流程本身。v4 的回环监听与 v62 记录的「回环被挡、等满五分钟」一起消失。
 - **网络是唯一的新前提。** 发起与轮询都出站到服务端；白名单为空时，CLI 用现有的 `sandbox.Snippets(client)` / `networkHint(host)` 给出放行片段，并指向 `skmr doctor --fix`（ADR 0186 会把服务端与更新域名写进去）。WorkBuddy 5.8.3 实测默认放行 TLS、回环与网络；Claude Code、Cursor 可能要放行一次。
 - **凭据落状态目录。** 0600 文件（ADR 0185），目录由 `doctor --fix` 放行（ADR 0186）。写不进去时按现有凭据错误报，不新增路径。
 
@@ -129,7 +129,7 @@ https://console.skillmasterai.com/cli-sign-in?ticket=<ticket>
 | # | 问题 | 当前倾向 | 怎么回答 |
 |---|---|---|---|
 | Q1 | 设备上的凭据活多久？ | 与浏览器会话同一把尺子（闲置 24 小时 / 绝对 7 天），服务器每周重新批准一次 | P2 实测一次日常使用；嫌烦再单开 ADR 放宽 |
-| Q2 | 旧路由与 `cli_sign_in_code` 在本版直接删，还是留一版？ | 直接删：回环退役是 [ADR 0190](../../decisions/0190-cloud-device-login-approves-on-a-web-page.md) 的决定，留着就是第二套会漂的路径 | P3 删除后跑全量服务端测试与 `impact.py --check` |
+| Q2 | 旧路由与 `cli_sign_in_code` 在本版直接删，还是留一版？ | 直接删：回环退役是 [ADR 0200](../../decisions/0200-cloud-device-login-approves-on-a-web-page.md) 的决定，留着就是第二套会漂的路径 | P3 删除后跑全量服务端测试与 `impact.py --check` |
 | Q3 | 拒绝后的票根，别人再打开时看到哪句话？ | 复用「已经用过或过期了」——它已经被回答过，不再是一道问题；精确到「被拒绝」会多一个态 | P1 看真实的一次拒绝；文案要改就回第 2 关 |
 | Q4 | 登录成功要不要发一条通知？ | 本版不发：控制台「登录设备」已经可见，通知是另一个模块的面 | 不做；有需要再进 TODO |
 | Q5 | 限流的数值合适吗？ | 按上表起步：发起 30 次/10 分钟、view 与轮询各 120 次/分钟（都按地址），轮询另加每票根 1 次/秒。**数值写在 `PgAuthThrottle.Rule` 里，不做部署配置**——它们描述的是这套防御的形状，能改的部署就是一个能把自己调松的部署 | P1 压测 10 并发；要调就改代码并跑 `AccountThrottleIT` |

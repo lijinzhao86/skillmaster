@@ -1,6 +1,6 @@
 # 0044 · 终端的范围：CLI 管桌面与服务器，移动端将来由 App
 
-> **状态**：已采纳；§决定 1（服务器上走 API key）被 [0190](0190-cloud-device-login-approves-on-a-web-page.md) 取代
+> **状态**：已采纳；§决定 1（服务器上走 API key）被 [0200](0200-cloud-device-login-approves-on-a-web-page.md) 取代
 > **日期**：2026-10-16
 > **依赖**：[0025](0025-cli-credential-storage.md)（凭据存哪）、[0028](0028-cli-uses-a-fixed-loopback-port.md)（回调用固定回环端口）、[0043](0043-the-browser-session-is-bounded-and-revocable.md)（浏览器会话可见可撤销）
 > **事实底稿**：[`research/credentials-across-terminals.md`](../research/credentials-across-terminals.md)。**本文不复述那里的事实**（RFC 8252/8628 的分档、MCP 规范对回调的硬约束、各平台存储的坑），只写我们据此选了什么、以及否掉了什么。

@@ -1,0 +1,43 @@
+# ops is an internal service: loopback only, no public plane, no user sessions.
+server:
+  address: ${OPS_BIND_ADDRESS:0.0.0.0}
+  port: ${OPS_PORT:8090}
+
+spring:
+  application:
+    name: skillmaster-ops
+  datasource:
+    url: ${OPS_DB_URL:jdbc:postgresql://localhost:5432/skillmaster_ops_v69}
+    username: ${OPS_DB_USER:skillmaster}
+    password: ${OPS_DB_PASSWORD:}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+skillmaster:
+  ops:
+    # The service-to-service plane on the server. Private address: this process never
+    # reaches the public one.
+    server-url: ${OPS_SERVER_URL:http://127.0.0.1:8081}
+    inner-token: ${OPS_INNER_TOKEN:}
+    # The import whitelist. Copied onto the host by the deploy workflow, never baked
+    # into the image — changing a source must not need a rebuild.
+    sources-file: ${OPS_SOURCES_FILE:/etc/skillmaster-ops/sync-sources.yml}
+    github-token: ${OPS_GITHUB_TOKEN:}
+    concurrency: 4
+    max-files: ${OPS_MAX_FILES:512}
+    max-file-bytes: ${OPS_MAX_FILE_BYTES:104857600}
+    max-total-bytes: ${OPS_MAX_TOTAL_BYTES:104857600}
+    max-repo-bytes: ${OPS_MAX_REPO_BYTES:268435456}
+    max-unpacked-bytes: ${OPS_MAX_UNPACKED_BYTES:536870912}

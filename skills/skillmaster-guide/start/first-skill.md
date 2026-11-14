@@ -24,6 +24,8 @@ skmr skill create <名字> --description "<做什么 + 什么时候用>"
 `create` 给的是一个占位文件。把它覆盖掉——注意 frontmatter 里的 `name` **必须和地址里的名字一字不差**，内容从本地文件读进来：
 
 ```bash
+# 覆盖前先完整读一遍；这一步本机会记下「你见过当前内容」
+skmr skill read <地址>@<版本码> SKILL.md
 skmr skill write <地址>@<版本码> SKILL.md --overwrite < ./SKILL.md
 ```
 

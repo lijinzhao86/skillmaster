@@ -30,7 +30,7 @@
 -- whichever of those ran second would count the other's sessions.
 --
 -- The token tables M2 writes are here — api_key among them since v2 (ADR 0038), and
--- cli_device_sign_in since v68 (ADR 0190) — and oauth_client is deliberately not. A test that needs a
+-- cli_device_sign_in since v68 (ADR 0200) — and oauth_client is deliberately not. A test that needs a
 -- client seeds its own row — v1 has no registration endpoint, so that is what a deployment does too —
 -- and seeding it with ON CONFLICT keeps it stable across runs. Emptying oauth_client instead would
 -- make the row a fixture each test must recreate, when it is really a deployment fact. A key is the

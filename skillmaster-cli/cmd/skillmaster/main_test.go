@@ -845,7 +845,7 @@ func TestARowIsTheAddressAloneAndTheRestIsOptIn(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			// `list --verbose` turns both switches on; that pairing is what the caller does.
 			withReading := c.withReading || c.verbose
-			if got := captureStdout(t, func() { printCards(c.cards, withReading, c.verbose) }); got != c.want {
+			if got := captureStdout(t, func() { printCards(c.cards, withReading, false, c.verbose) }); got != c.want {
 				t.Errorf("printed\n%q\nwant\n%q", got, c.want)
 			}
 		})
@@ -1303,7 +1303,7 @@ func TestSkillHelpHasTheSingleSkillVerbs(t *testing.T) {
 	skillsText := groupHelpText(t, "skills")
 	if got, want := groupHelpVerbs(t, skillsText),
 		map[string]bool{"list": true, "search": true, "pending": true, "publish": true,
-			"categories": true, "public-tags": true, "my-tags": true}; !reflect.DeepEqual(got, want) {
+			"categories": true, "labels": true, "public-tags": true, "my-tags": true}; !reflect.DeepEqual(got, want) {
 		t.Errorf("skills verbs = %v, want exactly %v:\n%s", got, want, skillsText)
 	}
 }

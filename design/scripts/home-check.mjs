@@ -189,7 +189,7 @@ const cardBodies = await page.$$eval('.card-body', (nodes) =>
 check(
   '三段正文',
   cardBodies ===
-    '把 skill 保存到云端，换哪个 agent 都能用。/把 skill 分享给朋友和同事，他们随时都能用上最新的知识。/1000+ 个精选 skill，总有一个能解决问题。',
+    '把 skill 保存到云端，换哪个 agent 都能用。/把 skill 分享给朋友和同事，他们随时都能用上最新的知识。/公开的 skill，总有一个能解决问题。',
   cardBodies,
 )
 const cardsOnFirstScreen = await page.evaluate((bar) => {

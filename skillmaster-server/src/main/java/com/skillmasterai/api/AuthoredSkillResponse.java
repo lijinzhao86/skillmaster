@@ -81,7 +81,13 @@ public record AuthoredSkillResponse(
          * different things about one skill's provenance.
          */
         @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-        SkillMetaResponse.CopiedFrom copiedFrom) {
+        SkillMetaResponse.CopiedFrom copiedFrom,
+        /* v66: the platform's one-line expected result and displayed attributes, for the
+           information page. Omitted when absent, like the other optional blocks. */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String outcome,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_EMPTY)
+        List<SearchResponse.Label> labels) {
 
     public record Namespace(String slug) {
     }
@@ -116,12 +122,20 @@ public record AuthoredSkillResponse(
     }
 
     public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper) {
-        return of(authored, objectMapper, null, null);
+        return of(authored, objectMapper, null, null, null, List.of());
     }
 
     public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper,
             com.skillmasterai.modules.skill.SourceService sources,
             com.skillmasterai.modules.metrics.UsageQuery metrics) {
+        return of(authored, objectMapper, sources, metrics, null, List.of());
+    }
+
+    /** v66: the author plane carries the same platform claims as the information page. */
+    public static AuthoredSkillResponse of(AuthoredSkill authored, ObjectMapper objectMapper,
+            com.skillmasterai.modules.skill.SourceService sources,
+            com.skillmasterai.modules.metrics.UsageQuery metrics, String outcome,
+            List<com.skillmasterai.modules.skill.LabelValue> labels) {
         Version selected = authored.selected() == null ? null
                 : authored.versions().stream()
                         .filter(summary -> summary.digest().equals(authored.selected().digest()))
@@ -173,7 +187,11 @@ public record AuthoredSkillResponse(
                 SkillMetaResponse.originOf(sources, authored.skillId(), selectedVersionId),
                 SkillMetaResponse.licenseOf(sources, selectedVersionId, objectMapper),
                 SkillMetaResponse.usageOf(sources, metrics, authored.skillId()),
-                SkillMetaResponse.copiedFromOf(sources, authored.skillId()));
+                SkillMetaResponse.copiedFromOf(sources, authored.skillId()),
+                outcome,
+                labels.stream().map(label -> new SearchResponse.Label(label.key(), label.value(),
+                        label.label(), label.full(), label.group(), label.filterable()))
+                        .toList());
     }
 
     static Version version(VersionSummary summary, java.util.Map<String, String> submitters) {

@@ -10,6 +10,7 @@ import com.skillmasterai.modules.retrieval.internal.EmbeddingRepository;
 import com.skillmasterai.modules.retrieval.EmbeddingSettings;
 import com.skillmasterai.modules.retrieval.EmbeddingUnavailable;
 import com.skillmasterai.support.CleanMigrateFlyway;
+import java.net.http.HttpResponse;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,16 +85,80 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
      */
     @Test
     void aCategoryNarrowsTheSearchAndIsUnderstoodInTheConsolesSpelling() {
+        // v66: the shelves are the 13 new words; `doc` / `dev` are retired and would resolve to
+        // nothing (the V52 migration maps them, but this fixture is written after it runs).
         index(skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-in-doc", "public", Ulid.generate(),
-                null, null, "doc"));
+                null, null, "office-efficiency"));
         index(skill(DEMO_NAMESPACE_ID, DEMO_USER_ID, "pdf-in-dev", "public", Ulid.generate(),
-                null, null, "dev"));
+                null, null, "dev-programming"));
         token();
 
-        JsonNode answer = json(webGet("/web/discover?q=pdf&tag=doc"));
+        JsonNode answer = json(webGet("/web/discover?q=pdf&tag=office-efficiency"));
 
         assertThat(names(answer.get("skills"))).containsExactly("pdf-in-doc");
         assertThat(answer.get("note")).isNull();
+    }
+
+    /**
+     * v66 (test-plan T16): an attribute filter narrows the id set before the ranking, on the
+     * semantic path too. Both skills are equally similar, so only the label can separate them.
+     */
+    @Test
+    void anAttributeNarrowsTheSemanticAnswerBeforeRanking() {
+        String python = publicSkill("pdf-in-python");
+        String other = publicSkill("pdf-in-other");
+        String pythonVersion = jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
+                .param("id", python).query(String.class).single();
+        String otherVersion = jdbc.sql("SELECT current_version_id FROM skill WHERE id = :id")
+                .param("id", other).query(String.class).single();
+        versionRow(python, pythonVersion, 1);
+        versionRow(other, otherVersion, 1);
+        jdbc.sql("""
+                INSERT INTO skill_label
+                  (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
+                   review_state, evaluated_version_id, created_at, updated_at)
+                VALUES (:id, :skill, 'runtime:python', 'agent', 0.95, '{}'::jsonb, 'v66-test',
+                        'auto', :version, :at, :at)
+                """).param("id", "lbl-" + python).param("skill", python)
+                .param("version", pythonVersion).param("at", AT).update();
+        index(python);
+        index(other);
+        token();
+
+        JsonNode answer = json(webGet("/web/discover?q=pdf&label=runtime:python"));
+
+        assertThat(names(answer.get("skills"))).containsExactly("pdf-in-python");
+        assertThat(answer.get("note")).isNull();
+    }
+
+    /** One `skill_version` row: `skill_label.evaluated_version_id` is a foreign key. */
+    private void versionRow(String skillId, String versionId, int number) {
+        String name = jdbc.sql("SELECT name FROM skill WHERE id = :id")
+                .param("id", skillId).query(String.class).single();
+        jdbc.sql("""
+                INSERT INTO skill_version
+                  (id, skill_id, number, digest, file_count, total_bytes, submitted_by,
+                   submitted_at, state, state_at, title, description, frontmatter, version,
+                   first_published_at)
+                VALUES (:id, :skill, :number, :digest, 0, 0, :user, :at, 'published', :at,
+                        :name, :name, '{}', :versionName, :at)
+                ON CONFLICT (id) DO NOTHING
+                """).param("id", versionId).param("skill", skillId).param("number", number)
+                .param("digest", "digest-" + versionId).param("user", DEMO_USER_ID)
+                .param("name", name).param("versionName", "1.0." + number)
+                .param("at", AT).update();
+    }
+
+    /** v66: an unknown attribute is a typo on every path, so the semantic path is a 400 too. */
+    @Test
+    void anUnknownAttributeOnTheSemanticPathIsAFourHundred() {
+        index(publicSkill("pdf-tools"));
+        token();
+
+        HttpResponse<String> answer = webGet("/web/discover?q=pdf&label=runtime:nope");
+
+        assertThat(answer.statusCode()).isEqualTo(400);
+        assertThat(answer.body()).contains("runtime:nope");
     }
 
     @Test

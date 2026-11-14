@@ -12,9 +12,10 @@
 | `skmr doctor` | 自检；--fix 改配置 | `skmr doctor [--fix [--undo] [--dry-run]]` |
 | `skmr draft` | 草稿的动词 | — |
 | `skmr draft create` | 新建一份草稿 | `skmr draft create <命名空间>/<名字> [--from <版本\|版本码>] --name <名称> [--note <说明>]` |
-| `skmr feedback` | 把解决不了的问题交给平台 | — |
+| `skmr feedback` | 把解决不了的问题与现场交给平台 | — |
+| `skmr feedback attach` | 把贴的图片或视频存下来 | `skmr feedback attach (--copy <路径> \| --last-paste \| --clipboard) [--max-age <时长>] [--json]` |
 | `skmr feedback delete` | 撤回并删除一条反馈 | `skmr feedback delete <回执> [--yes] [--json]` |
-| `skmr feedback send` | 预览或提交一份反馈 | `skmr feedback send [--file <路径>] [--skill <地址>] [--attach-diagnostics] [--command <命令>] [--error-code <码>] [--consent] [--allow-sensitive] [--json]` |
+| `skmr feedback send` | 预览或提交一份反馈 | `skmr feedback send [--file <路径>] [--skill <地址>] [--attach <路径>]... [--attach-diagnostics] [--command <命令>] [--error-code <码>] [--consent] [--allow-sensitive] [--json]` |
 | `skmr feedback template` | 打印反馈文档模板 | `skmr feedback template` |
 | `skmr login` | 登录这台机器 | `skmr login [--keyring]` |
 | `skmr logout` | 退出本机的凭据 | `skmr logout` |
@@ -90,6 +91,7 @@
 | `skmr skill write` | 整份写一个文件 | `skmr skill write <地址>@<版本码> <相对路径\|目录/> [--from <本地文件>...] [--overwrite] [--allow-empty]` |
 | `skmr skills` | 整个库的动词 | — |
 | `skmr skills categories` | 公开分类词表 | `skmr skills categories [--no-login]` |
+| `skmr skills labels` | 属性词表 | `skmr skills labels [--no-login]` |
 | `skmr skills list` | 列出我的库 | `skmr skills list [关键词] [--all] [--namespace <命名空间>]... [--category <分类>]... [--my-tag <标签>]... [--public-tag <标签>]... [--source created\|shared\|joined]... [--sort recent\|name] [--show live\|draft\|offline\|pending\|deleted\|all] [--verbose] [--no-login]` |
 | `skmr skills my-tags` | 我的标签 | `skmr skills my-tags [关键词] [--no-login]` |
 | `skmr skills my-tags add` | 新建一个标签 | `skmr skills my-tags add <名字> [--describe <说明>]` |
@@ -99,7 +101,7 @@
 | `skmr skills pending` | 看哪些草稿在等上线 | `skmr skills pending [--json]` |
 | `skmr skills public-tags` | 公开标签词表 | `skmr skills public-tags [关键词] [--all] [--no-login]` |
 | `skmr skills publish` | 批量上线（打开待上线页） | `skmr skills publish [--print] [--json]` |
-| `skmr skills search` | 按意思找 skill | `skmr skills search <问题> [--scope library\|public\|all] [--limit <条数>] [--exclude <地址>]... [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--semantic=false] [--verbose] [--no-login]` |
+| `skmr skills search` | 按意思找 skill | `skmr skills search [<问题>] [--scope library\|public\|all] [--limit <条数>] [--exclude <地址>]... [--category <分类>]... [--public-tag <标签>]... [--my-tag <标签>]... [--label <维度>:<值>]... [--semantic=false] [--verbose] [--no-login]` |
 | `skmr startup` | 开始入门旅程 | `skmr startup` |
 | `skmr update` | 更新这个 CLI | `skmr update [--check]` |
 | `skmr usage` | 使用记录 | `skmr usage [<地址>] [--stats] [--expand] [--users] [--mine] [--days <1–90> \| --since <YYYY-MM-DD> --until <YYYY-MM-DD>] [--skill <关键词或地址>] [--page <页码>] [--limit <条数>] [--json]` |

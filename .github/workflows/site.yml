@@ -306,14 +306,14 @@ jobs:
           # On 2026-10-26 that reset rolled back a build that was fine, so the probe now asks the
           # question this job can answer: does the site answer through the real name and the real
           # certificate, from the machine that serves it.
-          # **It asks `home`, not `www`** (v63). Both serve this same build today; `www` may stop
-          # serving while the ICP licence is processed.
+          # **It asks `home`, not `www`** (v63). `home` is the marketing page's main entry;
+          # `www` serves its own frozen copy and is not updated by this deploy.
           # **It compares bytes, not just the status.** The first `listen 443` block is the
           # console, so a name nginx does not match — a missing `home` block, a typo — answers
           # 200 with the console's `index.html`; a status probe would call that a success.
-          # **It follows the redirect, and both names resolve here.** At P2 `home` becomes a 301
-          # to `www`; with `--resolve` on both, the probe still lands on this same build, so no
-          # P2 edit is needed.
+          # **It follows the redirect, and both names resolve here.** If the long-term relation
+          # between `www` and `home` ever turns one into a 301 to the other, the probe still reaches
+          # a served page, so no probe edit is needed.
           if ! ssh "${opts[@]}" "$target" \
                'f=$(mktemp)
                 trap "rm -f $f" EXIT

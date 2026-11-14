@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * The CLI's question, from any machine with a network connection (v68, ADR 0190).
+ * The CLI's question, from any machine with a network connection (v68, ADR 0200).
  *
  * <p><strong>Three routes, and none of them needs a session.</strong> The caller is a process on the
  * person's machine that has no credential — that is what it is asking for. What keeps this from

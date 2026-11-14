@@ -1,6 +1,6 @@
 # 0187 · 营销首页可以临时挂在同一注册域的子域上，切回用 301
 
-- **状态**：已采纳
+- **状态**：已采纳（§决定 2 的「切回时 301 到 `www`」与 §决定 3 的「CORS 只放行一个来源」均由 [ADR 0190](0190-the-site-origin-is-an-explicit-list.md) 取代，2026-11-13；其余不变）
 - **日期**：2026-11-13
 - **所属版本**：[`v63-home-subdomain`](../versions/v63-home-subdomain/README.md)
 - **依赖**：[ADR 0086](0086-the-homepage-reads-the-session.md)（首页读取会话、会话 cookie 的 `Domain`、只放行一个 CORS 来源）

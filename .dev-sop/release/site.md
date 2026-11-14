@@ -1,7 +1,7 @@
 # 站点（`skillmaster-site/`）
 
-Workflow：`.github/workflows/site.yml`。产品形态：`www.skillmasterai.com` 的营销页，静态文件；
-v63 起同一份构建也由 `home.skillmasterai.com` 提供（临时入口，切换与切回步骤见 `deploy/README.md`）。
+Workflow：`.github/workflows/site.yml`。产品形态：`home.skillmasterai.com` 的营销页（v63 起为主入口），
+静态文件；`www.skillmasterai.com` 作为独立页面保留同一份构建（步骤见 `deploy/README.md`）。
 
 ## 与控制台完全同形
 
