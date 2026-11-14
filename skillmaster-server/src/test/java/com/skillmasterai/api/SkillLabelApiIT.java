@@ -18,12 +18,11 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
         String skillId = publicSkill("pdf-tools");
         String versionId = currentVersion(skillId);
         versionRow(skillId, versionId, 1);
-        outcome(skillId, "一份拆好的 PDF，以及每页对应的原文页码。", "agent", versionId);
-        label(skillId, "runtime:python", "auto", versionId);
-        label(skillId, "runtime:api-key", "confirmed", versionId);
-        label(skillId, "pricing_type:free", "auto", versionId);
-        label(skillId, "runtime:prompt-only", "auto", versionId);
-        label(skillId, "runtime:node", "pending", versionId);
+        outcome(skillId, "一份拆好的 PDF，以及每页对应的原文页码。");
+        label(skillId, "runtime:python");
+        label(skillId, "runtime:api-key");
+        label(skillId, "pricing_type:free");
+        label(skillId, "runtime:prompt-only");
 
         String bearer = token();
         HttpResponse<String> cards = get("/api/v1/skills?scope=public&q=pdf-tools", bearer);
@@ -53,9 +52,9 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
         String paidVersion = currentVersion(paid);
         versionRow(python, pythonVersion, 1);
         versionRow(paid, paidVersion, 1);
-        label(python, "runtime:python", "auto", pythonVersion);
-        label(paid, "runtime:python", "auto", paidVersion);
-        label(paid, "pricing_type:paid", "auto", paidVersion);
+        label(python, "runtime:python");
+        label(paid, "runtime:python");
+        label(paid, "pricing_type:paid");
         String bearer = token();
 
         assertThat(names(skills(get("/api/v1/skills?scope=public&label=runtime:python",
@@ -81,7 +80,7 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
         String mine = publicSkill("mine");
         String version = currentVersion(mine);
         versionRow(mine, version, 1);
-        label(mine, "runtime:python", "auto", version);
+        label(mine, "runtime:python");
         String bearer = token();
 
         assertThat(names(skills(get("/api/v1/skills?scope=library&label=runtime:python", bearer))))
@@ -110,7 +109,7 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
                 VALUES ('input_type:file', 'input_type', '输入', 'file', '文件', '需要提供文件',
                         'tool', FALSE, 'enabled', 1, :at)
                 """).param("at", AT).update();
-        labelRow(skillId, "input_type:file", "agent", "confirmed", versionId);
+        label(skillId, "input_type:file");
 
         String bearer = token();
         JsonNode card = skills(get("/api/v1/skills?scope=public&q=pdf-tools", bearer)).get(0);
@@ -125,27 +124,13 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
     }
 
     @Test
-    void anOperatorRowSpeaksAcrossVersionsOnlyWhenItIsConfirmed() {
-        // The read model's rule is two-part: an agent claim is evidence about its version, and
-        // only an operator's **confirmed** decision outlives versions. `operator` + `auto` is a
-        // half-written decision and must not display.
+    void aFinalRowIsShownWithoutProvenanceColumns() {
+        // v72 (ADR 0197): the table only holds final values, so there is no review state, source
+        // or evaluated version to filter by; a row is displayable because it exists.
         String skillId = publicSkill("pdf-tools");
-        String versionId = currentVersion(skillId);
-        versionRow(skillId, versionId, 1);
-        versionRow(skillId, "a-different-version", 2);
-        labelRow(skillId, "runtime:python", "operator", "auto", "a-different-version");
+        versionRow(skillId, currentVersion(skillId), 1);
+        label(skillId, "runtime:python");
         String bearer = token();
-        // An omitted field (the server writes no empty array) is the "nothing shows" answer.
-        assertThat(skills(get("/api/v1/skills?scope=public&q=pdf-tools", bearer))
-                .get(0).has("labels")).isFalse();
-
-        // Nothing about `operator` + `auto` becomes displayable on the current version either:
-        // only a confirmed operator claim is a decision, and only an agent claim is version-bound.
-        labelRow(skillId, "runtime:python", "operator", "auto", versionId);
-        assertThat(skills(get("/api/v1/skills?scope=public&q=pdf-tools", bearer))
-                .get(0).has("labels")).isFalse();
-
-        labelRow(skillId, "runtime:python", "operator", "confirmed", "a-different-version");
         assertThat(skills(get("/api/v1/skills?scope=public&q=pdf-tools", bearer))
                 .get(0).path("labels")).hasSize(1);
     }
@@ -178,19 +163,13 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
     }
 
     @Test
-    void anOutcomeThatEvaluatedAnotherVersionIsNotShown() {
+    void theOutcomeColumnIsShownWhenItIsSet() {
         String skillId = publicSkill("pdf-tools");
-        String versionId = currentVersion(skillId);
-        versionRow(skillId, versionId, 1);
-        versionRow(skillId, "a-different-version", 2);
-        outcome(skillId, "旧版本的结论", "agent", "a-different-version");
+        versionRow(skillId, currentVersion(skillId), 1);
+        outcome(skillId, "运营确认的结论");
         String bearer = token();
         assertThat(skills(get("/api/v1/skills?scope=public&q=pdf-tools", bearer))
-                .get(0).has("outcome")).isFalse();
-        outcome(skillId, "运营确认的结论", "operator", "a-different-version");
-        assertThat(skills(get("/api/v1/skills?scope=public&q=pdf-tools", bearer))
                 .get(0).get("outcome").asText()).isEqualTo("运营确认的结论");
-        assertThat(versionId).isNotBlank();
     }
 
     private void versionRow(String skillId, String versionId, int number) {
@@ -215,35 +194,16 @@ class SkillLabelApiIT extends AbstractOrganizeIT {
                 .param("id", skillId).query(String.class).single();
     }
 
-    private void outcome(String skillId, String text, String source, String versionId) {
-        jdbc.sql("""
-                UPDATE skill SET outcome = :outcome, outcome_source = :source,
-                                 outcome_confidence = 0.95, outcome_evidence = '{}'::jsonb,
-                                 outcome_evaluated_version_id = :version,
-                                 outcome_updated_at = :at
-                 WHERE id = :id
-                """).param("outcome", text).param("source", source).param("version", versionId)
-                .param("at", AT).param("id", skillId).update();
+    private void outcome(String skillId, String text) {
+        jdbc.sql("UPDATE skill SET outcome = :outcome WHERE id = :id")
+                .param("outcome", text).param("id", skillId).update();
     }
 
-    private void label(String skillId, String definitionId, String reviewState, String versionId) {
-        labelRow(skillId, definitionId, "agent", reviewState, versionId);
-    }
-
-    private void labelRow(String skillId, String definitionId, String source, String reviewState,
-            String versionId) {
-        String id = "lbl-" + skillId + "-" + definitionId + "-" + source + "-" + reviewState;
+    private void label(String skillId, String definitionId) {
         jdbc.sql("""
-                INSERT INTO skill_label
-                  (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
-                   review_state, evaluated_version_id, created_at, updated_at)
-                VALUES (:id, :skill, :definition, :source, 0.95, '{}'::jsonb, 'v66-test',
-                        :review, :version, :at, :at)
-                ON CONFLICT (skill_id, definition_id) DO UPDATE
-                   SET source = EXCLUDED.source, review_state = EXCLUDED.review_state,
-                       evaluated_version_id = EXCLUDED.evaluated_version_id
-                """).param("id", id).param("skill", skillId).param("definition", definitionId)
-                .param("source", source).param("review", reviewState)
-                .param("version", versionId).param("at", AT).update();
+                INSERT INTO skill_label (skill_id, definition_id)
+                VALUES (:skill, :definition)
+                ON CONFLICT DO NOTHING
+                """).param("skill", skillId).param("definition", definitionId).update();
     }
 }

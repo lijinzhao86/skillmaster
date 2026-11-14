@@ -114,13 +114,10 @@ class WebDiscoverSemanticIT extends AbstractOrganizeIT {
         versionRow(python, pythonVersion, 1);
         versionRow(other, otherVersion, 1);
         jdbc.sql("""
-                INSERT INTO skill_label
-                  (id, skill_id, definition_id, source, confidence, evidence, vocabulary_version,
-                   review_state, evaluated_version_id, created_at, updated_at)
-                VALUES (:id, :skill, 'runtime:python', 'agent', 0.95, '{}'::jsonb, 'v66-test',
-                        'auto', :version, :at, :at)
-                """).param("id", "lbl-" + python).param("skill", python)
-                .param("version", pythonVersion).param("at", AT).update();
+                INSERT INTO skill_label (skill_id, definition_id)
+                VALUES (:skill, 'runtime:python')
+                ON CONFLICT DO NOTHING
+                """).param("skill", python).update();
         index(python);
         index(other);
         token();

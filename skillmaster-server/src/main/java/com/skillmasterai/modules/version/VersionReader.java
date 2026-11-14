@@ -289,6 +289,25 @@ final class VersionReader {
      * class of mistake as serving {@code @1}'s manifest with {@code @2}'s bytes. The skill row's
      * copy exists for search, which reads it on the hot path.
      */
+    /**
+     * One version built without a caller, for the service-to-service plane (v72).
+     *
+     * <p><strong>The plane is the gate.</strong> This method does not ask who may read the version;
+     * its only caller is the inner label endpoint, which has already restricted itself to public
+     * official skills through the discovery predicate. Exposing it to a user-facing path would be
+     * a second answer to "who may read this", which is the one thing M7 refuses to own.
+     */
+    public Optional<SkillSnapshot> innerSnapshot(String skillId, String namespaceId, String name,
+            String versionId, String currentVersionId) {
+        return versions.findByRowId(skillId, versionId)
+                .map(version -> new SkillSnapshot(skillId, version.id(), namespaceId, name,
+                        version.title(), version.description(), version.frontmatter(),
+                        version.version(), version.digest(), version.fileCount(),
+                        version.totalBytes(), version.state(), version.stateAt(),
+                        version.firstPublishedAt(), version.id().equals(currentVersionId),
+                        versions.filesOf(version.id())));
+    }
+
     private SkillSnapshot toSnapshot(Access access, VersionRepository.VersionRow version) {
         return new SkillSnapshot(
                 access.skillId(), version.id(), access.namespaceId(), access.name(), version.title(),

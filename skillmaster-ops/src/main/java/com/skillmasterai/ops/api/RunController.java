@@ -1,6 +1,8 @@
 package com.skillmasterai.ops.api;
 
 import com.skillmasterai.ops.jobs.ImportJob;
+import com.skillmasterai.ops.jobs.LabelRefreshJob;
+import com.skillmasterai.ops.ports.LabelStore;
 import com.skillmasterai.ops.ports.RunStore;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,11 +29,16 @@ import org.springframework.web.bind.annotation.RestController;
 public class RunController {
 
     private final ImportJob imports;
+    private final LabelRefreshJob labels;
+    private final LabelStore labelEntries;
     private final RunStore runs;
     private final ExecutorService worker;
 
-    public RunController(ImportJob imports, RunStore runs, ExecutorService worker) {
+    public RunController(ImportJob imports, LabelRefreshJob labels, LabelStore labelEntries,
+            RunStore runs, ExecutorService worker) {
         this.imports = imports;
+        this.labels = labels;
+        this.labelEntries = labelEntries;
         this.runs = runs;
         this.worker = worker;
     }
@@ -61,13 +68,36 @@ public class RunController {
                 .body(Map.of("run_id", handle.run().id(), "status", "running"));
     }
 
+    @PostMapping("/label/runs")
+    ResponseEntity<?> startLabels(@RequestBody(required = false) StartRequest body) {
+        String trigger = body == null || body.trigger() == null ? "manual" : body.trigger();
+        Optional<LabelRefreshJob.Handle> started = labels.begin(trigger);
+        if (started.isEmpty()) {
+            return ResponseEntity.status(409)
+                    .body(Map.of("error", Map.of("code", "busy")));
+        }
+        LabelRefreshJob.Handle handle = started.get();
+        try {
+            worker.submit(() -> labels.execute(handle));
+        } catch (java.util.concurrent.RejectedExecutionException shuttingDown) {
+            handle.lock().close();
+            runs.finish(handle.run().id(), "failed", Map.of(), "the worker refused the run");
+            return ResponseEntity.status(503).body(Map.of("error", Map.of("code", "shutting_down")));
+        }
+        return ResponseEntity.accepted()
+                .body(Map.of("run_id", handle.run().id(), "status", "running"));
+    }
+
     @GetMapping("/runs/{id}")
     ResponseEntity<?> run(@PathVariable String id) {
         return runs.find(id)
                 .<ResponseEntity<?>>map(run -> {
                     Map<String, Object> detail = view(run);
-                    detail.put("entries", runs.entries(id).stream()
-                            .map(RunController::entryView).toList());
+                    detail.put("entries", "label".equals(run.kind())
+                            ? labelEntries.entries(id).stream()
+                                    .map(RunController::labelEntryView).toList()
+                            : runs.entries(id).stream()
+                                    .map(RunController::entryView).toList());
                     return ResponseEntity.ok(detail);
                 })
                 .orElseGet(() -> ResponseEntity.status(404)
@@ -94,6 +124,19 @@ public class RunController {
         value.put("skill_id", entry.skillId());
         value.put("draft_id", entry.draftId());
         value.put("result", entry.result());
+        value.put("note", entry.note());
+        value.put("created_at", entry.createdAt().toString());
+        return value;
+    }
+
+    private static Map<String, Object> labelEntryView(LabelStore.Entry entry) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("skill_id", entry.skillId());
+        value.put("namespace", entry.namespace());
+        value.put("name", entry.name());
+        value.put("version_id", entry.versionId());
+        value.put("result", entry.result());
+        value.put("labels", entry.labels());
         value.put("note", entry.note());
         value.put("created_at", entry.createdAt().toString());
         return value;

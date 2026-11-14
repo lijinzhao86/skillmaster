@@ -33,4 +33,10 @@ class ArchitectureTest {
     static final ArchRule theJobLayerDoesNotSpeakHttp =
             noClasses().that().resideInAPackage("..ops.jobs..")
                     .should().dependOnClassesThat().resideInAnyPackage("java.net.http..");
+
+    @ArchTest
+    static final ArchRule theRulesArePure =
+            noClasses().that().resideInAPackage("..ops.labels..")
+                    .should().dependOnClassesThat().resideInAnyPackage("org.springframework..",
+                            "javax.sql..", "java.net.http..");
 }

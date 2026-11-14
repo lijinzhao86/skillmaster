@@ -35,6 +35,9 @@ skillmaster:
     # into the image — changing a source must not need a rebuild.
     sources-file: ${OPS_SOURCES_FILE:/etc/skillmaster-ops/sync-sources.yml}
     github-token: ${OPS_GITHUB_TOKEN:}
+    # The namespace imported skills land in. Labels are addressed as namespace/name, and only the
+    # official namespace may receive them (the server refuses anything else).
+    official-namespace: ${OPS_OFFICIAL_NAMESPACE:skillmaster}
     concurrency: 4
     max-files: ${OPS_MAX_FILES:512}
     max-file-bytes: ${OPS_MAX_FILE_BYTES:104857600}

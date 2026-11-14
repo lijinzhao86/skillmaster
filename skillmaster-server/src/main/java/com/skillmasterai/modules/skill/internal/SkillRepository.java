@@ -748,6 +748,35 @@ public final class SkillRepository {
     }
 
     /**
+     * One page of what the discovery plane may serve, for the operations service (v72).
+     *
+     * <p>The predicate is {@link SkillPredicates#DISCOVERABLE}, not a copy: "public, published,
+     * online, not deleted" is one statement (ADR 0082), and a label refresh that used a wider one
+     * would label skills no reader can reach. The official-namespace filter is the caller's, because
+     * the namespace table belongs to M4.
+     */
+    public List<PublicRow> publicPage(String cursor, int limit) {
+        // No join to `namespace`: that table belongs to M4, and the official-namespace filter is
+        // applied one layer up, where the slug and the flag are readable. The discovery predicate
+        // already means "public", and only an official namespace can hold a public skill (ADR 0146).
+        String sql = "SELECT s.id, s.namespace_id, s.name, s.current_version_id"
+                + "  FROM skill s WHERE " + SkillPredicates.DISCOVERABLE
+                + (cursor == null ? "" : " AND s.id > :cursor")
+                + " ORDER BY s.id LIMIT :limit";
+        var statement = jdbc.sql(sql).param("limit", limit);
+        if (cursor != null) {
+            statement = statement.param("cursor", cursor);
+        }
+        return statement.query((rs, rowNum) -> new PublicRow(rs.getString("id"),
+                rs.getString("namespace_id"), rs.getString("name"),
+                rs.getString("current_version_id"))).list();
+    }
+
+    /** One row of a public page: enough to address the skill and its current version. */
+    public record PublicRow(String id, String namespaceId, String name, String currentVersionId) {
+    }
+
+    /**
      * @param currentVersionId the version consumers get, or null when nothing has been published
      *                         yet. Since ADR 0031 that is an ordinary state — a skill whose versions
      *                         are all drafts — and no longer the signature of a broken invariant.

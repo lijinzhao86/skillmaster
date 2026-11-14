@@ -190,6 +190,15 @@ public final class SkillVersionService {
         return reader.detailedSnapshot(access, pin);
     }
 
+    /**
+     * One version for the inner plane only (v72): no caller, and no ownership decision — the
+     * caller has already been restricted to public official skills.
+     */
+    public Optional<SkillSnapshot> innerSnapshot(String skillId, String namespaceId, String name,
+            String versionId, String currentVersionId) {
+        return reader.innerSnapshot(skillId, namespaceId, name, versionId, currentVersionId);
+    }
+
     public Optional<SkillSnapshot> authorSnapshot(Access access, VersionPin pin) {
         return reader.authorSnapshot(access, pin);
     }

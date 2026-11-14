@@ -119,15 +119,14 @@ public final class ModuleMap {
                             // v54: an internal copy is provenance about the skill row, not an
                             // external source; M12 writes and reads it, and no other module does.
                             "skill_copy",
-                            // v65: the attribute vocabulary, the claims on each skill, the
-                            // outcome's audit trail and the category migration map — ADR 0191 and
-                            // 0192. They sit in M12 for the same reason the tags and categories
-                            // do: a listing, its filters and the visibility predicate are one
-                            // statement. The extraction job writes the run and sample rows
-                            // through M12's own seam.
+                            // v65: the attribute vocabulary, the claims on each skill, and the
+                            // category migration map — ADR 0191 and 0192. They sit in M12 for the
+                            // same reason the tags and categories do: a listing, its filters and
+                            // the visibility predicate are one statement. v72 moved the
+                            // intermediate rows — runs, samples, evidence — out of this database;
+                            // what remains is the final skill / definition pair.
                             "skill_category_mapping", "skill_category_assignment_snapshot",
-                            "label_definition", "skill_label", "label_extraction_run",
-                            "label_audit_sample")),
+                            "label_definition", "skill_label")),
             // M14 is v45's notification floor (ADR 0139). It owns the event and the per-recipient
             // read state, and nothing else: the business object a notification points at stays in
             // its own module, which is what lets every other module use M14 without an edge back.

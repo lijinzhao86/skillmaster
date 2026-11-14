@@ -31,6 +31,8 @@ const SKIP_DIRS = new Set([
 const ROOTS = [
   'skillmaster-server/src/main/java',
   'skillmaster-server/src/test/java',
+  'skillmaster-ops/src/main/java',
+  'skillmaster-ops/src/test/java',
   'skillmaster-cli',
   'skillmaster-console/src',
   'skillmaster-console/tests',

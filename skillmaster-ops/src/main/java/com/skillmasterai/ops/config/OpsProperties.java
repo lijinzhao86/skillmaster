@@ -14,6 +14,7 @@ public record OpsProperties(
         String innerToken,
         String sourcesFile,
         String githubToken,
+        String officialNamespace,
         int concurrency,
         int maxFiles,
         long maxFileBytes,

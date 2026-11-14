@@ -189,4 +189,10 @@ public class SkillConfiguration {
     LabelService labelService(com.skillmasterai.modules.skill.internal.LabelRepository repository) {
         return new LabelService(repository);
     }
+
+    @Bean
+    LabelWriteService labelWriteService(
+            com.skillmasterai.modules.skill.internal.LabelRepository repository) {
+        return new LabelWriteService(repository);
+    }
 }
