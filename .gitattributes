@@ -13,3 +13,7 @@ skills/skillmaster/** -text
 # `\r` to the last token of every line; a flag at the end of a line would then read as `--clear\r`
 # and the unknown-flag check would fail on a file nobody edited. Keep the bytes as committed.
 skills/skillmaster-guide/** -text
+
+# **The startup journey is read line by line.** Same reason as the Guide: a line-ending rewrite on a
+# Windows checkout would change the bytes the journey is published from.
+skills/skillmaster-startup/** -text

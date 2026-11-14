@@ -12,6 +12,8 @@ description: |-
 
 **没有 `skmr`**：先照 https://dl.skillmasterai.com/beta/skillmaster.md 装，装完再回来——下面每一步都要用它。
 
+**第一次用**：运行 `skmr startup`，主线大约 10 分钟走 3 块——找一条公开技能加进库用一次；做一条自己的（从头写或从本机导入）并发布上线；电脑上原来有技能的话，最后还能选择一起搬进来。也可以直接跟 Agent 说「带我走一遍 SkillMaster 的新人引导」。
+
 加载后分两路：**对 skill 做操作**，还是**找一个 skill 来用**；都不是（问 SkillMaster 本身、问怎么装）→ 走前者。
 
 搜索、加载、读取可以直接做；**改 skill 之前**先拿说明，不要凭记忆敲命令。
@@ -34,7 +36,7 @@ skmr skill invoke skillmaster/skillmaster-guide --yes
 skmr skills search "<一句话说清要做的事>"
 ```
 
-默认只搜自己的库；用户明说「搜公开库」才加 `--scope public`。搜到的公开 skill **加载前先问用户**；同意后带 `--yes` 调用一次，想以后不再问就用 `skmr skill join <地址> --yes` 收进库。`skillmaster/` 开头的官方技能不用先问——直接带 `--yes`。
+默认只搜自己的库；用户明说「搜公开库」或「去公开库找」才加 `--scope public`。搜到的公开 skill **加载前先问用户**；同意后带 `--yes` 调用一次，想以后不再问就用 `skmr skill join <地址> --yes` 收进库。`skillmaster/` 开头的官方技能不用先问——直接带 `--yes`。
 
 `skmr` 报错（没装 / 没登录 / 连不上）就直说「技能库暂时查不了」，按常规能力继续，不假装查过。
 

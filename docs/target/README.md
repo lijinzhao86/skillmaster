@@ -94,6 +94,12 @@
 |---|---|---|---|
 | 23 | **平台不代管第三方凭据**：目标态写「不存储第三方密码，不代管组织外的身份」 | `design.md` §2.1 模块 1 的边界（`:125`） | **v52 把这条收窄**：仍然不代管身份密码，但开始托管**用户明确授权、用于调用第三方服务的 API 凭据**——密文入库、根密钥在云 KMS、由 CLI 在用户机器上注入（[`0168`](../decisions/0168-hosted-credentials-are-api-keys-not-identity-passwords.md)、[`0169`](../decisions/0169-the-first-version-injects-without-proxying.md)、[`0172`](../decisions/0172-the-root-key-is-huawei-cloud-kms.md)）。「代管身份密码」仍然不做；要做需新 ADR |
 
+### 十一、v71 的语义变更
+
+| # | 事项 | 位置 | 说明 |
+|---|---|---|---|
+| 24 | **startup 的正文是「迁移本机技能」**：目标态没有单独定义新人引导；此前的 `startup` 以迁移本机技能为主业 | `design.md` 没有这一层；`startup` 的正文在平台上 | **v71 把 `startup` 改写成新人引导**：安装收尾先问一次，同意才加载；正文 3 块（① 找 → 加进库 → 用一次；② 做一条自己的（从头写或本机导入）→ 发布上线；③ 可选批量搬本机技能）。迁移降为可选第 3 块；公开库默认 `join`，引导里不教 `copy`（[`0206`](../decisions/0206-startup-is-the-onboarding-and-joining-is-the-default.md)） |
+
 ## 维护约定
 
 - **正文不重写。** 差异以本清单承载；`target/` 的正文保持 2026-09-20 的原貌。
